@@ -191,6 +191,19 @@ if ! "$PYTHON" -c 'import fastapi, uvicorn, playwright' >/dev/null 2>&1; then
     }
 fi
 
+# ── Build Rust Native Acceleration ──
+if ! command -v cargo >/dev/null 2>&1; then
+    warn "Rust compiler (cargo) is not installed. Native acceleration will be skipped."
+else
+    if ! "$PYTHON" -c 'import clip_engine_core' >/dev/null 2>&1; then
+        log "Building Rust native acceleration engine..."
+        "$PYTHON" -m pip install maturin || true
+        "$PYTHON" -m maturin develop --release --manifest-path "$DIR/clip_engine_core/Cargo.toml" || {
+            warn "Rust acceleration engine failed to build. Ensure Rust is up to date."
+        }
+    fi
+fi
+
 if ! command -v ffmpeg >/dev/null 2>&1; then
     warn "FFmpeg was not found. The web interface will start, but video processing will require FFmpeg."
 fi

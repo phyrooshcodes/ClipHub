@@ -54,10 +54,31 @@ if not exist "venv\" (
 
 call venv\Scripts\activate.bat
 
+:: ── Create .env if missing ─────────────────────────────────
+if not exist ".env" (
+    if exist ".env.example" (
+        echo  [SETUP] Copying .env.example to .env...
+        copy .env.example .env >nul
+    )
+)
+
 echo  [SETUP] Checking and verifying package dependencies (this is fast)...
 python -m pip install --upgrade pip
 pip install -r requirements.txt
 playwright install chromium
+
+:: ── Build Rust Native Acceleration ────────────────────────
+where cargo >nul 2>&1
+if errorlevel 1 (
+    echo  [WARNING] Rust compiler not found. Native acceleration will be skipped.
+) else (
+    python -c "import clip_engine_core" >nul 2>&1
+    if errorlevel 1 (
+        echo  [SETUP] Building Rust native acceleration engine...
+        pip install maturin
+        maturin develop --release --manifest-path clip_engine_core/Cargo.toml
+    )
+)
 
 :: ── Launch ────────────────────────────────────────────────
 echo  [INFO]  Server starting at http://localhost:7842
