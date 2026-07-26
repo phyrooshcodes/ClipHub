@@ -402,17 +402,19 @@ def connect_youtube_playwright() -> bool:
             logged_in = False
             while time.monotonic() < deadline and not page.is_closed():
                 url = page.url.lower()
-                if "accounts.google.com" not in url and ("studio.youtube.com" in url or "youtube.com" in url):
-                    # Check if studio UI elements or avatar button is present
+                if "accounts.google.com" not in url:
+                    # If they are on a channel switcher, let them pick their channel
+                    if "channel_switcher" in url:
+                        page.wait_for_timeout(1000)
+                        continue
+                        
+                    # We are on YouTube or Studio. Check for the Create button or Studio Header.
                     try:
-                        if page.locator("ytcp-app, ytcp-header, #avatar-btn, #channel-name").count() > 0:
+                        if page.locator("#create-icon, ytcp-header #avatar-btn").count() > 0:
                             logged_in = True
                             break
                     except Exception:
                         pass
-                    if "studio.youtube.com" in url:
-                        logged_in = True
-                        break
                 page.wait_for_timeout(1000)
 
             if logged_in and not page.is_closed():
