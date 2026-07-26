@@ -54,8 +54,11 @@ def initiate_upload(page: Page, video_path: str, channel_id: str | None = None) 
     if channel_id:
         logger.info(f"[YouTube] Ensuring correct channel context for {channel_id}...")
         # First go to channel switcher to force the session to the correct channel
-        page.goto(f"https://www.youtube.com/channel_switcher?next=https%3A%2F%2Fstudio.youtube.com%2F", wait_until="domcontentloaded")
-        page.wait_for_timeout(2000)
+        try:
+            page.goto(f"https://www.youtube.com/channel_switcher?next=https%3A%2F%2Fstudio.youtube.com%2F", wait_until="domcontentloaded", timeout=15000)
+            page.wait_for_timeout(2000)
+        except Exception as e:
+            logger.warning(f"[YouTube] Channel switcher navigation skipped or timed out: {e}")
         
         # If the channel is listed, click it. If not, it means we might already be on studio or it's not a switcher page
         try:
