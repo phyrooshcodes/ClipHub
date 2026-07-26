@@ -404,32 +404,21 @@ def connect_youtube_playwright() -> bool:
             deadline = time.monotonic() + 300.0
             logged_in = False
             while time.monotonic() < deadline and not page.is_closed():
-                url = page.url.lower()
-                if "accounts.google.com" not in url:
-                    # If they are on a channel switcher, let them pick their channel
-                    if "channel_switcher" in url:
-                        page.wait_for_timeout(1000)
-                        continue
-                        
-                    # We are on YouTube or Studio. Check for the Create button or Studio Header.
-                    try:
+                try:
+                    url = page.url.lower()
+                    if "accounts.google.com" not in url and "channel_switcher" not in url:
                         if page.locator("#create-icon, ytcp-header #avatar-btn").count() > 0:
                             logged_in = True
-                            break
-                    except Exception:
-                        pass
-                page.wait_for_timeout(1000)
-
-            if logged_in and not page.is_closed():
-                logger.info("[YouTube] Login confirmed! Extracting channel info and saving cookies...")
-                page.wait_for_timeout(3000)
+                            extract_channel_info_from_page(page)
+                except Exception:
+                    pass
                 try:
-                    extract_channel_info_from_page(page)
-                except Exception as e:
-                    logger.warning("[YouTube] Extract channel info error: %s", e)
+                    page.wait_for_timeout(1000)
+                except Exception:
+                    break
 
-                logger.info("[YouTube] Auth completed successfully. Auto-closing browser...")
-                page.wait_for_timeout(1000)
+            if logged_in:
+                logger.info("[YouTube] Auth completed! User closed window.")
 
             try:
                 context.close()
