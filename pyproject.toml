@@ -1,0 +1,22 @@
+[build-system]
+requires = ["scikit-build-core>=0.10", "pybind11>=2.12"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "obscura-clips"
+version = "0.1.0"
+description = "Local-hybrid AI vertical video clipper"
+requires-python = ">=3.10"
+# NOTE: >=3.10 is the hard floor. In practice, prefer 3.11 or 3.12 for the venv —
+# faster-whisper's GPU backend (ctranslate2) tends to lag behind the newest
+# CPython releases for well-tested CUDA wheels. See run_linux.sh / run_windows.bat,
+# which now pick 3.12/3.11 automatically when available instead of a bare `python3`.
+dynamic = ["dependencies"]
+
+[tool.scikit-build]
+cmake.version = ">=3.18"
+wheel.packages = ["modules"]
+
+[tool.scikit-build.metadata.dependencies]
+provider = "scikit_build_core.metadata.requirements"
+input = "requirements.txt"

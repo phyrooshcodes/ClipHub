@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; font-src 'self' https://fonts.gstatic.com https://cdn.jsdelivr.net;">
+  <title>Obscura | AI Video Engine</title>
+  
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+  
+  <!-- Icons -->
+  <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+  
+  <!-- Styles -->
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- Ambient Background Orbs -->
+  <div class="ambient-orb orb-1"></div>
+  <div class="ambient-orb orb-2"></div>
+  <div class="ambient-orb orb-3"></div>
+
+  <!-- Top Navigation -->
+  <nav class="top-nav">
+    <div class="logo">
+      <div class="logo-icon"><i class="ri-movie-2-line"></i></div>
+      <span class="logo-text">OBS STUDIO</span>
+    </div>
+    <div class="nav-badges">
+      <div class="badge" id="badge-nvenc"><i class="ri-cpu-line"></i> ⚡ Loading...</div>
+      <div class="badge" id="badge-model"><i class="ri-brain-line"></i> 🧠 Loading...</div>
+    </div>
+    <div class="nav-actions" style="display: flex; gap: 16px; align-items: center;">
+        <button class="btn-outline btn-sm" id="btn-ask-caption" style="padding: 8px 16px; font-size: 0.85rem;">
+          <i class="ri-quill-pen-fill"></i> Ask Title & Hashtags
+        </button>
+        <button class="btn-outline btn-sm" id="btn-history" style="padding: 8px 16px; font-size: 0.85rem;">
+          <i class="ri-history-line"></i> History
+        </button>
+        <button class="btn-outline btn-sm" id="btn-upload-center" style="padding: 8px 16px; font-size: 0.85rem;">
+          <i class="ri-upload-cloud-2-line"></i> Upload Center
+        </button>
+        <button class="icon-btn" id="btn-settings" title="Settings"><i class="ri-settings-4-line"></i></button>
+    </div>
+  </nav>
+
+  <main class="container">
+    
+    <!-- Hero / Dropzone Area -->
+    <section class="hero-section" id="section-upload">
+      <h1 class="hero-title">Automate your <span>Viral Growth</span></h1>
+      <p class="hero-subtitle">Upload a podcast or stream, and let the AI extract, edit, and publish the best clips automatically.</p>
+      
+      <div class="dropzone" id="dropzone">
+        <div class="dropzone-content">
+          <div class="drop-icon"><i class="ri-upload-cloud-2-line"></i></div>
+          <h3>Drag & Drop video file here</h3>
+          <p>or click to browse from your computer</p>
+          <input type="file" id="file-input" accept="video/mp4,video/x-m4v,video/*" hidden />
+        </div>
+      </div>
+
+      <div class="divider">
+        <span>OR</span>
+      </div>
+
+      <div style="display: flex; justify-content: center; gap: 20px; margin-top: 25px; margin-bottom: 15px;">
+        <div style="display: flex; align-items: center; gap: 10px; background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); padding: 8px 16px; border-radius: var(--radius-md);">
+          <i class="ri-closed-captioning-line" style="color: var(--accent-cyan); font-size: 1.2rem;"></i>
+          <span style="color: var(--text-main); font-size: 0.95rem; font-weight: 500;">Caption Style:</span>
+          <select id="home-caption-style" style="background: transparent; border: none; color: var(--text-main); font-size: 0.95rem; cursor: pointer; outline: none;">
+            <option value="kinetic_slide" style="background: #111116;">Kinetic Slide (Default)</option>
+            <option value="tiktok_pop" style="background: #111116;">TikTok Pop</option>
+            <option value="cyberpunk_neon" style="background: #111116;">Cyberpunk Neon</option>
+            <option value="smooth_wave" style="background: #111116;">Smooth Wave (Karaoke)</option>
+            <option value="vibrant_gradient" style="background: #111116;">Vibrant Gradient</option>
+            <option value="cinematic_swing" style="background: #111116;">Cinematic Swing</option>
+            <option value="karaoke_glow" style="background: #111116;">Karaoke Glow</option>
+            <option value="minimal_fade" style="background: #111116;">Minimal Fade</option>
+            <option value="future_cyber" style="background: #111116;">Future Cyber</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="url-input-wrapper">
+        <i class="ri-youtube-line"></i>
+        <input type="text" id="youtube-url" placeholder="Paste YouTube link here..." />
+        <button class="btn-primary" id="btn-start-yt">Process <i class="ri-arrow-right-line"></i></button>
+      </div>
+
+      <div id="recent-uploads-section" style="margin-top: 40px; text-align: left; background: rgba(0,0,0,0.2); padding: 20px; border-radius: var(--radius-md); border: 1px solid var(--border-color); display: none;">
+        <h4 style="margin-bottom: 15px; color: var(--text-muted); font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px;">Recent Uploads / Downloads</h4>
+        <div id="recent-uploads-list" style="display: flex; gap: 10px; overflow-x: auto; padding-bottom: 10px;">
+          <!-- Recent uploads injected here -->
+        </div>
+      </div>
+    </section>
+
+    <!-- Pipeline Processing Area -->
+    <section class="processing-section hidden" id="section-processing">
+      <div class="processing-header">
+        <div>
+          <h2>Processing Video</h2>
+          <div style="display: flex; align-items: center; gap: 12px; margin-top: 5px;">
+            <p class="text-muted" id="proc-filename" style="margin:0;">video.mp4</p>
+            <span style="color: rgba(255,255,255,0.2);">|</span>
+            <p id="fun-status" style="color: var(--accent-cyan); font-weight: 500; font-style: italic; margin:0; display:flex; align-items:center; gap: 8px;">
+              <i class="ri-cup-line float" style="display:inline-block;"></i> <span id="fun-status-text">Grab a coffee, AI is brewing...</span>
+            </p>
+          </div>
+        </div>
+        <button class="btn-outline btn-danger" id="btn-cancel">
+          <i class="ri-stop-circle-line"></i> Cancel
+        </button>
+      </div>
+
+      <!-- Main Progress -->
+      <div class="progress-container">
+        <div class="progress-info">
+          <span id="proc-stage-name">Initializing Pipeline...</span>
+          <span id="proc-percent">0%</span>
+        </div>
+        <div class="progress-track">
+          <div class="progress-bar" id="proc-bar">
+            <div class="progress-glow"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Grid layout for steps and console -->
+      <div class="proc-grid">
+        <div class="proc-steps">
+          <div class="step-card hidden" id="step-download">
+            <div class="step-icon"><i class="ri-download-cloud-2-line"></i></div>
+            <div class="step-details">
+              <h4>Downloading Video</h4>
+              <span class="badge badge-sm">Network</span>
+            </div>
+            <div class="step-status"><i class="ri-loader-4-line spin"></i></div>
+          </div>
+          <div class="step-card" id="step-demux">
+            <div class="step-icon"><i class="ri-disc-line"></i></div>
+            <div class="step-details">
+              <h4>Audio Demux</h4>
+              <span class="badge badge-sm">CPU</span>
+            </div>
+            <div class="step-status"><i class="ri-loader-4-line spin"></i></div>
+          </div>
+          <div class="step-card" id="step-asr">
+            <div class="step-icon"><i class="ri-voice-recognition-line"></i></div>
+            <div class="step-details">
+              <h4>ASR Transcription</h4>
+              <span class="badge badge-sm">GPU INT8</span>
+            </div>
+            <div class="step-status"><i class="ri-loader-4-line spin"></i></div>
+          </div>
+          <div class="step-card" id="step-hook">
+            <div class="step-icon"><i class="ri-brain-line"></i></div>
+            <div class="step-details">
+              <h4>Hook Detection</h4>
+              <span class="badge badge-sm">Cloud LLM</span>
+            </div>
+            <div class="step-status"><i class="ri-loader-4-line spin"></i></div>
+          </div>
+          <div class="step-card" id="step-face">
+            <div class="step-icon"><i class="ri-focus-2-line"></i></div>
+            <div class="step-details">
+              <h4>Face Tracking</h4>
+              <span class="badge badge-sm">CPU</span>
+            </div>
+            <div class="step-status"><i class="ri-loader-4-line spin"></i></div>
+          </div>
+          <div class="step-card" id="step-subs">
+            <div class="step-icon"><i class="ri-chat-4-line"></i></div>
+            <div class="step-details">
+              <h4>Subtitles</h4>
+              <span class="badge badge-sm">CPU</span>
+            </div>
+            <div class="step-status"><i class="ri-loader-4-line spin"></i></div>
+          </div>
+          <div class="step-card" id="step-render">
+            <div class="step-icon"><i class="ri-movie-2-line"></i></div>
+            <div class="step-details">
+              <h4>NVENC Rendering</h4>
+              <span class="badge badge-sm">GPU</span>
+            </div>
+            <div class="step-status"><i class="ri-loader-4-line spin"></i></div>
+          </div>
+        </div>
+
+        <div class="console-card">
+          <div class="console-header">
+            <div class="dots">
+              <div class="dot red"></div>
+              <div class="dot yellow"></div>
+              <div class="dot green"></div>
+            </div>
+            <span class="console-title">pipeline_console.log</span>
+          </div>
+          <div class="console-body" id="console-output">
+            <!-- Logs appear here -->
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Clips Gallery Area -->
+    <section class="clips-section hidden" id="section-clips">
+      <div class="clips-header">
+        <div>
+          <h2>Your Clips are Ready</h2>
+          <p class="text-muted">Review, edit, and publish to your socials.</p>
+        </div>
+        <div style="display: flex; gap: 12px; align-items: center;">
+          <button class="btn-primary" id="btn-publish-all">
+            <i class="ri-instagram-fill"></i> Mass Post All to Instagram
+          </button>
+          <button class="btn-outline" id="btn-back-from-clips">
+            <i class="ri-arrow-left-line"></i> Back to Studio
+          </button>
+        </div>
+      </div>
+
+      <div class="clips-grid" id="clips-container">
+        <!-- Clip Cards will be injected here -->
+      </div>
+    </section>
+
+    <!-- History Area -->
+    <section class="history-section hidden" id="section-history">
+      <div class="clips-header">
+        <div>
+          <h2>Processing History</h2>
+          <div style="display: flex; gap: 10px; margin-top: 15px; margin-bottom: 5px;">
+            <button class="btn-primary btn-sm" id="tab-clip-history" style="padding: 6px 14px;">Video Clips</button>
+            <button class="btn-outline btn-sm" id="tab-caption-history" style="padding: 6px 14px;">Captions & Hashtags</button>
+          </div>
+        </div>
+        <div style="display: flex; gap: 12px; align-items: center;">
+          <button class="btn-primary" id="btn-mass-post-history">
+            <i class="ri-instagram-fill"></i> Mass Post All
+          </button>
+          <button class="btn-outline" id="btn-back-home">
+            <i class="ri-arrow-left-line"></i> Back to Studio
+          </button>
+        </div>
+      </div>
+
+      <div class="clips-grid" id="history-container">
+        <!-- History Clip Cards will be injected here -->
+      </div>
+      
+      <div id="caption-history-container" class="hidden" style="display: flex; flex-direction: column; gap: 15px; max-width: 800px; margin: 0 auto;">
+        <!-- Caption history injected here -->
+      </div>
+    </section>
+
+    <section class="upload-center-section hidden" id="section-upload-center">
+      <div class="clips-header">
+        <div>
+          <h2>Upload Center</h2>
+          <p class="text-muted" id="upload-center-subtitle">Instagram publishing queue</p>
+        </div>
+        <div style="display:flex; gap:10px;">
+          <button class="btn-outline btn-sm" id="btn-queue-pause"><i class="ri-pause-circle-line"></i> Pause Queue</button>
+          <button class="btn-outline btn-sm" id="btn-clear-failed">Clear Failed</button>
+          <button class="btn-outline btn-sm" id="btn-remove-completed">Remove Completed</button>
+          <button class="btn-outline btn-sm" id="btn-upload-center-back"><i class="ri-arrow-left-line"></i> Studio</button>
+        </div>
+      </div>
+      <div class="upload-overview" id="upload-overview"></div>
+      <div class="upload-section-block" id="uploading-panel"><h3>Currently Uploading</h3><div id="uploading-list"></div></div>
+      <div class="upload-section-block"><h3>Queue</h3><div class="upload-list" id="queue-list"></div></div>
+      <div class="upload-section-block"><h3>Manual Verification</h3><div class="upload-list" id="manual-list"></div></div>
+      <div class="upload-section-block"><h3>Failed</h3><div class="upload-list" id="failed-list"></div></div>
+      <div class="upload-section-block"><h3>Completed</h3><div class="upload-list" id="completed-list"></div></div>
+    </section>
+
+  </main>
+
+  <button class="upload-status-bar" id="upload-status-bar" title="Open Upload Center">
+    <i class="ri-instagram-line"></i><span id="upload-status-text">Manual Publish · Upload Center</span>
+  </button>
+
+  <!-- Settings Modal -->
+  <div class="modal-backdrop hidden" id="modal-settings">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Settings & Connections</h3>
+        <button class="icon-btn close-modal"><i class="ri-close-line"></i></button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Caption Animation Style</label>
+          <select id="config-caption-style">
+            <option value="kinetic_slide">Kinetic Slide (Default)</option>
+            <option value="tiktok_pop">TikTok Pop</option>
+            <option value="cyberpunk_neon">Cyberpunk Neon</option>
+            <option value="smooth_wave">Smooth Wave (Karaoke)</option>
+            <option value="vibrant_gradient">Vibrant Gradient</option>
+            <option value="cinematic_swing">Cinematic Swing</option>
+            <option value="karaoke_glow">Karaoke Glow</option>
+            <option value="minimal_fade">Minimal Fade</option>
+            <option value="future_cyber">Future Cyber</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Whisper Model</label>
+          <select id="config-model">
+            <option value="tiny">Tiny (fastest)</option>
+            <option value="base">Base</option>
+            <option value="small" selected>Small (recommended)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>NVIDIA API Key</label>
+          <div class="api-key-row">
+            <input type="password" id="nvidia-key" placeholder="nvapi-..." autocomplete="off" />
+            <button class="btn-outline btn-sm" id="btn-save-nvidia-key" type="button">Save</button>
+          </div>
+          <p class="text-xs api-key-status" id="nvidia-key-status"></p>
+        </div>
+        <hr class="modal-hr">
+        <h4>Publishing</h4>
+        <div class="form-group" id="publishing-mode">
+          <label class="radio-option">
+            <input type="radio" name="publishing-mode" value="disabled">
+            <span class="radio-text">
+              <span class="radio-title">Disabled</span>
+              <span class="radio-desc">Never queue clips automatically.</span>
+            </span>
+          </label>
+          <label class="radio-option">
+            <input type="radio" name="publishing-mode" value="manual" checked>
+            <span class="radio-text">
+              <span class="radio-title">Manual Publish</span>
+              <span class="radio-desc">Completed clips wait for you to press Publish.</span>
+            </span>
+          </label>
+          <label class="radio-option">
+            <input type="radio" name="publishing-mode" value="auto">
+            <span class="radio-text">
+              <span class="radio-title">Auto Publish</span>
+              <span class="radio-desc">Queue each rendered clip in the background; generation continues immediately.</span>
+            </span>
+          </label>
+          <p class="text-xs" id="publishing-mode-status" style="color: var(--accent-cyan); margin-top: 8px;"></p>
+        </div>
+        <div class="form-group" style="margin-top: 15px;">
+          <label>Target Platforms</label>
+          <div class="platform-selector-group" style="display: flex; flex-wrap: wrap; gap: 10px; margin-top: 6px;">
+            <label class="platform-badge-check" style="display: flex; align-items: center; gap: 6px; padding: 6px 12px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; cursor: pointer;">
+              <input type="checkbox" id="chk-platform-instagram" value="instagram" checked style="accent-color: var(--accent-magenta);">
+              <i class="ri-instagram-fill" style="color: #e1306c;"></i> Instagram Reels
+            </label>
+            <label class="platform-badge-check" style="display: flex; align-items: center; gap: 6px; padding: 6px 12px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; cursor: pointer;">
+              <input type="checkbox" id="chk-platform-youtube" value="youtube" checked style="accent-color: #ff0000;">
+              <i class="ri-youtube-fill" style="color: #ff0000;"></i> YouTube (12:00 AM) <span class="text-xs" style="font-size: 0.65rem; background: rgba(255,165,0,0.15); color: #ffa500; border: 1px solid rgba(255,165,0,0.3); padding: 2px 6px; border-radius: 12px; margin-left: 2px;">Testing</span>
+            </label>
+            <label class="platform-badge-check disabled" style="display: flex; align-items: center; gap: 6px; padding: 6px 12px; background: rgba(255,255,255,0.02); border: 1px dashed rgba(255,255,255,0.08); border-radius: 8px; opacity: 0.5; cursor: not-allowed;" title="Coming Soon">
+              <i class="ri-tiktok-fill"></i> TikTok <span class="text-xs" style="font-size: 0.65rem; opacity: 0.7;">Soon</span>
+            </label>
+            <label class="platform-badge-check disabled" style="display: flex; align-items: center; gap: 6px; padding: 6px 12px; background: rgba(255,255,255,0.02); border: 1px dashed rgba(255,255,255,0.08); border-radius: 8px; opacity: 0.5; cursor: not-allowed;" title="Coming Soon">
+              <i class="ri-twitter-x-fill"></i> X <span class="text-xs" style="font-size: 0.65rem; opacity: 0.7;">Soon</span>
+            </label>
+          </div>
+        </div>
+        <hr class="modal-hr">
+        <h4>Social Accounts</h4>
+        <div class="social-connect-box">
+          <div class="social-info">
+            <i class="ri-instagram-line" style="color: #e1306c;"></i>
+            <div>
+              <strong>Instagram</strong>
+              <p class="text-xs text-muted" id="ig-status-text">Not connected</p>
+            </div>
+          </div>
+          <button class="btn-outline btn-sm" id="btn-connect-ig">Connect</button>
+        </div>
+        <div class="social-connect-box" style="margin-top: 10px;">
+          <div class="social-info">
+            <i class="ri-youtube-fill" style="color: #ff0000;"></i>
+            <div>
+              <strong id="yt-channel-title">YouTube Studio</strong>
+              <p class="text-xs text-muted" id="yt-status-text">Not connected</p>
+            </div>
+          </div>
+          <div style="display: flex; gap: 8px; align-items: center; margin-top: 10px; flex-wrap: wrap;">
+            <button class="btn-outline btn-sm" id="btn-connect-yt">Connect Studio</button>
+            <button class="btn-outline btn-sm hidden" id="btn-switch-yt" style="border-color: rgba(255,255,255,0.2);"><i class="ri-user-switch-line"></i> Switch Channel</button>
+            <button class="btn-outline btn-sm hidden" id="btn-disconnect-yt" style="border-color: rgba(255,80,80,0.4); color: #ff6b6b;"><i class="ri-logout-box-r-line"></i> Disconnect</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+  <!-- Ask Title & Hashtags Modal -->
+  <div class="modal-backdrop hidden" id="modal-ask-caption">
+    <div class="modal" style="max-width: 500px;">
+      <div class="modal-header">
+        <h3>Ask Title & Hashtags</h3>
+        <button class="icon-btn close-modal"><i class="ri-close-line"></i></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted" style="margin-bottom: 20px;">Upload any video. AI will transcribe it and generate the perfect viral title and hashtag-rich caption for Instagram/TikTok.</p>
+        
+        <div class="form-group">
+          <input type="file" id="ask-caption-file" accept="video/mp4,video/quicktime,video/webm" style="display:none;">
+          <button class="btn-outline" id="btn-ask-upload" style="width:100%; border-style: dashed; padding: 20px;">
+            <i class="ri-upload-cloud-2-line" style="font-size: 1.5rem; display:block; margin-bottom: 8px;"></i>
+            Click to Browse Video
+          </button>
+        </div>
+        
+        <div id="ask-caption-loading" class="hidden" style="text-align:center; padding: 20px 0;">
+          <i class="ri-loader-4-line spin" style="font-size: 2rem; color: var(--primary);"></i>
+          <p class="text-muted" style="margin-top: 10px;">Transcribing & Generating AI Hooks...</p>
+        </div>
+        
+        <div id="ask-caption-result" class="hidden" style="margin-top: 20px; background: rgba(0,0,0,0.2); padding: 15px; border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+          <div style="display:flex; justify-content: space-between; align-items:center; margin-bottom: 8px;">
+            <h4 style="font-size: 0.9rem; color: #fff;">Generated Copy</h4>
+            <button class="btn-primary btn-sm" id="btn-ask-copy"><i class="ri-clipboard-line"></i> Copy</button>
+          </div>
+          <pre id="ask-caption-text" style="white-space: pre-wrap; font-family: inherit; font-size: 0.9rem; color: #b0b0c0;"></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Publish Modal -->
+  <div class="modal-backdrop hidden" id="modal-publish">
+    <div class="modal" style="max-width: 600px;">
+      <div class="modal-header">
+        <h3 id="publish-modal-title">Publish Clip</h3>
+        <button class="icon-btn close-modal" id="btn-close-publish-modal"><i class="ri-close-line"></i></button>
+      </div>
+      <div class="modal-body">
+        
+        <!-- Step 1: Selection -->
+        <div id="publish-selection-view">
+          <p style="margin-bottom: 20px; color: var(--text-muted);">Select the platforms where you want to publish this clip.</p>
+          <div style="display: flex; gap: 20px; margin-bottom: 30px;">
+            <label class="custom-checkbox" style="display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 16px;">
+              <input type="checkbox" id="chk-pub-instagram" checked>
+              <span>Instagram Reels</span>
+            </label>
+            <label class="custom-checkbox" style="display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 16px;">
+              <input type="checkbox" id="chk-pub-youtube" checked>
+              <span>YouTube Shorts</span>
+            </label>
+          </div>
+          <div style="display: flex; justify-content: flex-end;">
+            <button class="btn-primary" id="btn-confirm-publish">Start Publishing <i class="ri-arrow-right-line"></i></button>
+          </div>
+        </div>
+
+        <!-- Step 2: Progress -->
+        <div id="publish-progress-view" class="hidden">
+          <div class="progress-track" style="margin-bottom: 20px;">
+            <div class="progress-bar" id="publish-progress-fill" style="width: 0%; transition: width 0.3s ease;"></div>
+          </div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 15px; color: var(--text-muted);">
+            <span id="publish-progress-status">Initializing...</span>
+            <span id="publish-progress-percent">0%</span>
+          </div>
+          
+          <div class="console-card" style="margin-top: 20px; padding: 15px; background: rgba(0,0,0,0.2); border-radius: 8px;">
+            <div class="console-header" style="margin-bottom: 10px;">
+              <span class="console-title" style="font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px;">Publishing Log</span>
+            </div>
+            <div class="console-body" id="publish-console-output" style="max-height: 150px; overflow-y: auto; font-family: monospace; font-size: 13px; color: var(--text-main);">
+              <!-- Logs appear here -->
+            </div>
+          </div>
+          <div style="display: flex; justify-content: flex-end; margin-top: 20px;">
+            <button class="btn-outline hidden" id="btn-publish-done">Done</button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

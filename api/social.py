@@ -1,0 +1,355 @@
+import os
+import sys
+import uuid
+import json
+import asyncio
+import functools
+from typing import List
+from pathlib import Path
+from fastapi import APIRouter, BackgroundTasks, UploadFile, File
+from fastapi.responses import JSONResponse, HTMLResponse
+from pydantic import BaseModel
+import logging
+
+logger = logging.getLogger(__name__)
+router = APIRouter()
+BASE_DIR = Path(__file__).parent.parent
+OUTPUT_DIR = BASE_DIR / "output"
+
+class InstagramConnectRequest(BaseModel):
+    username: str
+    password: str
+
+class InstagramConnectSessionRequest(BaseModel):
+    username: str
+    session_id: str
+
+class SocialPostRequest(BaseModel):
+    job_id: str
+    clip_filename: str
+    title: str
+    caption: str
+    platforms: List[str]
+    allow_duplicate: bool = False
+
+class InstagramQueueActionRequest(BaseModel):
+    action: str
+
+social_uploads = {}
+upload_lock = asyncio.Lock()
+
+async def _bg_social_post(upload_id: str, job_id: str, clip_filename: str, title: str, caption: str, platforms: List[str]):
+    social_uploads[upload_id] = {"status": "uploading", "results": {}}
+    video_path = (OUTPUT_DIR / job_id / clip_filename).resolve()
+    if not video_path.is_relative_to(OUTPUT_DIR.resolve()) or not video_path.exists():
+        social_uploads[upload_id] = {"status": "failed", "error": "Video file not found or invalid."}
+        return
+        
+    try:
+        from modules.publisher_ig import post_instagram_reel
+        from modules.publisher_yt import post_youtube_short
+    except Exception as e:
+        social_uploads[upload_id] = {"status": "failed", "error": f"Failed to load publisher modules: {e}"}
+        return
+        
+    results = {}
+    has_errors = False
+    
+    def update_progress(platform: str, pct: int, msg: str):
+        if upload_id in social_uploads:
+            social_uploads[upload_id]["message"] = f"[{platform.upper()}] {msg}"
+            social_uploads[upload_id]["progress"] = pct
+    
+    async with upload_lock:
+        if "instagram" in platforms:
+            try:
+                loop = asyncio.get_event_loop()
+                ig_func = functools.partial(post_instagram_reel, str(video_path), caption, progress=lambda p, m: update_progress("instagram", p, m))
+                url = await loop.run_in_executor(None, ig_func)
+                results["instagram"] = {"success": True, "url": url}
+            except Exception as e:
+                results["instagram"] = {"success": False, "error": str(e)}
+                has_errors = True
+                
+    if "youtube" in platforms:
+        try:
+            from modules.youtube_worker import get_youtube_worker
+            worker = get_youtube_worker()
+            # Empty tags and None thumbnail for now
+            worker.enqueue(upload_id, str(video_path), title, caption, [], None, lambda p, m: update_progress("youtube", p, m))
+            
+            # Poll for completion
+            while True:
+                res = worker.results.get(upload_id, {})
+                st = res.get("status")
+                if st in ["scheduled", "completed", "failed"]:
+                    break
+                await asyncio.sleep(1)
+            
+            if res.get("success"):
+                results["youtube"] = {"success": True, "url": res.get("url")}
+            else:
+                results["youtube"] = {"success": False, "error": res.get("error", "Unknown error")}
+                has_errors = True
+        except Exception as e:
+            results["youtube"] = {"success": False, "error": str(e)}
+            has_errors = True
+            
+    status = "failed" if has_errors and len(results) == len(platforms) else "completed"
+    if has_errors and status == "completed": status = "partial"
+    social_uploads[upload_id] = {"status": status, "results": results}
+
+@router.get("/api/check-nvidia-key")
+async def check_nvidia_key():
+    from dotenv import load_dotenv
+    load_dotenv(BASE_DIR / ".env", override=True)
+    key = os.environ.get("NVIDIA_API_KEY", "")
+    is_set = len(key) > 0
+    masked_key = ""
+    if is_set: masked_key = key[:6] + "..." + key[-4:] if len(key) > 10 else "..."
+    return {"is_set": is_set, "masked_key": masked_key}
+
+@router.post("/api/save-nvidia-key")
+async def save_nvidia_key(payload: dict):
+    key = payload.get("key", "").strip()
+    key = key.replace("\n", "").replace("\r", "")
+    env_path = BASE_DIR / ".env"
+    lines = []
+    key_found = False
+    if env_path.exists():
+        with open(env_path, "r", encoding="utf-8") as f:
+            for line in f:
+                if line.strip().startswith("NVIDIA_API_KEY="):
+                    lines.append(f"NVIDIA_API_KEY={key}\n")
+                    key_found = True
+                else:
+                    lines.append(line)
+    if not key_found: lines.append(f"NVIDIA_API_KEY={key}\n")
+    with open(env_path, "w", encoding="utf-8") as f: f.writelines(lines)
+    os.environ["NVIDIA_API_KEY"] = key
+    return {"success": True, "message": "NVIDIA API Key saved permanently to backend."}
+
+@router.get("/api/music/tracks")
+async def get_music_tracks():
+    from modules.bg_music import list_available_tracks
+    try: return list_available_tracks()
+    except Exception as e:
+        logger.error(f"Error listing music tracks: {e}")
+        return []
+
+@router.post("/api/tools/generate-caption")
+async def api_tools_generate_caption(file: UploadFile = File(...)):
+    import tempfile, subprocess
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp:
+        content = await file.read()
+        tmp.write(content)
+        tmp_path = tmp.name
+    try:
+        python_exe = str(BASE_DIR / "venv" / "Scripts" / "python.exe")
+        if not Path(python_exe).exists():
+            python_exe = str(BASE_DIR / "venv" / "bin" / "python")
+            if not Path(python_exe).exists():
+                python_exe = sys.executable
+        cmd = [python_exe, str(BASE_DIR / "tools_generate_caption.py"), tmp_path]
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        return json.loads(result.stdout.strip())
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+    finally:
+        if os.path.exists(tmp_path): os.remove(tmp_path)
+
+@router.get("/api/social/status")
+async def social_status():
+    from modules.publisher_ig import is_instagram_connected
+    from modules.publisher_yt import is_youtube_connected, has_client_secrets, get_youtube_channel_info
+    ig_user = None
+    if is_instagram_connected():
+        try:
+            config_path = BASE_DIR / "credentials" / "instagram_config.json"
+            if config_path.exists():
+                with open(config_path, "r") as f: ig_user = json.load(f).get("username")
+        except: pass
+    yt_channel = None
+    if is_youtube_connected():
+        try: yt_channel = get_youtube_channel_info()
+        except: pass
+    return {
+        "instagram_connected": is_instagram_connected(),
+        "instagram_username": ig_user or ("Saved browser session" if is_instagram_connected() else None),
+        "youtube_connected": is_youtube_connected(),
+        "youtube_channel": yt_channel,
+        "youtube_client_secrets_present": has_client_secrets()
+    }
+
+@router.post("/api/social/instagram/connect-playwright")
+async def connect_ig_playwright():
+    from modules.publisher_ig import connect_instagram_playwright
+    try:
+        await asyncio.to_thread(connect_instagram_playwright)
+        return {"success": True}
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+
+@router.post("/api/social/instagram/connect-session")
+async def connect_ig_session(req: InstagramConnectSessionRequest):
+    from modules.publisher_ig import connect_instagram_with_session
+    try:
+        connect_instagram_with_session(req.username, req.session_id)
+        return {"success": True}
+    except Exception as e: return JSONResponse({"error": str(e)}, status_code=400)
+
+@router.post("/api/social/instagram/disconnect")
+async def disconnect_ig():
+    from modules.publisher_ig import disconnect_instagram
+    disconnect_instagram()
+    return {"success": True}
+
+@router.post("/api/social/youtube/connect-playwright")
+async def connect_yt_playwright():
+    from modules.publisher_yt import connect_youtube_playwright
+    try:
+        await asyncio.to_thread(connect_youtube_playwright)
+        return {"success": True}
+    except Exception as e: return JSONResponse({"error": str(e)}, status_code=400)
+
+@router.get("/api/social/youtube/auth-url")
+async def youtube_auth_url():
+    from modules.publisher_yt import get_youtube_flow, has_client_secrets
+    if not has_client_secrets(): return JSONResponse({"error": "client_secrets.json missing"}, status_code=400)
+    try:
+        flow = get_youtube_flow(redirect_uri="http://localhost:7842/api/social/youtube/callback")
+        auth_url, _ = flow.authorization_url(prompt='consent', access_type='offline')
+        return {"auth_url": auth_url}
+    except Exception as e: return JSONResponse({"error": str(e)}, status_code=500)
+
+@router.get("/api/social/youtube/callback")
+async def youtube_callback(code: str):
+    from modules.publisher_yt import connect_youtube_with_code
+    try:
+        connect_youtube_with_code(code, redirect_uri="http://localhost:7842/api/social/youtube/callback")
+        return HTMLResponse("<html><head><title>YouTube Connected</title></head><body><h2>✅ YouTube Connected!</h2><script>setTimeout(()=>window.close(), 2000);</script></body></html>")
+    except Exception as e: return HTMLResponse(f"<html><body><h2>❌ Connection Failed</h2><p>{e}</p></body></html>")
+
+@router.post("/api/social/youtube/disconnect")
+async def disconnect_yt():
+    from modules.publisher_yt import disconnect_youtube
+    disconnect_youtube()
+    return {"success": True}
+
+@router.get("/api/publisher/health")
+async def publisher_health():
+    from modules.publishers.youtube.publisher import get_youtube_channel_info, get_channel_profile_dir, PROFILE_DIR, _state_dir, is_youtube_connected
+    import time as _time
+    channel_info = get_youtube_channel_info()
+    channel_id = channel_info.get("channel_id", "")
+    active_profile = get_channel_profile_dir(channel_id) if channel_id else PROFILE_DIR
+    profile_exists = active_profile.exists() and any(active_profile.iterdir()) if active_profile.exists() else False
+    profiles_root = _state_dir() / "channel-profiles"
+    channel_profiles = []
+    if profiles_root.exists():
+        for child in sorted(profiles_root.iterdir()):
+            if child.is_dir():
+                channel_profiles.append({"channel_id": child.name, "profile_path": str(child), "has_data": any(child.iterdir()) if list(child.iterdir()) else False})
+    return {"youtube_connected": is_youtube_connected(), "channel": channel_info, "active_profile": str(active_profile), "profile_exists": profile_exists, "channel_profiles": channel_profiles, "timestamp": _time.time()}
+
+@router.get("/api/channels")
+async def list_channels():
+    from modules.publishers.youtube.publisher import get_youtube_channel_info, _state_dir
+    channel_info = get_youtube_channel_info()
+    profiles_root = _state_dir() / "channel-profiles"
+    channels = []
+    if channel_info.get("channel_id"): channels.append({"channel_id": channel_info["channel_id"], "name": channel_info.get("name", ""), "handle": channel_info.get("handle", ""), "is_active": True, "profile_isolated": (profiles_root / channel_info["channel_id"]).exists()})
+    if profiles_root.exists():
+        for child in sorted(profiles_root.iterdir()):
+            if child.is_dir() and child.name != channel_info.get("channel_id"): channels.append({"channel_id": child.name, "name": "", "handle": "", "is_active": False, "profile_isolated": True})
+    return {"channels": channels}
+
+@router.post("/api/social/post")
+async def start_social_post(req: SocialPostRequest, background_tasks: BackgroundTasks):
+    requested = {platform.lower() for platform in req.platforms}
+    if not requested or not requested.issubset({"instagram", "youtube"}): return JSONResponse({"error": "Platforms must contain instagram and/or youtube."}, status_code=400)
+    if requested == {"instagram"}:
+        try:
+            job_dir = (OUTPUT_DIR / req.job_id).resolve()
+            video_path = (job_dir / req.clip_filename).resolve()
+            if not video_path.is_relative_to(OUTPUT_DIR.resolve()) or not video_path.is_file(): return JSONResponse({"error": "Video file not found or invalid."}, status_code=404)
+            from modules.instagram_queue import get_instagram_queue
+            upload = get_instagram_queue().enqueue(str(video_path), req.caption, allow_duplicate=req.allow_duplicate)
+            return {"upload_id": upload["id"], "status": upload["status"], "upload": upload}
+        except Exception as exc: return JSONResponse({"error": str(exc)}, status_code=500)
+    upload_id = str(uuid.uuid4())
+    background_tasks.add_task(_bg_social_post, upload_id, req.job_id, req.clip_filename, req.title, req.caption, req.platforms)
+    return {"upload_id": upload_id, "status": "pending"}
+
+@router.get("/api/social/post-status/{upload_id}")
+async def get_social_post_status(upload_id: str):
+    from modules.instagram_queue import get_instagram_queue
+    queued_upload = get_instagram_queue().get(upload_id)
+    if queued_upload: return queued_upload
+    if upload_id not in social_uploads: return JSONResponse({"error": "Upload ID not found"}, status_code=404)
+    return social_uploads[upload_id]
+
+def _instagram_upload_payload(item: dict) -> dict:
+    payload = dict(item)
+    path = Path(item["video_path"])
+    try: payload["file_size"] = path.stat().st_size
+    except: payload["file_size"] = None
+    try:
+        parts = path.resolve().relative_to(OUTPUT_DIR.resolve()).parts
+        if len(parts) >= 2: payload["video_url"] = f"/output/{parts[0]}/{parts[-1]}"
+    except: payload["video_url"] = None
+    return payload
+
+@router.get("/api/social/instagram/history")
+async def instagram_upload_history():
+    from modules.instagram_queue import get_instagram_queue
+    return {"uploads": [_instagram_upload_payload(item) for item in get_instagram_queue().history()]}
+
+@router.get("/api/social/instagram/center")
+async def instagram_upload_center():
+    from modules.instagram_queue import get_instagram_queue
+    queue = get_instagram_queue()
+    return {"summary": queue.summary(), "uploads": [_instagram_upload_payload(item) for item in queue.history(200)]}
+
+@router.get("/api/social/instagram/uploads/{upload_id}/events")
+async def instagram_upload_events(upload_id: str):
+    from modules.instagram_queue import get_instagram_queue
+    queue = get_instagram_queue()
+    if not queue.get(upload_id): return JSONResponse({"error": "Upload not found"}, status_code=404)
+    return {"events": queue.events(upload_id)}
+
+@router.post("/api/social/instagram/queue/{upload_id}")
+async def instagram_queue_action(upload_id: str, req: InstagramQueueActionRequest):
+    from modules.instagram_queue import get_instagram_queue
+    queue = get_instagram_queue()
+    if req.action == "retry":
+        item = queue.retry(upload_id)
+        if not item: return JSONResponse({"error": "Cannot retry."}, status_code=400)
+        return _instagram_upload_payload(item)
+    if req.action == "remove":
+        if not queue.remove(upload_id): return JSONResponse({"error": "Cannot remove."}, status_code=400)
+        return {"success": True}
+    if req.action == "mark_completed":
+        item = queue.mark_completed(upload_id)
+        if not item: return JSONResponse({"error": "Cannot mark completed."}, status_code=400)
+        return _instagram_upload_payload(item)
+    if req.action == "cancel":
+        item = queue.cancel(upload_id)
+        if not item: return JSONResponse({"error": "Cannot cancel."}, status_code=400)
+        return _instagram_upload_payload(item)
+    if req.action in {"move_up", "move_down"}:
+        item = queue.move(upload_id, -1 if req.action == "move_up" else 1)
+        if not item: return JSONResponse({"error": "Cannot move."}, status_code=400)
+        return _instagram_upload_payload(item)
+    return JSONResponse({"error": "Unknown action."}, status_code=400)
+
+@router.post("/api/social/instagram/queue")
+async def instagram_queue_control(req: InstagramQueueActionRequest):
+    from modules.instagram_queue import get_instagram_queue
+    queue = get_instagram_queue()
+    if req.action == "pause": queue.set_paused(True)
+    elif req.action == "resume": queue.set_paused(False)
+    elif req.action == "clear_failed": return {"removed": queue.clear({"failed", "login_required", "challenge_required", "rate_limited", "rejected"})}
+    elif req.action == "remove_completed": return {"removed": queue.clear({"completed"})}
+    else: return JSONResponse({"error": "Unknown action."}, status_code=400)
+    return queue.summary()
