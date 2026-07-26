@@ -38,6 +38,9 @@
         <button class="btn-outline btn-sm" id="btn-ask-caption" style="padding: 8px 16px; font-size: 0.85rem;">
           <i class="ri-quill-pen-fill"></i> Ask Title & Hashtags
         </button>
+        <button class="btn-outline btn-sm" id="btn-ask-product" style="padding: 8px 16px; font-size: 0.85rem; color: #ff9900; border-color: rgba(255,153,0,0.3);">
+          <i class="ri-amazon-fill"></i> Get Product Suggestion
+        </button>
         <button class="btn-outline btn-sm" id="btn-history" style="padding: 8px 16px; font-size: 0.85rem;">
           <i class="ri-history-line"></i> History
         </button>
@@ -430,6 +433,39 @@
             <button class="btn-primary btn-sm" id="btn-ask-copy"><i class="ri-clipboard-line"></i> Copy</button>
           </div>
           <pre id="ask-caption-text" style="white-space: pre-wrap; font-family: inherit; font-size: 0.9rem; color: #b0b0c0;"></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Ask Product Suggestion Modal -->
+  <div class="modal-backdrop hidden" id="modal-ask-product">
+    <div class="modal" style="max-width: 500px;">
+      <div class="modal-header">
+        <h3>Get Amazon Product Suggestions</h3>
+        <button class="icon-btn close-modal"><i class="ri-close-line"></i></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted" style="margin-bottom: 20px;">Upload a clip. AI will analyze the content and find the best Amazon products to promote.</p>
+        
+        <div class="form-group">
+          <input type="file" id="ask-product-file" accept="video/mp4,video/quicktime,video/webm" style="display:none;">
+          <button class="btn-outline" id="btn-ask-product-upload" style="width:100%; border-style: dashed; padding: 20px; color: #ff9900; border-color: rgba(255,153,0,0.4);">
+            <i class="ri-upload-cloud-2-line" style="font-size: 1.5rem; display:block; margin-bottom: 8px;"></i>
+            Click to Browse Clip
+          </button>
+        </div>
+        
+        <div id="ask-product-loading" class="hidden" style="text-align:center; padding: 20px 0;">
+          <i class="ri-loader-4-line spin" style="font-size: 2rem; color: #ff9900;"></i>
+          <p class="text-muted" style="margin-top: 10px;">Analyzing & Finding Products...</p>
+        </div>
+        
+        <div id="ask-product-result" class="hidden" style="margin-top: 20px; background: rgba(0,0,0,0.2); padding: 15px; border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+          <div style="display:flex; justify-content: space-between; align-items:center; margin-bottom: 8px;">
+            <h4 style="font-size: 0.9rem; color: #ff9900;"><i class="ri-amazon-fill"></i> Recommended Products</h4>
+          </div>
+          <div id="ask-product-list" style="display: flex; flex-direction: column; gap: 15px;"></div>
         </div>
       </div>
     </div>

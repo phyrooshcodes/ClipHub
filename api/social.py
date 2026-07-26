@@ -158,6 +158,27 @@ async def api_tools_generate_caption(file: UploadFile = File(...)):
     finally:
         if os.path.exists(tmp_path): os.remove(tmp_path)
 
+@router.post("/api/tools/generate-products")
+async def api_tools_generate_products(file: UploadFile = File(...)):
+    import tempfile, subprocess
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp:
+        tmp.write(await file.read())
+        tmp_path = tmp.name
+    try:
+        python_exe = sys.executable
+        if BASE_DIR.name == "Obscura-Clips":
+            python_exe = str(BASE_DIR / "venv" / "bin" / "python")
+            if not Path(python_exe).exists():
+                python_exe = sys.executable
+        cmd = [python_exe, str(BASE_DIR / "tools_generate_products.py"), tmp_path]
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        return json.loads(result.stdout.strip())
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+    finally:
+        if os.path.exists(tmp_path): os.remove(tmp_path)
+
+
 @router.get("/api/social/status")
 async def social_status():
     from modules.publisher_ig import is_instagram_connected

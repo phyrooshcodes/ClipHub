@@ -471,6 +471,69 @@ document.addEventListener("DOMContentLoaded", () => {
     } catch(err) {}
   });
 
+  // Ask Product Suggestion Modal
+  const modalAskProduct = document.getElementById('modal-ask-product');
+  const btnAskProduct = document.getElementById('btn-ask-product');
+  const btnAskProductUpload = document.getElementById('btn-ask-product-upload');
+  const askProductFile = document.getElementById('ask-product-file');
+  
+  btnAskProduct.addEventListener('click', () => {
+    modalAskProduct.classList.remove('hidden');
+    gsap.fromTo(modalAskProduct.querySelector('.modal'), { scale: 0.98, opacity: 0, y: 10 }, { scale: 1, opacity: 1, y: 0, duration: 0.2, ease: "power2.out" });
+  });
+  
+  btnAskProductUpload.addEventListener('click', () => askProductFile.click());
+  
+  askProductFile.addEventListener('change', async (e) => {
+    if(!e.target.files.length) return;
+    const file = e.target.files[0];
+    
+    document.getElementById('ask-product-loading').classList.remove('hidden');
+    document.getElementById('ask-product-result').classList.add('hidden');
+    btnAskProductUpload.style.display = 'none';
+    
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    try {
+      const res = await fetch('/api/tools/generate-products', {
+        method: 'POST',
+        body: formData
+      });
+      const data = await res.json();
+      
+      document.getElementById('ask-product-loading').classList.add('hidden');
+      document.getElementById('ask-product-result').classList.remove('hidden');
+      btnAskProductUpload.style.display = 'block';
+      
+      const listContainer = document.getElementById('ask-product-list');
+      listContainer.innerHTML = '';
+      
+      if (data.products && data.products.length > 0) {
+        data.products.forEach(prod => {
+          const amzSearch = `https://www.amazon.com/s?k=${encodeURIComponent(prod.search_query)}`;
+          listContainer.innerHTML += `
+            <div style="background: rgba(255,255,255,0.03); padding: 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.08);">
+              <div style="font-weight: bold; color: var(--text-main); margin-bottom: 4px;">${prod.product_name}</div>
+              <div style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 10px;">${prod.reason}</div>
+              <a href="${amzSearch}" target="_blank" class="btn-outline btn-sm" style="display: inline-block; color: #ff9900; border-color: rgba(255,153,0,0.3); text-decoration: none;">
+                <i class="ri-amazon-fill"></i> Search on Amazon
+              </a>
+            </div>
+          `;
+        });
+      } else {
+        listContainer.innerHTML = `<div class="text-muted">No specific products found for this clip.</div>`;
+      }
+      
+    } catch(err) {
+      console.error(err);
+      Toast.show("Failed to generate product suggestions.", "error");
+      document.getElementById('ask-product-loading').classList.add('hidden');
+      btnAskProductUpload.style.display = 'block';
+    }
+  });
+
   document.querySelectorAll('.close-modal').forEach(btn => {
     btn.addEventListener('click', () => {
       document.documentElement.classList.remove('modal-open');
@@ -480,6 +543,7 @@ document.addEventListener("DOMContentLoaded", () => {
         onComplete: () => {
           modalSettings.classList.add('hidden');
           modalAskCaption.classList.add('hidden');
+          modalAskProduct.classList.add('hidden');
         }
       });
     });
