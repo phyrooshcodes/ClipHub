@@ -152,20 +152,19 @@ def wait_for_upload_completion(page: Page, telemetry: UploadNetworkTelemetry | N
             return
 
         try:
-            progress_el = page.locator("ytcp-video-upload-progress, .progress-label, ytcp-uploads-dialog-header, .ytcp-uploads-dialog").first
-            if progress_el.count():
+            progress_el = page.locator("ytcp-video-upload-progress .progress-label").first
+            if progress_el.count() and progress_el.is_visible():
                 text = progress_el.inner_text().strip()
                 text_lower = text.lower()
                 
-                if text and text != last_logged_text and ("uploading" in text_lower or "%" in text_lower):
+                if text and text != last_logged_text:
                     logger.info(f"[YouTube] Current Transfer Status: {text.splitlines()[0]}")
                     last_logged_text = text
 
-                # Strict checking: We must explicitly see a post-upload phase word, OR we must have seen 'uploading' previously and it's now gone.
-                saw_uploading_previously = last_logged_text and ("uploading" in last_logged_text.lower() or "%" in last_logged_text.lower())
+                # Strict checking: Only explicitly positive completion keywords
                 explicit_complete = any(kw in text_lower for kw in ("upload complete", "processing", "checks", "sd complete", "hd complete"))
                 
-                if explicit_complete or (saw_uploading_previously and "uploading" not in text_lower and "%" not in text_lower):
+                if explicit_complete:
                     logger.info(f"[YouTube] File upload transfer complete! Final Status: {text.splitlines()[0] if text else 'Complete'}")
                     return
         except PlaywrightError:
