@@ -197,6 +197,7 @@ def _launch_persistent_context(playwright, user_data_dir: str, headless: bool, v
             "--no-default-browser-check",
             "--disable-blink-features=AutomationControlled",
             "--disable-infobars",
+            "--window-size=1440,1000",
             "--user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
             "about:blank",
         ]

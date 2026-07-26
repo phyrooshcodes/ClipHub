@@ -18,14 +18,14 @@ UPLOAD_ITEM_SELECTORS = (
     'tp-yt-paper-item:has-text("Upload videos")',
     'paper-item:has-text("Upload videos")',
     'ytcp-text-menu-item:has-text("Upload videos")',
-    "#text-item-0",
+    '[aria-label="Upload videos"]',
 )
 
 DIRECT_UPLOAD_BUTTON_SELECTORS = (
-    'ytcp-icon-button[aria-label="Upload videos"]',
-    'ytcp-button:has-text("UPLOAD VIDEOS")',
     "#upload-icon",
-    "#upload-video-button",
+    'ytcp-icon-button[aria-label="Upload videos"]',
+    'ytcp-button:has-text("Upload videos")',
+    'ytcp-upload-video-button',
 )
 
 FILE_INPUT_SELECTORS = (
