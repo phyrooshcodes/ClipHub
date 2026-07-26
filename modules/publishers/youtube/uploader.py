@@ -123,7 +123,10 @@ class UploadNetworkTelemetry:
             if "upload.youtube.com" in url or "upload/resumable" in url or "resumableupload" in url:
                 status = response.status
                 self.last_status = status
-                if status in (200, 201):
+                
+                req_url = response.request.url.lower()
+                # Ignore the initial session creation request which doesn't upload the file body
+                if "upload_id=" in req_url and status in (200, 201):
                     self.upload_finished = True
                     logger.info(f"[Network Telemetry] HTTP {status} OK received from YouTube upload endpoint.")
 
@@ -155,8 +158,11 @@ def wait_for_upload_completion(page: Page, telemetry: UploadNetworkTelemetry | N
                     logger.info(f"[YouTube] Current Transfer Status: {text.splitlines()[0]}")
                     last_logged_text = text
 
-                # Check for completion keywords or absence of 'uploading' + '%'
-                if any(kw in text_lower for kw in ("upload complete", "processing", "checks", "sd complete", "hd complete")) or ("uploading" not in text_lower and "%" not in text_lower):
+                # Strict checking: We must explicitly see a post-upload phase word, OR we must have seen 'uploading' previously and it's now gone.
+                saw_uploading_previously = last_logged_text and ("uploading" in last_logged_text.lower() or "%" in last_logged_text.lower())
+                explicit_complete = any(kw in text_lower for kw in ("upload complete", "processing", "checks", "sd complete", "hd complete"))
+                
+                if explicit_complete or (saw_uploading_previously and "uploading" not in text_lower and "%" not in text_lower):
                     logger.info(f"[YouTube] File upload transfer complete! Final Status: {text.splitlines()[0] if text else 'Complete'}")
                     return
         except PlaywrightError:
