@@ -183,7 +183,10 @@ def _launch_persistent_context(playwright, user_data_dir: str, headless: bool, v
             pass
 
     system_chrome = _find_system_chrome()
-    if system_chrome and cdp_port is not None:
+    if system_chrome:
+        if cdp_port is None:
+            cdp_port = _find_free_port(start=9400)
+            
         # Use CDP connect — caller picks the port to avoid conflicts
         port = cdp_port
         cmd = [
