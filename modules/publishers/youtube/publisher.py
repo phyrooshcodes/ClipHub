@@ -311,7 +311,10 @@ def extract_channel_info_from_page(page: Page) -> tuple[str, str, str]:
             except Exception:
                 pass
 
-        if name:
+        if not name and channel_id:
+            name = "Saved Session"
+
+        if name or channel_id:
             update_youtube_channel_info(name=name, handle=handle, channel_id=channel_id)
         return name, handle, channel_id
     except Exception as exc:
@@ -410,6 +413,21 @@ def connect_youtube_playwright() -> bool:
                         if page.locator("#create-icon, ytcp-header #avatar-btn").count() > 0:
                             logged_in = True
                             extract_channel_info_from_page(page)
+                            try:
+                                page.evaluate("""() => {
+                                    if (!document.getElementById('obscura-login-banner')) {
+                                        const div = document.createElement('div');
+                                        div.id = 'obscura-login-banner';
+                                        div.innerHTML = '<h2>✅ Logged in successfully! Please close this window manually!</h2>';
+                                        div.style.position = 'fixed'; div.style.top = '10px'; div.style.left = '50%';
+                                        div.style.transform = 'translateX(-50%)'; div.style.background = '#4CAF50';
+                                        div.style.color = 'white'; div.style.padding = '15px'; div.style.zIndex = '999999';
+                                        div.style.borderRadius = '8px'; div.style.boxShadow = '0 4px 6px rgba(0,0,0,0.1)';
+                                        document.body.appendChild(div);
+                                    }
+                                }""")
+                            except Exception:
+                                pass
                 except Exception:
                     pass
                 try:
