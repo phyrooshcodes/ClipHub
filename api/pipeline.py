@@ -79,7 +79,8 @@ def _list_clips(job_id: str = None, newer_than: float = 0) -> list:
                 "social_caption": social_cap, "reason": clip_meta.get("reason", ""),
                 "hook_score": clip_meta.get("hook_score", "?"), "viral_rating": clip_meta.get("viral_rating", None),
                 "retention_score": clip_meta.get("retention_score", None), "viral_analysis": clip_meta.get("viral_analysis", ""),
-                "broll_cues": clip_meta.get("broll_cues", [])
+                "broll_cues": clip_meta.get("broll_cues", []),
+                "product_recommendations": clip_meta.get("product_recommendations", [])
             })
     return sorted(clips, key=lambda c: c["modified"], reverse=True)
 

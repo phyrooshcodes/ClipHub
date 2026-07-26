@@ -1132,6 +1132,24 @@ document.addEventListener("DOMContentLoaded", () => {
           ? `<span class="clip-num-badge" style="background:rgba(99, 102, 241, 0.15); color:#818cf8; border:1px solid rgba(99, 102, 241, 0.3); padding:2px 8px; border-radius:12px; font-weight:700; font-size:0.75rem; letter-spacing:0.5px;">Clip #${clip.clip_number}</span>`
           : `<span class="clip-num-badge" style="background:rgba(99, 102, 241, 0.15); color:#818cf8; border:1px solid rgba(99, 102, 241, 0.3); padding:2px 8px; border-radius:12px; font-weight:700; font-size:0.75rem; letter-spacing:0.5px;">Clip #${i + 1}</span>`;
 
+        let productsHtml = '';
+        if (clip.product_recommendations && clip.product_recommendations.length > 0) {
+          productsHtml = `<div class="product-suggestions" style="margin-bottom: 15px; background: rgba(255, 153, 0, 0.1); border-left: 3px solid #ff9900; padding: 10px; border-radius: 6px;">
+            <div style="font-size: 0.75rem; font-weight: 700; color: #ff9900; text-transform: uppercase; margin-bottom: 6px; letter-spacing: 0.5px;"><i class="ri-amazon-fill"></i> Amazon Suggestion</div>
+          `;
+          clip.product_recommendations.forEach(prod => {
+            const amzSearch = `https://www.amazon.com/s?k=${encodeURIComponent(prod.search_query)}`;
+            productsHtml += `
+              <div style="margin-bottom: 8px; font-size: 0.85rem; color: #d1d5db;">
+                <strong style="color: #f3f4f6;">${escapeHtml(prod.product_name)}</strong> <span style="font-size: 0.75rem; color: #9ca3af;">(${escapeHtml(prod.category)})</span>
+                <p style="margin: 4px 0; font-size: 0.8rem; line-height: 1.3; color: #9ca3af;">${escapeHtml(prod.reasoning)}</p>
+                <a href="${amzSearch}" target="_blank" style="color: #ff9900; text-decoration: none; font-size: 0.75rem; font-weight: 600;">Search on Amazon &rarr;</a>
+              </div>
+            `;
+          });
+          productsHtml += `</div>`;
+        }
+
         html += `
           <div class="clip-card" style="opacity:0; transform:translateY(30px);">
             <div style="position:relative;">
@@ -1147,7 +1165,7 @@ document.addEventListener("DOMContentLoaded", () => {
                  <p class="clip-caption" style="font-size:0.85rem; color:#8b8b99; margin-bottom:15px; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden;">${escapeHtml(cleanCaption)}</p>
                  <button class="btn-outline btn-sm btn-copy" data-text="${encodeURIComponent(cleanTitle + '\n\n' + cleanCaption)}" style="position:absolute; right:0; top:-10px; padding:2px 6px; font-size:0.7rem;"><i class="ri-clipboard-line"></i> Copy</button>
               </div>
-              
+              ${productsHtml}
               <div class="clip-footer">
                 <span class="text-xs text-muted" style="font-weight:600; letter-spacing:1px; text-transform:uppercase;">History</span>
                 <div class="platform-toggles">
