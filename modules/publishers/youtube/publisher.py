@@ -117,8 +117,7 @@ class YouTubeUploadResult:
 
 
 def _headless() -> bool:
-    # Forced to False to completely bypass Google bot detection on YouTube Studio and allow the user to watch the upload progress
-    return False
+    return os.getenv("OBSCURA_YOUTUBE_HEADLESS", os.getenv("OBSCURA_HEADLESS", "1")).strip().lower() not in {"0", "false", "no"}
 
 
 def validate_youtube_video(video_path: str) -> float:
