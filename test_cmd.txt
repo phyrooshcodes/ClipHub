@@ -1,0 +1,4 @@
+
+0.0-1.0 [enter] overlay x 0;
+1.0-2.0 [enter] overlay x -500;
+2.0-3.0 [enter] overlay x -1000;

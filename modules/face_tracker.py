@@ -13,8 +13,8 @@ from typing import List, Dict, Tuple, Optional
 
 logger = logging.getLogger(__name__)
 
-TARGET_ASPECT_W = 9
-TARGET_ASPECT_H = 16
+TARGET_ASPECT_W = 1
+TARGET_ASPECT_H = 1
 
 _global_face_cascade = None
 
@@ -60,31 +60,8 @@ def compute_crop_coords(
     activity_threshold: float = 1.5,
 ) -> Dict:
     """
-    Analyze a video segment and compute a smooth 9:16 crop box
-    centered on the detected face(s).
-
-    Args:
-        input_video:         Path to the source video file.
-        start_ms:            Clip start time in milliseconds.
-        end_ms:              Clip end time in milliseconds.
-        smoothing_window:    Number of frames to average for
-                             smooth crop movement.
-        sample_every_n_frames: Only run face detection every N frames.
-        adaptive_sampling: Skip sampled Haar detections on visually unchanged
-            frames. Disabled by default to preserve legacy output exactly.
-        activity_threshold: Mean grayscale pixel difference required to run a
-            sampled detection when ``adaptive_sampling`` is enabled.
-
-    Returns:
-        A dict containing:
-        {
-            "crop_w": int,      # Crop width in pixels
-            "crop_h": int,      # Crop height (= source height)
-            "crop_x": int,      # Final crop X offset (left edge)
-            "src_w":  int,      # Original video width
-            "src_h":  int,      # Original video height
-            "face_detected": bool
-        }
+    Analyze a video segment and compute a smooth 1:1 crop box
+    that dynamically follows the speaker's face like a pro operator.
     """
     face_cascade = _get_cascade()
 
@@ -96,21 +73,19 @@ def compute_crop_coords(
     src_w = video_stream.width
     src_h = video_stream.height
 
-    # Calculate the crop dimensions for 9:16 aspect ratio
-    # We always use full height and calculate the matching width
+    # Calculate 1:1 crop (height determines square size)
     crop_h = src_h
-    crop_w = int(src_h * (TARGET_ASPECT_W / TARGET_ASPECT_H))
+    crop_w = src_h
 
-    # If source video is already narrower than needed, use source width
     if crop_w > src_w:
         crop_w = src_w
+        crop_h = src_w
 
     logger.info(
         f"[FaceTracker] Source: {src_w}x{src_h} | "
-        f"9:16 Crop: {crop_w}x{crop_h}"
+        f"1:1 Dynamic Crop: {crop_w}x{crop_h} at {fps:.2f}fps"
     )
 
-    # Seek to clip start (PyAV uses time_base)
     start_s = start_ms / 1000.0
     end_s = end_ms / 1000.0
     seek_ts = int(start_s / video_stream.time_base)
@@ -123,10 +98,15 @@ def compute_crop_coords(
     if adaptive_sampling:
         from modules.native_accel import mean_absolute_difference
 
-    face_x_positions: List[float] = []
+    sampled_frames = []
+    sampled_xs = []
+    
     face_detected = False
     previous_sample_gray: Optional[np.ndarray] = None
     frames_read = 0
+
+    # Default fallback center
+    last_face_x = src_w / 2.0
 
     for frame in container.decode(video=0):
         t = frame.time
@@ -135,58 +115,78 @@ def compute_crop_coords(
         if t > end_s:
             break
 
-        # Only run detection every N frames (CPU saver)
         if frames_read % sample_every_n_frames == 0:
             img = frame.to_ndarray(format="bgr24")
             gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-            # Haar detection is already native OpenCV. When explicitly opted
-            # in, the C++ activity kernel can avoid re-running it on static
-            # podcast frames while retaining the original default schedule.
+            
             should_detect = True
             if adaptive_sampling and previous_sample_gray is not None:
                 should_detect = mean_absolute_difference(previous_sample_gray, gray) >= activity_threshold
             previous_sample_gray = gray
-            if not should_detect:
-                frames_read += 1
-                continue
-
-            # Detect faces
-            faces = face_cascade.detectMultiScale(
-                gray,
-                scaleFactor=1.2,
-                minNeighbors=5,
-                minSize=(60, 60)
-            )
-
-            if len(faces) > 0:
-                face_detected = True
-                # Sort faces by size (width * height) descending and pick the largest face
-                faces = sorted(faces, key=lambda f: f[2] * f[3], reverse=True)
-                fx, fy, fw, fh = faces[0]
-                
-                # Calculate face center X in pixels
-                face_center_x = fx + (fw / 2.0)
-                face_x_positions.append(face_center_x)
+            
+            if should_detect:
+                faces = face_cascade.detectMultiScale(
+                    gray,
+                    scaleFactor=1.2,
+                    minNeighbors=5,
+                    minSize=(60, 60)
+                )
+                if len(faces) > 0:
+                    face_detected = True
+                    faces = sorted(faces, key=lambda f: f[2] * f[3], reverse=True)
+                    fx, fy, fw, fh = faces[0]
+                    last_face_x = fx + (fw / 2.0)
+            
+            sampled_frames.append(frames_read)
+            sampled_xs.append(last_face_x)
 
         frames_read += 1
 
     container.close()
 
-    # ─── Calculate final crop X offset ──────────────────────
-    crop_x = _calculate_smooth_crop_x(
-        face_x_positions, crop_w, src_w, smoothing_window
-    )
+    # ─── Calculate Dynamic Smooth Crop ──────────────────────
+    if not face_detected or len(sampled_frames) == 0:
+        logger.warning("[FaceTracker] No face detected — defaulting to static center crop.")
+        static_x = max(0, (src_w - crop_w) // 2)
+        dynamic_crop_x = [static_x] * frames_read
+    else:
+        # 1. Interpolate to per-frame values
+        all_frames = np.arange(frames_read)
+        interpolated_xs = np.interp(all_frames, sampled_frames, sampled_xs)
+        
+        # 2. Smooth heavily for "pro camera operator" cinematic pan effect (moving average)
+        # Using a 1.5 second window (e.g. 45 frames at 30fps)
+        window_size = int(fps * 1.5)
+        if window_size < 1: window_size = 1
+        
+        smoothed_xs = np.convolve(interpolated_xs, np.ones(window_size)/window_size, mode='valid')
+        
+        # Pad the edges to match the original array length
+        pad_left = window_size // 2
+        pad_right = len(interpolated_xs) - len(smoothed_xs) - pad_left
+        smoothed_xs = np.pad(smoothed_xs, (pad_left, pad_right), mode='edge')
+        
+        # 3. Convert face center X to crop box left edge X
+        dynamic_crop_x = []
+        for fx in smoothed_xs:
+            cx = int(fx - crop_w / 2)
+            cx = max(0, min(cx, src_w - crop_w))
+            dynamic_crop_x.append(cx)
+
+    # Calculate legacy single static crop for backward compatibility
+    static_crop_x = int(np.median(dynamic_crop_x)) if len(dynamic_crop_x) > 0 else 0
 
     logger.info(
         f"[FaceTracker] ✅ Face detected: {face_detected} | "
-        f"Crop X offset: {crop_x}px | "
-        f"Sampled {len(face_x_positions)} face positions."
+        f"Generated {len(dynamic_crop_x)} dynamic frames for smooth tracking."
     )
 
     return {
         "crop_w":        crop_w,
         "crop_h":        crop_h,
-        "crop_x":        crop_x,
+        "crop_x":        static_crop_x,
+        "dynamic_crop_x": dynamic_crop_x,
+        "fps":           fps,
         "src_w":         src_w,
         "src_h":         src_h,
         "face_detected": face_detected

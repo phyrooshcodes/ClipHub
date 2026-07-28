@@ -47,8 +47,11 @@ def render_clip(
 
     crop_w = crop_coords["crop_w"]
     crop_h = crop_coords["crop_h"]
-    crop_x = crop_coords["crop_x"]
-    crop_y = 0
+    
+    # Check if dynamic crop is available
+    dynamic_crop_x = crop_coords.get("dynamic_crop_x", [])
+    fps = crop_coords.get("fps", 30.0)
+    use_dynamic = len(dynamic_crop_x) > 0
 
     # Proper path escaping for ASS filter (handles spaces, colons, quotes)
     import re
@@ -56,18 +59,44 @@ def render_clip(
     rel_sub = os.path.relpath(subtitle_path).replace("\\", "/")
     safe_sub_path = re.sub(r"([:\\'])", r"\\\1", rel_sub)
 
-    vf_filter = (
-        f"crop={crop_w}:{crop_h}:{crop_x}:{crop_y},"
-        f"scale=1080:1920,"
-        f"ass='{safe_sub_path}'"
-    )
-
     command = [
         "ffmpeg", "-y",
         "-ss", f"{start_s:.3f}",
         "-t", f"{duration_s:.3f}",
         "-i", input_video,
     ]
+
+    vf_filter = ""
+    
+    if use_dynamic:
+        # Generate sendcmd text file
+        sendcmd_path = output_path + ".sendcmd.txt"
+        with open(sendcmd_path, "w") as f:
+            for i, cx in enumerate(dynamic_crop_x):
+                t_start = i / fps
+                t_end = (i + 1) / fps
+                # To crop dynamically using overlay: we shift the video left by cx
+                f.write(f"{t_start:.3f}-{t_end:.3f} [enter] overlay x {-cx};\n")
+        
+        # Add black canvas background
+        command += ["-f", "lavfi", "-i", f"color=c=black:s={crop_w}x{crop_h}:r={fps}:d={duration_s:.3f}"]
+        
+        # Filter complex: overlay video on black canvas, scale to 1080x1080, and add subtitles
+        filter_complex = (
+            f"[1:v]sendcmd=f='{sendcmd_path}'[v_cmd]; "
+            f"[v_cmd][0:v]overlay[over_out]; "
+            f"[over_out]scale=1080:1080,"
+            f"ass='{safe_sub_path}'[v_final]"
+        )
+    else:
+        # Fallback to static crop
+        crop_x = crop_coords.get("crop_x", 0)
+        crop_y = 0
+        vf_filter = (
+            f"crop={crop_w}:{crop_h}:{crop_x}:{crop_y},"
+            f"scale=1080:1080,"
+            f"ass='{safe_sub_path}'"
+        )
 
     if music_choice:
         import av
@@ -82,10 +111,22 @@ def render_clip(
             "-stream_loop", "-1",
             "-ss", f"{float(music_choice['start_s']):.3f}",
             "-i", music_choice["path"],
-            "-filter_complex", _music_mix_filter(duration_s, has_audio),
-            "-map", "0:v:0",
-            "-map", "[mixed_audio]",
         ]
+        
+        if use_dynamic:
+            filter_complex += f"; " + _music_mix_filter(duration_s, has_audio)
+            command += ["-filter_complex", filter_complex, "-map", "[v_final]", "-map", "[mixed_audio]"]
+        else:
+            command += [
+                "-filter_complex", _music_mix_filter(duration_s, has_audio),
+                "-map", "0:v:0",
+                "-map", "[mixed_audio]",
+            ]
+    else:
+        if use_dynamic:
+            command += ["-filter_complex", filter_complex, "-map", "[v_final]", "-map", "0:a?"]
+        else:
+            command += ["-map", "0:v:0", "-map", "0:a?"]
 
     use_nvenc = check_nvenc_available() if encoder == "auto" else (encoder == "h264_nvenc")
     
@@ -94,9 +135,10 @@ def render_clip(
     else:
         enc_args = ["-c:v", "libx264", "-preset", "fast", "-crf", "23"]
 
+    if vf_filter:
+        command += ["-vf", vf_filter]
+        
     command += [
-        "-vf", vf_filter,
-        *enc_args,
         "-c:a", "aac",
         "-b:a", AUDIO_BITRATE,
         "-pix_fmt", "yuv420p",
