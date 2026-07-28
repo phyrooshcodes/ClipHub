@@ -1008,9 +1008,8 @@ document.addEventListener("DOMContentLoaded", () => {
             ${productsHtml}
             <div class="clip-footer">
               <span class="text-xs text-muted" style="font-weight:600; letter-spacing:1px; text-transform:uppercase;">Auto-selected</span>
-              <div class="platform-toggles">
                 <a href="${clip.url}" download class="btn-primary btn-sm" style="padding:6px 12px; margin-right:8px; border-radius:8px; font-size:0.85rem; text-decoration:none;"><i class="ri-download-cloud-2-line"></i></a>
-                <button class="btn-primary btn-sm btn-publish" data-clip="${clip.url}" style="padding:6px 16px; font-size:0.8rem;">Publish</button>
+                <button class="btn-primary btn-sm btn-publish" data-clip="${clip.url}" data-products='${JSON.stringify(clip.product_recommendations || []).replace(/'/g, "&#39;")}' style="padding:6px 16px; font-size:0.8rem;">Publish</button>
               </div>
             </div>
           </div>
@@ -1348,10 +1347,12 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
     
-    // Publish Single Clip
+        // Publish Single Clip
     if (e.target.closest('.btn-publish')) {
       const btn = e.target.closest('.btn-publish');
       const clipPath = btn.getAttribute('data-clip');
+      let products = [];
+      try { products = JSON.parse(btn.getAttribute('data-products') || '[]'); } catch(e) {}
       
       const card = btn.closest('.clip-card');
       const title = card ? card.querySelector('.clip-title').textContent : 'Viral Clip';
@@ -1364,7 +1365,7 @@ document.addEventListener("DOMContentLoaded", () => {
       
       if (!e.isTrusted) {
         // Mass publish programmatically clicked this
-        executePublish(jobId, filename, title, caption, getSelectedPlatforms(), btn, false);
+        executePublish(jobId, filename, title, caption, products, getSelectedPlatforms(), btn, false);
         return;
       }
       
@@ -1405,12 +1406,12 @@ document.addEventListener("DOMContentLoaded", () => {
         document.getElementById('publish-console-output').innerHTML = '';
         document.getElementById('btn-publish-done').classList.add('hidden');
         
-        executePublish(jobId, filename, title, caption, platforms, btn, true);
+        executePublish(jobId, filename, title, caption, products, platforms, btn, true);
       });
     }
   });
 
-  async function executePublish(jobId, filename, title, caption, platforms, btn, updateModal = false) {
+  async function executePublish(jobId, filename, title, caption, products, platforms, btn, updateModal = false) {
     if(!updateModal) {
       btn.innerHTML = '<i class="ri-loader-4-line spin"></i> Publishing...';
       btn.disabled = true;
@@ -1444,7 +1445,7 @@ document.addEventListener("DOMContentLoaded", () => {
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({
           job_id: jobId, clip_filename: filename, title: title, caption: caption,
-          platforms: platforms, allow_duplicate: false
+          platforms: platforms, allow_duplicate: false, product_recommendations: products
         })
       });
       let data = await response.json();
@@ -1456,7 +1457,7 @@ document.addEventListener("DOMContentLoaded", () => {
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
               job_id: jobId, clip_filename: filename, title: title, caption: caption,
-              platforms: platforms, allow_duplicate: true
+              platforms: platforms, allow_duplicate: true, product_recommendations: products
             })
           });
           data = await retryRes.json();

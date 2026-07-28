@@ -45,7 +45,7 @@ class YouTubePersistentWorker:
             self._thread = threading.Thread(target=self._run, daemon=True, name="youtube-worker")
             self._thread.start()
 
-    def enqueue(self, upload_id, video_path, title, description, tags, thumbnail_path, progress_cb):
+    def enqueue(self, upload_id, video_path, title, description, tags, thumbnail_path, product_recommendations, progress_cb):
         self.results[upload_id] = {"status": "queued"}
         self.progress_callbacks[upload_id] = progress_cb
         self._queue.put({
@@ -54,7 +54,8 @@ class YouTubePersistentWorker:
             "title": title,
             "description": description,
             "tags": tags,
-            "thumbnail_path": thumbnail_path
+            "thumbnail_path": thumbnail_path,
+            "product_recommendations": product_recommendations
         })
         return upload_id
 
@@ -167,6 +168,7 @@ class YouTubePersistentWorker:
         description = job["description"]
         tags = job["tags"]
         thumbnail_path = job["thumbnail_path"]
+        product_recommendations = job.get("product_recommendations") or []
 
         self.results[upload_id]["status"] = "uploading"
         self._notify(upload_id, 10, "Starting YouTube upload in persistent browser")
@@ -201,6 +203,12 @@ class YouTubePersistentWorker:
             current_stage = "transfer"
             self._notify(upload_id, 60, "Waiting for video file upload transfer to complete")
             wait_for_upload_completion(page, telemetry=telemetry, timeout=180_000)
+            
+            if product_recommendations:
+                current_stage = "affiliate_tagging"
+                self._notify(upload_id, 65, "Tagging affiliate products")
+                from modules.publishers.youtube.affiliate import tag_products
+                tag_products(page, product_recommendations)
             
             target_dt, date_str, time_str = calculate_schedule_target()
             scheduled_display_time = f"{date_str} at {time_str}"
