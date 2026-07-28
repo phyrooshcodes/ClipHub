@@ -206,6 +206,15 @@ document.addEventListener("DOMContentLoaded", () => {
   });
   renderPublishingMode();
 
+  const optYtShopping = document.getElementById('opt-yt-shopping');
+  if (optYtShopping) {
+    const savedYtShopping = localStorage.getItem('ytShoppingEnabled');
+    optYtShopping.checked = savedYtShopping !== 'false'; // Default true
+    optYtShopping.addEventListener('change', (e) => {
+      localStorage.setItem('ytShoppingEnabled', e.target.checked);
+    });
+  }
+
   // NVIDIA API Key — check/save wiring (endpoints already existed server-side,
   // this field just wasn't connected to them)
   const nvidiaKeyInput = document.getElementById('nvidia-key');
@@ -1352,7 +1361,10 @@ document.addEventListener("DOMContentLoaded", () => {
       const btn = e.target.closest('.btn-publish');
       const clipPath = btn.getAttribute('data-clip');
       let products = [];
-      try { products = JSON.parse(btn.getAttribute('data-products') || '[]'); } catch(e) {}
+      const ytShoppingEnabled = document.getElementById('opt-yt-shopping')?.checked ?? (localStorage.getItem('ytShoppingEnabled') !== 'false');
+      if (ytShoppingEnabled) {
+        try { products = JSON.parse(btn.getAttribute('data-products') || '[]'); } catch(e) {}
+      }
       
       const card = btn.closest('.clip-card');
       const title = card ? card.querySelector('.clip-title').textContent : 'Viral Clip';
