@@ -32,6 +32,9 @@ class SocialPostRequest(BaseModel):
     platforms: List[str]
     allow_duplicate: bool = False
     product_recommendations: List[dict] = []
+    amazon_store_tag: str = ""
+    enable_comment_affiliate: bool = True
+    enable_native_shopping: bool = False
 
 class InstagramQueueActionRequest(BaseModel):
     action: str
@@ -39,7 +42,7 @@ class InstagramQueueActionRequest(BaseModel):
 social_uploads = {}
 upload_lock = asyncio.Lock()
 
-async def _bg_social_post(upload_id: str, job_id: str, clip_filename: str, title: str, caption: str, platforms: List[str], product_recommendations: List[dict] = None):
+async def _bg_social_post(upload_id: str, job_id: str, clip_filename: str, title: str, caption: str, platforms: List[str], product_recommendations: List[dict] = None, amazon_store_tag: str = "", enable_comment_affiliate: bool = True, enable_native_shopping: bool = False):
     if product_recommendations is None:
         product_recommendations = []
     social_uploads[upload_id] = {"status": "uploading", "results": {}}
@@ -78,8 +81,7 @@ async def _bg_social_post(upload_id: str, job_id: str, clip_filename: str, title
         try:
             from modules.youtube_worker import get_youtube_worker
             worker = get_youtube_worker()
-            # Empty tags and None thumbnail for now
-            worker.enqueue(upload_id, str(video_path), title, caption, [], None, product_recommendations, lambda p, m: update_progress("youtube", p, m))
+            worker.enqueue(upload_id, str(video_path), title, caption, [], None, product_recommendations, amazon_store_tag, enable_comment_affiliate, enable_native_shopping, lambda p, m: update_progress("youtube", p, m))
             
             # Poll for completion
             while True:
@@ -302,7 +304,7 @@ async def start_social_post(req: SocialPostRequest, background_tasks: Background
             return {"upload_id": upload["id"], "status": upload["status"], "upload": upload}
         except Exception as exc: return JSONResponse({"error": str(exc)}, status_code=500)
     upload_id = str(uuid.uuid4())
-    background_tasks.add_task(_bg_social_post, upload_id, req.job_id, req.clip_filename, req.title, req.caption, req.platforms, req.product_recommendations)
+    background_tasks.add_task(_bg_social_post, upload_id, req.job_id, req.clip_filename, req.title, req.caption, req.platforms, req.product_recommendations, req.amazon_store_tag, req.enable_comment_affiliate, req.enable_native_shopping)
     return {"upload_id": upload_id, "status": "pending"}
 
 @router.get("/api/social/post-status/{upload_id}")

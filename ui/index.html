@@ -373,13 +373,25 @@
           </div>
         </div>
         <hr class="modal-hr">
-        <h4>YouTube Shopping</h4>
+        <h4>Amazon Associates & Monetization</h4>
+        <div class="form-group" style="margin-top: 10px;">
+          <label>Amazon Store ID / Affiliate Tag</label>
+          <input type="text" id="amazon-store-tag" placeholder="e.g. mychannel-20" style="margin-top: 4px;" autocomplete="off" />
+          <p class="text-xs text-muted" style="margin-top: 4px;">Earn commissions by appending your Amazon Associates Store Tag to all generated product links.</p>
+        </div>
+        <div class="form-group" style="margin-top: 12px;">
+          <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none;">
+            <input type="checkbox" id="opt-yt-comment" checked style="accent-color: #ff9900; width: 16px; height: 16px;">
+            <span style="font-size: 0.95rem;">Auto-Pin Affiliate Link in Comments & Description <span style="font-size: 0.75rem; color: var(--accent-cyan); background: rgba(0, 255, 255, 0.1); padding: 2px 6px; border-radius: 4px; margin-left: 6px;">Recommended • Works with 0 subs</span></span>
+          </label>
+          <p class="text-xs text-muted" style="margin-top: 4px; margin-left: 24px;">Automatically puts your affiliate link in the video description and posts a pinned comment on your YouTube Short. No YouTube Partner status needed!</p>
+        </div>
         <div class="form-group" style="margin-top: 10px;">
           <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none;">
-            <input type="checkbox" id="opt-yt-shopping" checked style="accent-color: #ff9900; width: 16px; height: 16px;">
-            <span style="font-size: 0.95rem;">Enable Auto-Tagging for Amazon Products</span>
+            <input type="checkbox" id="opt-yt-shopping" style="accent-color: #ff9900; width: 16px; height: 16px;">
+            <span style="font-size: 0.95rem;">Native YouTube Shopping Sticker <span style="font-size: 0.75rem; color: #ff9900; background: rgba(255, 153, 0, 0.15); padding: 2px 6px; border-radius: 4px; margin-left: 6px;">Requires YPP / 500+ subs</span></span>
           </label>
-          <p class="text-xs text-muted" style="margin-top: 6px; margin-left: 24px;">Automatically tag AI-recommended products natively in YouTube Shorts using YouTube Shopping. Ensure your YouTube Channel is eligible for the <b>YouTube Affiliate Program</b> and you have linked your Amazon Associates account in the YouTube Studio <b>Earn</b> tab. <a href="https://support.google.com/youtube/answer/13374088" target="_blank" style="color: #ff9900; text-decoration: none;">Learn more &rarr;</a></p>
+          <p class="text-xs text-muted" style="margin-top: 4px; margin-left: 24px;">Uses YouTube's native floating shopping badge overlay in the short video player.</p>
         </div>
         <hr class="modal-hr">
         <h4>Social Accounts</h4>

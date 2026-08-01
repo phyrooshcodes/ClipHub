@@ -45,7 +45,7 @@ class YouTubePersistentWorker:
             self._thread = threading.Thread(target=self._run, daemon=True, name="youtube-worker")
             self._thread.start()
 
-    def enqueue(self, upload_id, video_path, title, description, tags, thumbnail_path, product_recommendations, progress_cb):
+    def enqueue(self, upload_id, video_path, title, description, tags, thumbnail_path, product_recommendations, amazon_store_tag, enable_comment_affiliate, enable_native_shopping, progress_cb):
         self.results[upload_id] = {"status": "queued"}
         self.progress_callbacks[upload_id] = progress_cb
         self._queue.put({
@@ -55,7 +55,10 @@ class YouTubePersistentWorker:
             "description": description,
             "tags": tags,
             "thumbnail_path": thumbnail_path,
-            "product_recommendations": product_recommendations
+            "product_recommendations": product_recommendations,
+            "amazon_store_tag": amazon_store_tag,
+            "enable_comment_affiliate": enable_comment_affiliate,
+            "enable_native_shopping": enable_native_shopping
         })
         return upload_id
 
@@ -169,6 +172,20 @@ class YouTubePersistentWorker:
         tags = job["tags"]
         thumbnail_path = job["thumbnail_path"]
         product_recommendations = job.get("product_recommendations") or []
+        amazon_store_tag = job.get("amazon_store_tag", "")
+        enable_comment_affiliate = job.get("enable_comment_affiliate", True)
+        enable_native_shopping = job.get("enable_native_shopping", False)
+
+        affiliate_comment_text = ""
+        if enable_comment_affiliate and product_recommendations:
+            import urllib.parse
+            prod = product_recommendations[0]
+            query = prod.get("search_query") or prod.get("product_name") or ""
+            link = f"https://www.amazon.com/s?k={urllib.parse.quote_plus(query)}"
+            if amazon_store_tag:
+                link += f"&tag={urllib.parse.quote_plus(amazon_store_tag)}"
+            affiliate_comment_text = f"🛒 Featured in this clip: {prod.get('product_name', query)}\n👉 Check it out here on Amazon: {link}\n\n#ad"
+            description = (description or "") + "\n\n" + affiliate_comment_text
 
         self.results[upload_id]["status"] = "uploading"
         self._notify(upload_id, 10, "Starting YouTube upload in persistent browser")
@@ -204,9 +221,9 @@ class YouTubePersistentWorker:
             self._notify(upload_id, 60, "Waiting for video file upload transfer to complete")
             wait_for_upload_completion(page, telemetry=telemetry, timeout=180_000)
             
-            if product_recommendations:
+            if product_recommendations and enable_native_shopping:
                 current_stage = "affiliate_tagging"
-                self._notify(upload_id, 65, "Tagging affiliate products")
+                self._notify(upload_id, 65, "Tagging affiliate products via YouTube Shopping")
                 from modules.publishers.youtube.affiliate import tag_products
                 tag_products(page, product_recommendations)
             
@@ -224,13 +241,23 @@ class YouTubePersistentWorker:
             if not success:
                 raise RuntimeError("Schedule verification timed out.")
                 
-            self._notify(upload_id, 100, "Successfully scheduled YouTube video")
+            self._notify(upload_id, 95, "Successfully scheduled YouTube video")
             self.results[upload_id] = {
                 "status": "scheduled",
                 "success": True,
                 "url": video_url,
                 "scheduled_time": scheduled_display_time
             }
+
+            if affiliate_comment_text and video_url:
+                self._notify(upload_id, 98, "Posting and pinning affiliate comment...")
+                try:
+                    from modules.publishers.youtube.affiliate import post_pinned_comment
+                    post_pinned_comment(page, video_url, affiliate_comment_text)
+                except Exception as c_exc:
+                    logger.warning(f"[YouTube Worker] Could not post pinned comment: {c_exc}")
+
+            self._notify(upload_id, 100, "Upload & affiliate monetization complete!")
             
         except Exception as exc:
             detail = f"Stage '{current_stage}' failed: {exc}"

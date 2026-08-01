@@ -206,10 +206,27 @@ document.addEventListener("DOMContentLoaded", () => {
   });
   renderPublishingMode();
 
+  const amazonStoreTag = document.getElementById('amazon-store-tag');
+  if (amazonStoreTag) {
+    amazonStoreTag.value = localStorage.getItem('amazonStoreTag') || '';
+    amazonStoreTag.addEventListener('input', (e) => {
+      localStorage.setItem('amazonStoreTag', e.target.value.trim());
+    });
+  }
+
+  const optYtComment = document.getElementById('opt-yt-comment');
+  if (optYtComment) {
+    const savedYtComment = localStorage.getItem('ytCommentEnabled');
+    optYtComment.checked = savedYtComment !== 'false'; // Default true
+    optYtComment.addEventListener('change', (e) => {
+      localStorage.setItem('ytCommentEnabled', e.target.checked);
+    });
+  }
+
   const optYtShopping = document.getElementById('opt-yt-shopping');
   if (optYtShopping) {
     const savedYtShopping = localStorage.getItem('ytShoppingEnabled');
-    optYtShopping.checked = savedYtShopping !== 'false'; // Default true
+    optYtShopping.checked = savedYtShopping === 'true'; // Default false since requires YPP
     optYtShopping.addEventListener('change', (e) => {
       localStorage.setItem('ytShoppingEnabled', e.target.checked);
     });
@@ -986,8 +1003,10 @@ document.addEventListener("DOMContentLoaded", () => {
         productsHtml = `<div class="product-suggestions" style="margin-bottom: 15px; background: rgba(255, 153, 0, 0.1); border-left: 3px solid #ff9900; padding: 10px; border-radius: 6px;">
           <div style="font-size: 0.75rem; font-weight: 700; color: #ff9900; text-transform: uppercase; margin-bottom: 6px; letter-spacing: 0.5px;"><i class="ri-amazon-fill"></i> Amazon Suggestion</div>
         `;
+        const amzTag = (localStorage.getItem('amazonStoreTag') || '').trim();
         clip.product_recommendations.forEach(prod => {
-          const amzSearch = `https://www.amazon.com/s?k=${encodeURIComponent(prod.search_query)}`;
+          let amzSearch = `https://www.amazon.com/s?k=${encodeURIComponent(prod.search_query || prod.product_name)}`;
+          if (amzTag) amzSearch += `&tag=${encodeURIComponent(amzTag)}`;
           productsHtml += `
             <div style="margin-bottom: 8px; font-size: 0.85rem; color: #d1d5db;">
               <strong style="color: #f3f4f6;">${escapeHtml(prod.product_name)}</strong> <span style="font-size: 0.75rem; color: #9ca3af;">(${escapeHtml(prod.category)})</span>
@@ -1361,10 +1380,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const btn = e.target.closest('.btn-publish');
       const clipPath = btn.getAttribute('data-clip');
       let products = [];
-      const ytShoppingEnabled = document.getElementById('opt-yt-shopping')?.checked ?? (localStorage.getItem('ytShoppingEnabled') !== 'false');
-      if (ytShoppingEnabled) {
-        try { products = JSON.parse(btn.getAttribute('data-products') || '[]'); } catch(e) {}
-      }
+      try { products = JSON.parse(btn.getAttribute('data-products') || '[]'); } catch(e) {}
       
       const card = btn.closest('.clip-card');
       const title = card ? card.querySelector('.clip-title').textContent : 'Viral Clip';
@@ -1452,12 +1468,18 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     
     try {
+      const amazonStoreTag = (localStorage.getItem('amazonStoreTag') || '').trim();
+      const enableCommentAffiliate = (document.getElementById('opt-yt-comment')?.checked ?? (localStorage.getItem('ytCommentEnabled') !== 'false'));
+      const enableNativeShopping = (document.getElementById('opt-yt-shopping')?.checked ?? (localStorage.getItem('ytShoppingEnabled') === 'true'));
+
       const response = await fetch('/api/social/post', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({
           job_id: jobId, clip_filename: filename, title: title, caption: caption,
-          platforms: platforms, allow_duplicate: false, product_recommendations: products
+          platforms: platforms, allow_duplicate: false, product_recommendations: products,
+          amazon_store_tag: amazonStoreTag, enable_comment_affiliate: enableCommentAffiliate,
+          enable_native_shopping: enableNativeShopping
         })
       });
       let data = await response.json();
