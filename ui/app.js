@@ -98,14 +98,14 @@ document.addEventListener("DOMContentLoaded", () => {
   dropzone.addEventListener('drop', (e) => {
     e.preventDefault();
     dropzone.classList.remove('dragover');
-    if (e.dataTransfer.files.length) startProcessing(e.dataTransfer.files[0], false);
+    if (e.dataTransfer.files.length) openCaptionStudio(e.dataTransfer.files[0], false, false, false);
   });
   fileInput.addEventListener('change', (e) => {
-    if (e.target.files.length) startProcessing(e.target.files[0], false);
+    if (e.target.files.length) openCaptionStudio(e.target.files[0], false, false, false);
   });
   btnStartYt.addEventListener('click', () => {
     const url = document.getElementById('youtube-url').value;
-    if (url) startProcessing(url, true);
+    if (url) openCaptionStudio(url, true, false, false);
   });
 
   // --- Initialization & Resume Logic ---
@@ -156,34 +156,189 @@ document.addEventListener("DOMContentLoaded", () => {
           `;
           card.onmouseover = () => { card.style.background = 'rgba(255,255,255,0.1)'; card.style.borderColor = 'var(--accent-primary)'; };
           card.onmouseout = () => { card.style.background = 'rgba(255,255,255,0.05)'; card.style.borderColor = 'var(--border-color)'; };
-          card.onclick = () => startProcessing(u.filename, false, true);
+          card.onclick = () => openCaptionStudio(u.filename, false, true, false);
           list.appendChild(card);
         });
       }
     } catch(e) {}
   }
 
-  // Settings Modal
+  // Settings Modal & Caption Studio Architecture
   const configCaptionStyle = document.getElementById('config-caption-style');
-  const homeCaptionStyle = document.getElementById('home-caption-style');
-  
   const savedCaptionStyle = localStorage.getItem('captionStyle') || 'kinetic_slide';
   if (configCaptionStyle) configCaptionStyle.value = savedCaptionStyle;
-  if (homeCaptionStyle) homeCaptionStyle.value = savedCaptionStyle;
   
   if (configCaptionStyle) {
     configCaptionStyle.addEventListener('change', (e) => {
       localStorage.setItem('captionStyle', e.target.value);
-      if (homeCaptionStyle) homeCaptionStyle.value = e.target.value;
+      renderCaptionStudioGrid();
     });
   }
-  
-  if (homeCaptionStyle) {
-    homeCaptionStyle.addEventListener('change', (e) => {
-      localStorage.setItem('captionStyle', e.target.value);
-      if (configCaptionStyle) configCaptionStyle.value = e.target.value;
+
+  let currentPendingJob = null;
+
+  const CAPTION_STYLES_DATA = [
+    { id: 'kinetic_slide', name: 'Kinetic Slide (Default)', desc: 'Smooth vertical slide with a punchy entry scale pop.', previewCss: 'color: #00FFFF; text-shadow: 0 2px 4px rgba(0,0,0,0.8); font-weight: 800;', badge: '★ Most Popular', html: '<span style="color: #fff; opacity: 0.5;">VIRAL</span> <span style="color: #00ffff; text-shadow: 2px 2px 0px #000; display: inline-block; transform: scale(1.1);">GROWTH</span>' },
+    { id: 'hormozi_gold', name: 'Alex Hormozi Gold', desc: 'Signature warm gold text, heavy drop shadow, and explosive bounce.', previewCss: 'color: #FFD700; text-shadow: 0 3px 6px #000; font-weight: 900;', badge: '👑 Hormozi Style', html: '<span style="color: #fff; opacity: 0.4;">HOW TO</span> <span style="color: #FFD700; text-shadow: 3px 3px 0 #000; display: inline-block; transform: scale(1.25); font-weight: 900;">WIN</span> <span style="color: #fff; opacity: 0.4;">TODAY</span>' },
+    { id: 'mrbeast_lightning', name: 'MrBeast Lightning', desc: 'Hyper-bright electric cyan with energetic tilt and thick outline.', previewCss: 'color: #00FFFF; font-weight: 900;', badge: '⚡ MrBeast Vibe', html: '<span style="color: #00FFFF; -webkit-text-stroke: 1px black; text-shadow: 3px 3px 0 #000; display: inline-block; transform: rotate(-5deg) scale(1.15); font-weight: 900;">INSANE!</span>' },
+    { id: 'fire_ember', name: 'Fire Ember', desc: 'Hot fiery orange jumping words with a subtle ember glow.', previewCss: 'color: #FF5500; font-weight: 800;', badge: '🔥 Hot', html: '<span style="color: #ccc;">UNSTOPPABLE</span> <span style="color: #FF5500; text-shadow: 0 0 12px #FF5500; display: inline-block; transform: translateY(-3px) scale(1.1);">POWER</span>' },
+    { id: 'emerald_money', name: 'Emerald Money Pop', desc: 'Vibrant emerald green designed for finance, business, and cash hooks.', previewCss: 'color: #00FF70; font-weight: 800;', badge: '💰 Business', html: '<span style="color: #ddd; opacity: 0.5;">EARN</span> <span style="color: #00FF70; text-shadow: 0 0 8px rgba(0,255,112,0.6); display: inline-block; transform: scale(1.2); font-weight: 800;">$10,000</span> <span style="color: #ddd; opacity: 0.5;">NOW</span>' },
+    { id: 'glitch_matrix', name: 'Glitch Matrix Green', desc: 'Cyber hacker neon green with quick horizontal jitter & neon glow.', previewCss: 'color: #00FF00; font-family: monospace;', badge: '💻 Cyberpunk', html: '<span style="color: #00FF00; font-family: monospace; text-shadow: 0 0 10px #00FF00; letter-spacing: 2px;">HACK_SYSTEM</span>' },
+    { id: 'neon_purple_rain', name: 'Neon Purple Rain', desc: 'Deep electric violet and magenta with smooth breathing zoom.', previewCss: 'color: #FF00AA; font-weight: 800;', badge: '🟣 Aesthetic', html: '<span style="color: #e0d0e0; opacity: 0.5;">DEEP</span> <span style="color: #FF00AA; text-shadow: 0 0 12px #FF00AA; display: inline-block; transform: scale(1.15);">VIBES</span>' },
+    { id: 'bold_impact_red', name: 'Bold Impact Red', desc: 'Aggressive high-impact crime and drama style with zero background dimming.', previewCss: 'color: #FF0000; font-weight: 900;', badge: '🚨 High Impact', html: '<span style="color: #fff;">CRITICAL</span> <span style="color: #FF0000; text-shadow: 2px 2px 0 #000; display: inline-block; transform: scale(1.3); font-weight: 900;">ALERT</span>' },
+    { id: 'sunset_vibes', name: 'Sunset Vibes Glow', desc: 'Warm sunset pink-orange tones with gentle floating animation.', previewCss: 'color: #FF9966; font-weight: 700;', badge: '🌅 Dreamy', html: '<span style="color: #FF9966; text-shadow: 0 2px 8px rgba(255,153,102,0.5); display: inline-block; transform: translateY(-4px);">GOLDEN HOUR</span>' },
+    { id: 'pastel_dream', name: 'Pastel Dream', desc: 'Soft pastel lavender and mint elegance for lifestyle content.', previewCss: 'color: #E0B0FF; font-weight: 600;', badge: '🌸 Lifestyle', html: '<span style="color: #fff; opacity: 0.6;">soft &</span> <span style="color: #F0D0FF; text-shadow: 0 0 6px rgba(240,208,255,0.7); display: inline-block; transform: scale(1.08);">beautiful</span>' },
+    { id: 'stomp_kinetic', name: 'Action Stomp Kinetic', desc: 'Hard-hitting slam from 200% down to 100% scale instantaneously.', previewCss: 'color: #00FFFF; font-weight: 900;', badge: '💥 Action Slam', html: '<span style="color: #b0b0b0; opacity: 0.5;">READY</span> <span style="color: #00FFFF; text-shadow: 4px 4px 0 #000; font-weight: 900; display: inline-block; transform: scale(1.4);">STOMP!</span>' },
+    { id: 'tiktok_pop', name: 'TikTok Pop', desc: 'Classic fast word zoom pop with high contrast outline.', previewCss: 'color: #FFFF00; font-weight: 800;', badge: '📱 TikTok', html: '<span style="color: #fff;">CHECK</span> <span style="color: #ffff00; -webkit-text-stroke: 1px red; text-shadow: 2px 2px 0 #ff0000; display: inline-block; transform: scale(1.2);">THIS</span> <span style="color: #fff;">OUT</span>' },
+    { id: 'cyberpunk_neon', name: 'Cyberpunk Neon', desc: 'Neon pink active word with semi-transparent cyan inactive words.', previewCss: 'color: #FF00FF; font-weight: 800;', badge: '🌃 Neon', html: '<span style="color: #00ffff; opacity: 0.5;">CYBER</span> <span style="color: #ff00ff; text-shadow: 0 0 10px #ff00ff; display: inline-block; transform: rotate(3deg) scale(1.15);">PUNK</span>' },
+    { id: 'smooth_wave', name: 'Smooth Wave', desc: 'Smooth continuous karaoke highlight wiping across words.', previewCss: 'color: #00FFFF; font-weight: 700;', badge: '🌊 Karaoke', html: '<span style="color: #00ffff; text-shadow: 0 0 5px #00ffff;">SMOOTH</span> <span style="color: #ffffff; opacity: 0.3;">WIPE EFFECT</span>' },
+    { id: 'vibrant_gradient', name: 'Vibrant Gradient', desc: 'Orange-to-yellow vibrant pop while inactive words fade to grey.', previewCss: 'color: #FFA500; font-weight: 800;', badge: '🎨 Gradient', html: '<span style="color: #808080;">PURE</span> <span style="color: #FFB800; text-shadow: 0 2px 6px rgba(255,184,0,0.6); display: inline-block; transform: scale(1.15);">VIBRANCE</span>' },
+    { id: 'cinematic_swing', name: 'Cinematic Swing', desc: 'Elegant swing-in tilt rotation with soft dimmed backdrop.', previewCss: 'color: #FFFF00; font-weight: 700;', badge: '🎬 Movie', html: '<span style="color: #ffff00; display: inline-block; transform: rotate(4deg) scale(1.1);">CINEMATIC</span>' },
+    { id: 'karaoke_glow', name: 'Karaoke Glow', desc: 'Glowing neon yellow outline with soft background blur.', previewCss: 'color: #FFFF00; font-weight: 800;', badge: '✨ Glowing', html: '<span style="color: #FFFF00; text-shadow: 0 0 12px #FFFF00; display: inline-block; transform: scale(1.1);">GLOWING</span>' },
+    { id: 'minimal_fade', name: 'Minimal Fade', desc: 'High-end minimalist clean design with pure opacity transitions.', previewCss: 'color: #FFFFFF; font-weight: 600;', badge: '🤍 Minimalist', html: '<span style="color: #ffffff; font-weight: 700;">CLEAN</span> <span style="color: #ffffff; opacity: 0.3;">FADE</span>' },
+    { id: 'future_cyber', name: 'Future Cyber', desc: 'Active cyan glow outline with bright yellow fill and swift scale.', previewCss: 'color: #00FFCC; font-weight: 800;', badge: '🛸 Sci-Fi', html: '<span style="color: #FFFF00; text-shadow: 0 0 8px #00FF00; display: inline-block; transform: scale(1.2);">FUTURE</span>' }
+  ];
+
+  function renderCaptionStudioGrid() {
+    const grid = document.getElementById('caption-styles-grid');
+    if (!grid) return;
+    grid.innerHTML = '';
+    const selected = localStorage.getItem('captionStyle') || 'kinetic_slide';
+
+    CAPTION_STYLES_DATA.forEach(st => {
+      const isSelected = st.id === selected;
+      const card = document.createElement('div');
+      card.className = `caption-card ${isSelected ? 'selected' : ''}`;
+      card.setAttribute('data-style', st.id);
+      card.style.cssText = `
+        background: rgba(20, 20, 28, 0.85); border: ${isSelected ? '2px solid var(--accent-cyan)' : '1px solid var(--border-color)'};
+        border-radius: 12px; padding: 20px; cursor: pointer; transition: all 0.25s ease;
+        box-shadow: ${isSelected ? '0 0 25px rgba(0, 240, 255, 0.3)' : 'none'};
+        display: flex; flex-direction: column; justify-content: space-between; position: relative;
+      `;
+
+      card.innerHTML = `
+        <div>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <span style="font-size: 0.75rem; background: rgba(255,255,255,0.08); padding: 4px 10px; border-radius: 20px; color: var(--accent-cyan); font-weight: 600;">${st.badge}</span>
+            <div class="radio-check" style="width: 20px; height: 20px; border-radius: 50%; border: 2px solid ${isSelected ? 'var(--accent-cyan)' : 'var(--text-muted)'}; background: ${isSelected ? 'var(--accent-cyan)' : 'transparent'}; display: flex; align-items: center; justify-content: center; color: #000; font-size: 0.8rem; font-weight: bold;">
+              ${isSelected ? '✓' : ''}
+            </div>
+          </div>
+          <h4 style="color: var(--text-main); font-size: 1.15rem; margin-bottom: 8px; font-weight: 700;">${st.name}</h4>
+          <p style="color: var(--text-muted); font-size: 0.85rem; line-height: 1.4; margin-bottom: 16px;">${st.desc}</p>
+        </div>
+        <div style="background: rgba(0,0,0,0.6); border: 1px dashed rgba(255,255,255,0.15); padding: 20px 10px; border-radius: 8px; text-align: center; overflow: hidden;">
+          <div style="${st.previewCss} font-size: 1.15rem; transition: transform 0.3s ease;">
+            ${st.html}
+          </div>
+        </div>
+      `;
+
+      card.addEventListener('click', () => {
+        localStorage.setItem('captionStyle', st.id);
+        const cfg = document.getElementById('config-caption-style');
+        if (cfg) cfg.value = st.id;
+        renderCaptionStudioGrid();
+      });
+
+      grid.appendChild(card);
     });
   }
+
+  function openCaptionStudio(source, isYoutube = false, isExistingUpload = false, isStandaloneTool = false) {
+    currentPendingJob = { source, isYoutube, isExistingUpload, isStandaloneTool };
+    renderCaptionStudioGrid();
+
+    sectionUpload.classList.add('hidden');
+    sectionProcessing.classList.add('hidden');
+    sectionClips.classList.add('hidden');
+    sectionHistory.classList.add('hidden');
+    sectionUploadCenter.classList.add('hidden');
+    
+    const studio = document.getElementById('section-caption-studio');
+    document.getElementById('caption-studio-main').classList.remove('hidden');
+    document.getElementById('standalone-caption-loading').classList.add('hidden');
+    document.getElementById('standalone-caption-result').classList.add('hidden');
+
+    if (isStandaloneTool) {
+      document.getElementById('caption-studio-title').innerHTML = `Add Viral Captions: <span>Choose Style</span>`;
+      document.getElementById('caption-studio-subtitle').textContent = `Select the exact visual animation style to burn onto your uploaded clip!`;
+      document.getElementById('btn-proceed-text').textContent = `✨ Burn Captions Onto Video`;
+    } else {
+      document.getElementById('caption-studio-title').innerHTML = `Step 2: Choose Your <span>Caption Style</span>`;
+      document.getElementById('caption-studio-subtitle').textContent = `Select a viral typography & animation preset below. See live visual previews of how your video captions will look!`;
+      document.getElementById('btn-proceed-text').textContent = `✨ Start Generating Clips`;
+    }
+
+    studio.classList.remove('hidden');
+    gsap.fromTo(studio, { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.4, ease: 'power2.out' });
+  }
+
+  const btnAddCaptionsTool = document.getElementById('btn-add-captions-tool');
+  const standaloneCaptionFile = document.getElementById('standalone-caption-file');
+  if (btnAddCaptionsTool && standaloneCaptionFile) {
+    btnAddCaptionsTool.addEventListener('click', () => standaloneCaptionFile.click());
+    standaloneCaptionFile.addEventListener('change', (e) => {
+      if (e.target.files.length) openCaptionStudio(e.target.files[0], false, false, true);
+    });
+  }
+
+  const btnStudioBack = document.getElementById('btn-caption-studio-back');
+  const btnStudioProceed = document.getElementById('btn-caption-studio-proceed');
+  if (btnStudioBack) {
+    btnStudioBack.addEventListener('click', () => {
+      document.getElementById('section-caption-studio').classList.add('hidden');
+      sectionUpload.classList.remove('hidden');
+      gsap.fromTo(sectionUpload, { opacity: 0 }, { opacity: 1, duration: 0.3 });
+    });
+  }
+  if (btnStudioProceed) {
+    btnStudioProceed.addEventListener('click', async () => {
+      if (!currentPendingJob) return;
+      if (currentPendingJob.isStandaloneTool) {
+        document.getElementById('caption-studio-main').classList.add('hidden');
+        document.getElementById('standalone-caption-loading').classList.remove('hidden');
+
+        const formData = new FormData();
+        formData.append('file', currentPendingJob.source);
+        formData.append('style', localStorage.getItem('captionStyle') || 'kinetic_slide');
+
+        try {
+          const res = await fetch('/api/tools/add-captions', {
+            method: 'POST',
+            body: formData
+          });
+          const data = await res.json();
+          if (!data.success) {
+            alert("Error adding captions: " + (data.error || "Unknown error"));
+            document.getElementById('standalone-caption-loading').classList.add('hidden');
+            document.getElementById('caption-studio-main').classList.remove('hidden');
+            return;
+          }
+          document.getElementById('standalone-caption-loading').classList.add('hidden');
+          document.getElementById('standalone-caption-result').classList.remove('hidden');
+          const player = document.getElementById('standalone-caption-video-player');
+          player.src = data.video_url;
+          document.getElementById('btn-download-captioned').href = data.video_url;
+        } catch (e) {
+          alert("Network or system error: " + e.message);
+          document.getElementById('standalone-caption-loading').classList.add('hidden');
+          document.getElementById('caption-studio-main').classList.remove('hidden');
+        }
+      } else {
+        document.getElementById('section-caption-studio').classList.add('hidden');
+        startProcessing(currentPendingJob.source, currentPendingJob.isYoutube, currentPendingJob.isExistingUpload);
+      }
+    });
+  }
+  const btnStudioDone = document.getElementById('btn-caption-studio-done');
+  if (btnStudioDone) {
+    btnStudioDone.addEventListener('click', () => {
+      if (standaloneCaptionFile) standaloneCaptionFile.click();
+    });
+  }
+
 
   const publishingModeStatus = document.getElementById('publishing-mode-status');
   function currentPublishingMode() {
@@ -778,7 +933,7 @@ document.addEventListener("DOMContentLoaded", () => {
           // Send config (model, caption_style, etc) FIRST before initiating connections
           async function sendConfig(jobId) {
             const model = document.getElementById('config-model')?.value || 'small';
-            const captionStyle = document.getElementById('config-caption-style')?.value || 'kinetic_slide';
+            const captionStyle = localStorage.getItem('captionStyle') || document.getElementById('config-caption-style')?.value || 'kinetic_slide';
             try {
               await fetch(`/config/${jobId}`, {
                 method: 'POST',

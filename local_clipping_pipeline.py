@@ -106,9 +106,24 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--caption-style",
         default="kinetic_slide",
-        choices=["kinetic_slide", "tiktok_pop", "cyberpunk_neon", "smooth_wave", "vibrant_gradient", "cinematic_swing", "karaoke_glow", "minimal_fade", "future_cyber"],
+        choices=[
+            "kinetic_slide", "tiktok_pop", "cyberpunk_neon", "smooth_wave", "vibrant_gradient",
+            "cinematic_swing", "karaoke_glow", "minimal_fade", "future_cyber", "hormozi_gold",
+            "mrbeast_lightning", "fire_ember", "emerald_money", "glitch_matrix", "neon_purple_rain",
+            "bold_impact_red", "sunset_vibes", "pastel_dream", "stomp_kinetic"
+        ],
         help="Caption animation style:\n"
              "  kinetic_slide      -> smooth slide & bounce (default)\n"
+             "  hormozi_gold       -> Alex Hormozi signature warm gold punch\n"
+             "  mrbeast_lightning  -> electric cyan with energetic tilt\n"
+             "  fire_ember         -> fiery orange leaping words\n"
+             "  emerald_money      -> wealth emerald green pop\n"
+             "  glitch_matrix      -> hacker neon green jitter\n"
+             "  neon_purple_rain   -> electric violet breathing zoom\n"
+             "  bold_impact_red    -> aggressive drama blood red\n"
+             "  sunset_vibes       -> warm sunset floating glow\n"
+             "  pastel_dream       -> soft lavender creamy aesthetic\n"
+             "  stomp_kinetic      -> action slam down animation\n"
              "  tiktok_pop         -> fast word zoom pop\n"
              "  cyberpunk_neon     -> cyan & pink tilt pop\n"
              "  smooth_wave        -> smooth karaoke highlights\n"

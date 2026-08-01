@@ -408,6 +408,106 @@ def _write_ass(
                 active_tags = "\\c&HFFFF00&\\shad2\\3c&H00FF00&\\blur2\\fscx90\\fscy90\\t(0,100,\\fscx120\\fscy120)\\t(100,150,\\fscx100\\fscy100)"
                 static_active_tags = "\\c&HFFFF00&\\shad2\\3c&H00FF00&\\blur2"
                 anim_effect = f"\\pos({pos_x},{pos_y})\\fad(80,0)"
+
+            elif style_name == "hormozi_gold":
+                # Alex Hormozi signature warm gold punch, dramatic scale pop and thick outline
+                anim_dur_max = 0.140
+                color_active = "00D7FF" # Gold in BGR
+                color_other = "E0E0E0"
+                alpha_other = "35"
+                active_tags = f"\\c&H{color_active}&\\shad3\\fscx0\\fscy0\\t(0,90,\\fscx145\\fscy145)\\t(90,140,\\fscx105\\fscy105)"
+                static_active_tags = f"\\c&H{color_active}&\\shad3\\fscx105\\fscy105"
+                anim_effect = f"\\pos({pos_x},{pos_y})\\fad(60,0)"
+
+            elif style_name == "mrbeast_lightning":
+                # MrBeast style electric cyan with energetic tilt and bold contrast
+                anim_dur_max = 0.150
+                color_active = "FFFF00" # Pure Cyan in BGR
+                color_other = "FFFFFF"
+                alpha_other = "45"
+                active_tags = f"\\c&H{color_active}&\\shad2\\frz-6\\fscx110\\fscy110\\t(0,80,\\frz4\\fscx135\\fscy135)\\t(80,150,\\frz-1\\fscx110\\fscy110)"
+                static_active_tags = f"\\c&H{color_active}&\\shad2\\frz-1\\fscx110\\fscy110"
+                anim_effect = f"\\pos({pos_x},{pos_y})\\fad(70,0)"
+
+            elif style_name == "fire_ember":
+                # Hot fiery orange with subtle upward leap
+                anim_dur_max = 0.160
+                color_active = "0055FF" # Fire Orange in BGR
+                color_other = "CCCCCC"
+                alpha_other = "40"
+                active_tags = f"\\c&H{color_active}&\\shad2\\blur2\\fscx95\\fscy95\\t(0,100,\\fscx125\\fscy125)\\t(100,160,\\fscx102\\fscy102)"
+                static_active_tags = f"\\c&H{color_active}&\\shad2\\blur2\\fscx102\\fscy102"
+                anim_effect = f"\\move({pos_x},{pos_y + 15},{pos_x},{pos_y},0,120)\\fad(80,0)"
+
+            elif style_name == "emerald_money":
+                # Wealth/finance business vibe with sharp green pop
+                anim_dur_max = 0.140
+                color_active = "50FF00" # Emerald Green in BGR
+                color_other = "D8D8D8"
+                alpha_other = "30"
+                active_tags = f"\\c&H{color_active}&\\shad2\\fscx50\\fscy50\\t(0,90,\\fscx130\\fscy130)\\t(90,140,\\fscx100\\fscy100)"
+                static_active_tags = f"\\c&H{color_active}&\\shad2"
+                anim_effect = f"\\pos({pos_x},{pos_y})\\fad(70,0)"
+
+            elif style_name == "glitch_matrix":
+                # Cyber hxcker neon green with quick horizontal jitter
+                anim_dur_max = 0.120
+                color_active = "00FF00" # Matrix Green in BGR
+                color_other = "808080"
+                alpha_other = "50"
+                active_tags = f"\\c&H{color_active}&\\shad0\\3c&H00CC00&\\blur3\\fscx110\\fscy100\\t(0,60,\\fscx95\\fscy105)\\t(60,120,\\fscx100\\fscy100)"
+                static_active_tags = f"\\c&H{color_active}&\\shad0\\3c&H00CC00&\\blur3"
+                anim_effect = f"\\pos({pos_x},{pos_y})\\fad(50,0)"
+
+            elif style_name == "neon_purple_rain":
+                # Electric magenta/violet with smooth breathing zoom
+                anim_dur_max = 0.180
+                color_active = "FF00AA" # Purple/Magenta in BGR
+                color_other = "E0D0E0"
+                alpha_other = "40"
+                active_tags = f"\\c&H{color_active}&\\shad2\\blur2\\fscx90\\fscy90\\t(0,120,\\fscx120\\fscy120)\\t(120,180,\\fscx105\\fscy105)"
+                static_active_tags = f"\\c&H{color_active}&\\shad2\\blur2\\fscx105\\fscy105"
+                anim_effect = f"\\pos({pos_x},{pos_y})\\fad(100,0)"
+
+            elif style_name == "bold_impact_red":
+                # Aggressive high-impact drama/crime style with punchy red
+                anim_dur_max = 0.130
+                color_active = "0000FF" # Pure Red in BGR
+                color_other = "FFFFFF"
+                alpha_other = "10" # Very little dimming for bold punch
+                active_tags = f"\\c&H{color_active}&\\shad3\\fscx150\\fscy150\\t(0,80,\\fscx110\\fscy110)"
+                static_active_tags = f"\\c&H{color_active}&\\shad3\\fscx110\\fscy110"
+                anim_effect = f"\\pos({pos_x},{pos_y})\\fad(40,0)"
+
+            elif style_name == "sunset_vibes":
+                # Warm sunset tones with gentle floating animation
+                anim_dur_max = 0.200
+                color_active = "60A0FF" # Warm Sunset Pink-Orange in BGR
+                color_other = "EDEDED"
+                alpha_other = "35"
+                active_tags = f"\\c&H{color_active}&\\fscx95\\fscy95\\t(0,150,\\fscx112\\fscy112)\\t(150,200,\\fscx103\\fscy103)"
+                static_active_tags = f"\\c&H{color_active}&\\fscx103\\fscy103"
+                anim_effect = f"\\move({pos_x},{pos_y + 12},{pos_x},{pos_y},0,160)\\fad(100,0)"
+
+            elif style_name == "pastel_dream":
+                # Aesthetic lifestyle soft lavender with creamy elegance
+                anim_dur_max = 0.180
+                color_active = "F0D0FF" # Pastel Lavender in BGR
+                color_other = "F5F5F5"
+                alpha_other = "45"
+                active_tags = f"\\c&H{color_active}&\\shad1\\blur1\\fscx98\\fscy98\\t(0,140,\\fscx108\\fscy108)"
+                static_active_tags = f"\\c&H{color_active}&\\shad1\\blur1\\fscx108\\fscy108"
+                anim_effect = f"\\pos({pos_x},{pos_y})\\fad(120,0)"
+
+            elif style_name == "stomp_kinetic":
+                # Action stomp: slam instantly from 200% down to 100%
+                anim_dur_max = 0.110
+                color_active = "00FFFF" # Bright yellow in BGR
+                color_other = "B0B0B0"
+                alpha_other = "55"
+                active_tags = f"\\c&H{color_active}&\\shad3\\fscx220\\fscy220\\t(0,80,\\fscx100\\fscy100)"
+                static_active_tags = f"\\c&H{color_active}&\\shad3\\fscx100\\fscy100"
+                anim_effect = f"\\pos({pos_x},{pos_y})\\fad(30,0)"
                 
             else:
                 anim_dur_max = 0.150

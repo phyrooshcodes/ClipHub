@@ -6,7 +6,7 @@ import asyncio
 import functools
 from typing import List
 from pathlib import Path
-from fastapi import APIRouter, BackgroundTasks, UploadFile, File
+from fastapi import APIRouter, BackgroundTasks, UploadFile, File, Form
 from fastapi.responses import JSONResponse, HTMLResponse
 from pydantic import BaseModel
 import logging
@@ -183,6 +183,34 @@ async def api_tools_generate_products(file: UploadFile = File(...)):
     finally:
         if os.path.exists(tmp_path): os.remove(tmp_path)
 
+@router.post("/api/tools/add-captions")
+async def api_tools_add_captions(file: UploadFile = File(...), style: str = Form("kinetic_slide")):
+    import tempfile, subprocess
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp:
+        tmp.write(await file.read())
+        tmp_path = tmp.name
+        
+    out_dir = OUTPUT_DIR / "caption_studio"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_filename = f"captions_{uuid.uuid4().hex[:8]}.mp4"
+    out_path = out_dir / out_filename
+    
+    try:
+        python_exe = str(BASE_DIR / "venv" / "bin" / "python")
+        if not Path(python_exe).exists():
+            python_exe = str(BASE_DIR / "venv" / "Scripts" / "python.exe")
+            if not Path(python_exe).exists():
+                python_exe = sys.executable
+        cmd = [python_exe, str(BASE_DIR / "tools_add_captions.py"), tmp_path, style, str(out_path)]
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        data = json.loads(result.stdout.strip())
+        if "error" in data and not data.get("success"):
+            return JSONResponse(data, status_code=400)
+        return {"success": True, "video_url": f"/output/caption_studio/{out_filename}", "words_count": data.get("words_count", 0)}
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+    finally:
+        if os.path.exists(tmp_path): os.remove(tmp_path)
 
 @router.get("/api/social/status")
 async def social_status():
