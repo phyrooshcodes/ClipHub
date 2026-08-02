@@ -33,9 +33,25 @@ class DownloadJob:
 
 active_downloads: Dict[str, DownloadJob] = {}
 
+def _get_cookies_args():
+    home = Path.home()
+    if (home / ".mozilla" / "firefox").exists() or (home / "Library" / "Application Support" / "Firefox").exists():
+        return ["--cookies-from-browser", "firefox"]
+    if (home / ".config" / "google-chrome").exists() or (home / "Library" / "Application Support" / "Google" / "Chrome").exists() or (home / "AppData" / "Local" / "Google" / "Chrome" / "User Data").exists():
+        return ["--cookies-from-browser", "chrome"]
+    if (home / ".config" / "chromium").exists() or (home / "AppData" / "Local" / "Chromium" / "User Data").exists():
+        return ["--cookies-from-browser", "chromium"]
+    if (home / ".config" / "BraveSoftware" / "Brave-Browser").exists() or (home / "AppData" / "Local" / "BraveSoftware" / "Brave-Browser" / "User Data").exists():
+        return ["--cookies-from-browser", "brave"]
+    if (home / ".config" / "microsoft-edge").exists() or (home / "AppData" / "Local" / "Microsoft" / "Edge" / "User Data").exists():
+        return ["--cookies-from-browser", "edge"]
+    return ["--cookies-from-browser", "firefox"]
+
 async def _run_ytdl(job: DownloadJob, python_exe: str, save_path: str):
     cmd = [
         python_exe, "-m", "yt_dlp",
+        *_get_cookies_args(),
+        "--remote-components", "ejs:github",
         "--js-runtimes", "node",
         "--format", "bestvideo[ext=mp4][height<=1080]+bestaudio[ext=m4a]/best[ext=mp4]/best",
         "--merge-output-format", "mp4",
