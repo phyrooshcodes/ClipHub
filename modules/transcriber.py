@@ -44,16 +44,25 @@ def transcribe_audio(
 
     # Dynamically inject local CUDA runtime library paths into Windows DLL search path
     try:
-        venv_site = Path(sys.executable).parent.parent / "Lib" / "site-packages"
-        nvidia_dir = venv_site / "nvidia"
-        if nvidia_dir.exists():
-            for sub in nvidia_dir.iterdir():
-                bin_dir = sub / "bin"
-                if bin_dir.exists():
-                    os.environ["PATH"] = str(bin_dir) + os.pathsep + os.environ["PATH"]
-                    # Also tell Python 3.8+ to search this folder for DLLs
-                    if hasattr(os, "add_dll_directory"):
-                        os.add_dll_directory(str(bin_dir))
+        import site
+        site_dirs = [str(Path(sys.executable).parent.parent / "Lib" / "site-packages")]
+        try:
+            site_dirs.extend(site.getsitepackages())
+        except Exception:
+            pass
+
+        for sdir in site_dirs:
+            nvidia_dir = Path(sdir) / "nvidia"
+            if nvidia_dir.exists():
+                for sub in nvidia_dir.iterdir():
+                    for folder in [sub / "bin", sub / "lib", sub]:
+                        if folder.exists() and any(folder.glob("*.dll")):
+                            os.environ["PATH"] = str(folder) + os.pathsep + os.environ["PATH"]
+                            if hasattr(os, "add_dll_directory"):
+                                try:
+                                    os.add_dll_directory(str(folder))
+                                except Exception:
+                                    pass
     except Exception as e:
         logger.warning(f"[Transcriber] Failed to add local CUDA paths: {e}")
 

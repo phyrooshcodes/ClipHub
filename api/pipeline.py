@@ -90,16 +90,23 @@ async def _run_process(job_id: str, cmd: list, start_time: float):
         env = {**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1", "PYTHONUNBUFFERED": "1", "QT_QPA_PLATFORM": "offscreen"}
         try:
             import site
-            for site_pkg in site.getsitepackages():
-                sp = Path(site_pkg)
-                cublas = sp / "nvidia" / "cublas" / "lib"
-                cudnn = sp / "nvidia" / "cudnn" / "lib"
-                nvrtc = sp / "nvidia" / "cuda_nvrtc" / "lib"
-                paths = [str(p) for p in [cublas, cudnn, nvrtc] if p.exists()]
-                if paths:
-                    curr_ld = env.get("LD_LIBRARY_PATH", "")
-                    env["LD_LIBRARY_PATH"] = ":".join(paths) + (":" + curr_ld if curr_ld else "")
-                    break
+            site_dirs = [str(BASE_DIR / "venv" / "Scripts" / "site-packages"), str(BASE_DIR / "venv" / "Lib" / "site-packages")]
+            try: site_dirs.extend(site.getsitepackages())
+            except Exception: pass
+            
+            nvidia_paths = []
+            for sdir in site_dirs:
+                nd = Path(sdir) / "nvidia"
+                if nd.exists():
+                    for sub in nd.iterdir():
+                        for leaf in ["bin", "lib", ""]:
+                            p = sub / leaf if leaf else sub
+                            if p.exists() and str(p) not in nvidia_paths:
+                                nvidia_paths.append(str(p))
+            if nvidia_paths:
+                sep = ";" if sys.platform == "win32" else ":"
+                env["PATH"] = sep.join(nvidia_paths) + sep + env.get("PATH", "")
+                env["LD_LIBRARY_PATH"] = ":".join(nvidia_paths) + (":" + env.get("LD_LIBRARY_PATH", "") if env.get("LD_LIBRARY_PATH") else "")
         except Exception as e: logger.warning(f"Failed to inject nvidia paths: {e}")
 
         process = await asyncio.create_subprocess_exec(
