@@ -108,7 +108,7 @@ body {
 }
 
 .nav-badges { display: flex; gap: 8px; align-items: center; }
-
+.nav-actions { display: flex; gap: 10px; align-items: center; }
 .badge {
   background: transparent;
   border: 1px solid var(--border-color);
@@ -869,9 +869,23 @@ select option { background: #111; color: var(--text-main); }
   /* Layout & Container */
   .app-container { padding: 15px 12px 60px 12px; }
   .top-nav { padding: 0 12px; height: 56px; }
-  .nav-right { gap: 6px; }
-  .nav-right .btn-outline { padding: 6px 10px; font-size: 0.75rem; }
-  
+  .nav-actions {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none; /* Firefox */
+    padding-bottom: 2px;
+  }
+  .nav-actions::-webkit-scrollbar {
+    display: none; /* Chrome/Safari */
+  }
+  .nav-actions .btn-outline { 
+    white-space: nowrap; 
+    padding: 6px 10px; 
+    font-size: 0.75rem; 
+  }
+  .nav-actions .icon-btn {
+    flex-shrink: 0;
+  }
   /* Hero Section */
   .hero-section { margin-top: 15px; margin-bottom: 25px; }
   .hero-title { font-size: 1.65rem; letter-spacing: -0.5px; line-height: 1.2; }
