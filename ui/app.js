@@ -507,11 +507,14 @@ document.addEventListener("DOMContentLoaded", () => {
         } else {
           if (ytTitle) ytTitle.textContent = 'YouTube Studio';
           ytStatus.textContent = 'Not connected';
-          if (ytButton) ytButton.textContent = 'Connect Studio';
-          if (ytSwitch) ytSwitch.classList.add('hidden');
-          if (ytDisconnect) ytDisconnect.classList.add('hidden');
         }
       }
+    } catch (_) {
+      if (igStatus) igStatus.textContent = 'Status unavailable';
+      if (ytStatus) ytStatus.textContent = 'Status unavailable';
+    }
+  }
+
   async function loadServerInfo() {
     try {
       const res = await fetch('/api/server-info');
