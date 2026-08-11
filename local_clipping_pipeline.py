@@ -392,10 +392,10 @@ def run_pipeline(args: argparse.Namespace) -> None:
         title     = clip.get("title", f"clip_{clip_num:03d}")
         score     = clip.get("hook_score", "?")
 
-        # Sanitize title for use as filename
+        # Sanitize title for use as filename with clip_XX_ prefix for exact metadata indexing
         safe_title = "".join(c if c.isalnum() or c in " _-" else "" for c in title)
-        safe_title = safe_title.strip().replace(" ", "_")[:40]
-        clip_filename = f"{safe_title}.mp4"
+        safe_title = safe_title.strip().replace(" ", "_")[:35]
+        clip_filename = f"clip_{clip_num:02d}_{safe_title}.mp4"
         clip["filename"] = clip_filename
         output_path   = os.path.join(output_dir, clip_filename)
         sub_path      = os.path.join(temp_dir, f"subtitles_{clip_num:02d}.ass")
