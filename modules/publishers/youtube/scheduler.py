@@ -47,10 +47,21 @@ def calculate_schedule_target(now: datetime | None = None) -> tuple[datetime, st
     return target_dt, date_str, time_str
 
 
+def check_for_verification_dialog(page: Page) -> None:
+    """Detect Google Security Verification ('Verify it's you') dialog."""
+    try:
+        verify = page.locator("text=/Verify it's you|confirm it's really you|extra layer of security/i").first
+        if verify.count() and verify.is_visible():
+            raise RuntimeError("Google Security Verification required ('Verify it's you'). Please reconnect YouTube Studio in Settings to complete 2FA.")
+    except PlaywrightError:
+        pass
+
+
 def _click_next_until_visibility(page: Page, max_clicks: int = 10) -> None:
     """Click Next button through wizard steps until Visibility / Schedule tab is reached."""
     logger.info("[YouTube] Opening Visibility.")
     for _ in range(max_clicks):
+        check_for_verification_dialog(page)
         # Check if Schedule radio button is already visible
         for sched_sel in SCHEDULE_RADIO_SELECTORS:
             if page.locator(sched_sel).first.count() and page.locator(sched_sel).first.is_visible():
