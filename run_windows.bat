@@ -140,10 +140,23 @@ maturin develop --release --manifest-path clip_engine_core/Cargo.toml
 
 :LAUNCH
 
-:: ── 7. Launch App Server & Open Web UI ────────────────────
+:: ── 7. Choose UI and Launch App Server ────────────────────
 echo:
 echo  ==============================================================
-echo   OBSCURA CLIPS IS LIVE!
+echo   SELECT USER INTERFACE
+echo  ==============================================================
+echo   [1] Classic Web UI (FastAPI)
+echo   [2] Beta UI (Tauri + React)
+echo:
+set /p UI_CHOICE="Enter your choice (1 or 2) [1]: "
+if "%UI_CHOICE%"=="" set UI_CHOICE=1
+
+if "%UI_CHOICE%"=="2" goto LAUNCH_BETA
+
+:LAUNCH_CLASSIC
+echo:
+echo  ==============================================================
+echo   OBSCURA CLIPS IS LIVE! (Classic UI)
 echo   Server URL: http://localhost:7842
 echo   Opening Chrome / Web Browser...
 echo   Press Ctrl+C in this terminal window to stop the server.
@@ -154,7 +167,21 @@ echo:
 start "" "http://localhost:7842"
 
 python server.py
+goto END_LAUNCH
 
+:LAUNCH_BETA
+echo:
+echo  ==============================================================
+echo   OBSCURA CLIPS IS LIVE! (Beta UI)
+echo   Beta UI is currently in development.
+echo   Press Ctrl+C in this terminal window to stop the server.
+echo  ==============================================================
+echo:
+:: Future Tauri launch command will go here
+:: For now, we just start the server and wait for the beta client
+python server.py
+
+:END_LAUNCH
 echo:
 echo  [INFO] Server stopped.
 pause

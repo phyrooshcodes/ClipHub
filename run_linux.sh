@@ -208,8 +208,27 @@ if ! command -v ffmpeg >/dev/null 2>&1; then
     warn "FFmpeg was not found. The web interface will start, but video processing will require FFmpeg."
 fi
 
-log "Starting server at http://127.0.0.1:7842"
-log "Press Ctrl+C to stop."
-echo
+log "=============================================================="
+log "                      SELECT USER INTERFACE"
+log "=============================================================="
+echo "[1] Classic Web UI (FastAPI)"
+echo "[2] Beta UI (Tauri + React)"
+read -p "Enter your choice (1 or 2) [1]: " UI_CHOICE
+UI_CHOICE=${UI_CHOICE:-1}
 
-exec "$PYTHON" "$DIR/server.py"
+if [ "$UI_CHOICE" = "1" ]; then
+    log "Starting Classic UI server at http://127.0.0.1:7842"
+    log "Press Ctrl+C to stop."
+    echo
+    exec "$PYTHON" "$DIR/server.py"
+elif [ "$UI_CHOICE" = "2" ]; then
+    log "Starting backend server for Beta UI (Tauri + React)..."
+    log "Beta UI client is currently in development."
+    log "Press Ctrl+C to stop."
+    echo
+    # Future Tauri launch command will go here
+    exec "$PYTHON" "$DIR/server.py"
+else
+    err "Invalid choice."
+    exit 1
+fi
