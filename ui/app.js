@@ -512,11 +512,17 @@ document.addEventListener("DOMContentLoaded", () => {
           if (ytDisconnect) ytDisconnect.classList.add('hidden');
         }
       }
-    } catch (_) {
-      if (igStatus) igStatus.textContent = 'Status unavailable';
-      if (ytStatus) ytStatus.textContent = 'Status unavailable';
-    }
+  async function loadServerInfo() {
+    try {
+      const res = await fetch('/api/server-info');
+      const data = await res.json();
+      const wifiEl = document.getElementById('wifi-server-info');
+      if (wifiEl && data.wifi_url) {
+        wifiEl.innerHTML = `Open on your phone: <a href="${data.wifi_url}" target="_blank" style="color:#818cf8; font-weight:700; text-decoration:none;">${data.wifi_url}</a>`;
+      }
+    } catch (_) {}
   }
+  loadServerInfo();
 
   document.getElementById('btn-connect-ig')?.addEventListener('click', async (event) => {
     const button = event.currentTarget;

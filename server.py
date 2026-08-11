@@ -69,10 +69,32 @@ def _open_browser():
     time.sleep(1.5)
     webbrowser.open("http://localhost:7842")
 
+def get_local_ip() -> str:
+    try:
+        import socket
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "127.0.0.1"
+
+@app.get("/api/server-info")
+async def server_info():
+    ip = get_local_ip()
+    return {
+        "local_url": "http://localhost:7842",
+        "wifi_url": f"http://{ip}:7842",
+        "wifi_ip": ip
+    }
+
 if __name__ == "__main__":
     import os
     if os.environ.get("OBSCURA_OPEN_BROWSER", "1") == "1":
         threading.Thread(target=_open_browser, daemon=True).start()
-    print("\n  *  Obscura Clips API server starting")
-    print("  -> http://127.0.0.1:7842\n")
-    uvicorn.run(app, host="127.0.0.1", port=7842, log_level="warning")
+    local_ip = get_local_ip()
+    print("\n  ✦ OBSCURA CLIPS — Server Started")
+    print(f"  -> Local PC   : http://localhost:7842")
+    print(f"  -> Phone/Wi-Fi : http://{local_ip}:7842\n")
+    uvicorn.run(app, host="0.0.0.0", port=7842, log_level="warning")
