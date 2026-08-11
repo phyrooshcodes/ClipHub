@@ -1524,11 +1524,16 @@ document.addEventListener("DOMContentLoaded", () => {
       const card = btn.closest('.clip-card');
       const title = card ? card.querySelector('.clip-title').textContent : 'Viral Clip';
       const caption = card ? card.querySelector('.clip-caption').textContent : 'Check out this awesome clip! #viral #fyp';
-      const parts = clipPath.split('/');
-      if (parts.length >= 3) {
-        const jobId = parts[parts.length - 2];
+      let products = [];
+      try {
+        products = JSON.parse(btn.getAttribute('data-products') || '[]');
+      } catch(e) {}
+      const cleanPath = clipPath.replace(/^https?:\/\/[^\/]+/, '');
+      const parts = cleanPath.split('/').filter(Boolean);
+      if (parts.length >= 2) {
         const filename = parts[parts.length - 1];
-        executePublish(jobId, filename, title, caption, platforms, btn, true);
+        const jobId = parts[parts.length - 2];
+        executePublish(jobId, filename, title, caption, products, platforms, btn, true);
       }
     });
   }
