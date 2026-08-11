@@ -859,13 +859,87 @@ select option { background: #111; color: var(--text-main); }
 .form-group { margin-bottom: 18px; }
 .text-xs { font-size: 0.72rem; }
 
-/* ─── Responsive nav ─────────────────────────────────────── */
+/* ─── Responsive Navigation & Mobile Optimization ──────── */
 @media (max-width: 900px) {
   .nav-badges { display: none; }
-  .top-nav { padding: 0 16px; }
+  .top-nav { padding: 0 16px; height: 60px; }
 }
-@media (max-width: 700px) {
-  .hero-title { font-size: 2.2rem; }
-  .proc-grid { grid-template-columns: 1fr; }
+
+@media (max-width: 640px) {
+  /* Layout & Container */
+  .app-container { padding: 15px 12px 60px 12px; }
+  .top-nav { padding: 0 12px; height: 56px; }
+  .nav-right { gap: 6px; }
+  .nav-right .btn-outline { padding: 6px 10px; font-size: 0.75rem; }
+  
+  /* Hero Section */
+  .hero-section { margin-top: 15px; margin-bottom: 25px; }
+  .hero-title { font-size: 1.65rem; letter-spacing: -0.5px; line-height: 1.2; }
+  .hero-subtitle { font-size: 0.85rem; padding: 0 10px; }
+  
+  /* Dropzone & YouTube Input Group */
+  .dropzone { padding: 30px 15px; min-height: 180px; }
+  .dropzone i { font-size: 2.2rem; }
+  .dropzone-text { font-size: 0.95rem; }
+  
+  .yt-input-group {
+    flex-direction: column;
+    background: transparent;
+    border: none;
+    padding: 0;
+    gap: 10px;
+    box-shadow: none;
+  }
+  .yt-input-group .input-icon-wrapper {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 0 14px;
+    height: 48px;
+    width: 100%;
+  }
+  .yt-input-group .btn-primary {
+    width: 100%;
+    height: 48px;
+    border-radius: var(--radius-md);
+    justify-content: center;
+    font-size: 0.9rem;
+  }
+  
+  /* Processing Grid */
+  .proc-grid { grid-template-columns: 1fr; gap: 15px; }
+  
+  /* Clips Grid & Card */
+  .clips-grid { grid-template-columns: 1fr !important; gap: 16px !important; }
+  .clip-card { border-radius: 12px; }
+  .clip-video { max-height: 440px; }
+  .clip-title { font-size: 1rem !important; }
+  .clip-caption { font-size: 0.82rem !important; }
+  
+  /* History Job Section Headers */
+  .job-history-block { padding: 14px !important; margin-bottom: 20px !important; border-radius: 10px !important; }
+  .job-history-header {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 12px !important;
+  }
+  .btn-job-mass-post {
+    width: 100% !important;
+    justify-content: center !important;
+    padding: 10px !important;
+    font-size: 0.85rem !important;
+  }
+  
+  /* Modals on Mobile */
+  .modal {
+    width: 95% !important;
+    max-height: 90vh !important;
+    padding: 18px !important;
+    border-radius: 14px !important;
+  }
+  .modal-body { max-height: 70vh !important; overflow-y: auto !important; -webkit-overflow-scrolling: touch; }
+  
+  /* Upload Status Bar */
+  .upload-status-bar { left: 10px; right: 10px; bottom: 10px; font-size: 0.75rem; padding: 10px 14px; }
 }
 
