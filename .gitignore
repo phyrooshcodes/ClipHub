@@ -23,6 +23,7 @@ broll_cache/
 temp/
 scratch/
 output/
+bin/
 .agents/
 .claude/
 

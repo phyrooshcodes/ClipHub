@@ -48,39 +48,69 @@ def _get_cookies_args():
     return ["--cookies-from-browser", "firefox"]
 
 async def _run_ytdl(job: DownloadJob, python_exe: str, save_path: str):
-    cmd = [
-        python_exe, "-m", "yt_dlp",
-        *_get_cookies_args(),
-        "--remote-components", "ejs:github",
-        "--js-runtimes", "node",
-        "--format", "bestvideo[ext=mp4][height<=1080]+bestaudio[ext=m4a]/best[ext=mp4]/best",
-        "--merge-output-format", "mp4",
-        "--output", save_path,
-        "--newline", "--no-playlist", "--no-part", "--", job.url
-    ]
-    job.events.append({"type": "ytdl_start", "url": job.url})
+    # Ensure local bin and C:\ffmpeg\bin are in PATH for subprocess
+    env = dict(os.environ)
+    local_bin = str(BASE_DIR / "bin")
+    c_ffmpeg = r"C:\ffmpeg\bin"
+    current_path = env.get("PATH", "")
+    paths_to_add = [p for p in [local_bin, c_ffmpeg] if Path(p).exists() and p not in current_path]
+    if paths_to_add:
+        env["PATH"] = ";".join(paths_to_add) + ";" + current_path
+
+    env["PYTHONIOENCODING"] = "utf-8"
+    env["PYTHONUTF8"] = "1"
+
+    async def execute_cmd(use_cookies: bool) -> bool:
+        cmd = [
+            python_exe, "-m", "yt_dlp",
+        ]
+        if use_cookies:
+            cmd.extend(_get_cookies_args())
+        cmd.extend([
+            "--remote-components", "ejs:github",
+            "--js-runtimes", "node",
+            "--format", "bestvideo[ext=mp4][height<=1080]+bestaudio[ext=m4a]/best[ext=mp4]/best",
+            "--merge-output-format", "mp4",
+            "--output", save_path,
+            "--newline", "--no-playlist", "--no-part", "--", job.url
+        ])
+
+        job.events.append({"type": "ytdl_start", "url": job.url})
+        try:
+            process = await asyncio.create_subprocess_exec(
+                *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
+                env=env
+            )
+            while True:
+                line_bytes = await process.stdout.readline()
+                if not line_bytes: break
+                text = line_bytes.decode("utf-8", errors="replace").rstrip()
+                if not text.strip(): continue
+
+                m = re.search(r"\[download\]\s+([\d.]+)%\s+of\s+([~\d.]+\w+)\s+at\s+([\d.]+\w+/s)\s+ETA\s+(\S+)", text)
+                if m:
+                    job.events.append({
+                        "type": "ytdl_progress", "percent": float(m.group(1)),
+                        "size": m.group(2), "speed": m.group(3), "eta": m.group(4),
+                    })
+                    continue
+                job.events.append({"type": "ytdl_log", "raw": text})
+
+            await process.wait()
+            return process.returncode == 0 and Path(save_path).exists()
+        except Exception as e:
+            job.events.append({"type": "ytdl_log", "raw": f"Execution error: {e}"})
+            return False
+
     try:
-        process = await asyncio.create_subprocess_exec(
-            *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
-            env={**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"}
-        )
-        while True:
-            line_bytes = await process.stdout.readline()
-            if not line_bytes: break
-            text = line_bytes.decode("utf-8", errors="replace").rstrip()
-            if not text.strip(): continue
+        # First attempt: Try standard download (fast, no browser cookie database locks)
+        success = await execute_cmd(use_cookies=False)
+        if not success and not Path(save_path).exists():
+            # Second attempt: Try with cookies if standard download failed (for age-restricted/private videos)
+            job.events.append({"type": "ytdl_log", "raw": "Standard download unfulfilled. Retrying with browser cookies..."})
+            success = await execute_cmd(use_cookies=True)
 
-            m = re.search(r"\[download\]\s+([\d.]+)%\s+of\s+([~\d.]+\w+)\s+at\s+([\d.]+\w+/s)\s+ETA\s+(\S+)", text)
-            if m:
-                job.events.append({
-                    "type": "ytdl_progress", "percent": float(m.group(1)),
-                    "size": m.group(2), "speed": m.group(3), "eta": m.group(4),
-                })
-                continue
-            job.events.append({"type": "ytdl_log", "raw": text})
-
-        await process.wait()
-        if process.returncode == 0 and Path(save_path).exists():
+        if success and Path(save_path).exists():
             registry.register(job.job_id, save_path, f"job_{job.job_id}.mp4")
             job.events.append({
                 "type": "ytdl_done", "job_id": job.job_id,
