@@ -161,13 +161,8 @@ def wait_for_upload_completion(page: Page, telemetry: UploadNetworkTelemetry | N
     
     last_logged_text = ""
     while time.monotonic() < deadline:
-        # Check network telemetry signal first
-        if telemetry and telemetry.upload_finished:
-            logger.info("[YouTube] Network Telemetry confirmed 100% video payload transfer.")
-            return
-
         try:
-            progress_el = page.locator("ytcp-video-upload-progress .progress-label").first
+            progress_el = page.locator("ytcp-video-upload-progress .progress-label, ytcp-uploads-dialog .progress-label").first
             if progress_el.count() and progress_el.is_visible():
                 text = progress_el.inner_text().strip()
                 text_lower = text.lower()
@@ -177,7 +172,7 @@ def wait_for_upload_completion(page: Page, telemetry: UploadNetworkTelemetry | N
                     last_logged_text = text
 
                 # Strict checking: Only explicitly positive completion keywords
-                explicit_complete = any(kw in text_lower for kw in ("upload complete", "processing", "checks", "sd complete", "hd complete"))
+                explicit_complete = any(kw in text_lower for kw in ("upload complete", "processing", "checks", "sd complete", "hd complete", "saved as draft"))
                 
                 if explicit_complete:
                     logger.info(f"[YouTube] File upload transfer complete! Final Status: {text.splitlines()[0] if text else 'Complete'}")
