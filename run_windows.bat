@@ -172,21 +172,10 @@ if exist "%USERPROFILE%\.cargo\bin\cargo.exe" (
 
 :RUST_OK
 where cargo >nul 2>&1
-if not errorlevel 1 goto CHECK_BUILD_TOOLS
+if not errorlevel 1 goto CHECK_RUST_CORE
 
 echo  [INFO]  Rust compiler not found. Native acceleration skipped - Python fallback active.
 goto LAUNCH
-
-:CHECK_BUILD_TOOLS
-:: Check for C++ Linker (link.exe / MSVC Build Tools)
-where link >nul 2>&1
-if not errorlevel 1 goto CHECK_RUST_CORE
-
-echo  [SETUP] C++ Build Tools ^(link.exe^) not found. Attempting automatic installation via Winget...
-where winget >nul 2>&1
-if not errorlevel 1 (
-    winget install --id Microsoft.VisualStudio.2022.BuildTools -e --accept-source-agreements --accept-package-agreements --override "--passive --wait --add Microsoft.VisualStudio.Workload.VCTools"
-)
 
 :CHECK_RUST_CORE
 python -c "import clip_engine_core" >nul 2>&1
@@ -228,31 +217,81 @@ goto END_LAUNCH
 :LAUNCH_BETA
 echo:
 echo  ==============================================================
-echo   OBSCURA CLIPS IS LIVE! (Beta UI)
-echo   Starting Python Backend and Beta UI...
+echo   BETA UI MODE SELECTION
+echo  ==============================================================
+echo   [Enter] Launch in Browser Localhost (Fast, light & zero extra dependencies)
+echo   [B/b]   Install MSVC C++ Build Tools & Launch Native Desktop App (Tauri)
+echo:
+set /p BETA_MODE="Enter your choice [Browser]: "
+
+if /i "%BETA_MODE%"=="B" goto LAUNCH_TAURI_NATIVE
+
+:LAUNCH_BROWSER
+echo:
+echo  ==============================================================
+echo   OBSCURA CLIPS IS LIVE! (Beta UI - Browser Localhost)
+echo   Server URL: http://localhost:5173
+echo   Opening Web Browser...
 echo   Press Ctrl+C in this terminal window to stop.
 echo  ==============================================================
 echo:
 set OBSCURA_OPEN_BROWSER=0
 start "Obscura Backend" python server.py
 cd obscura-ui
-
-if exist "%USERPROFILE%\.cargo\bin\cargo.exe" (
-    set "PATH=%USERPROFILE%\.cargo\bin;%PATH%"
-)
-
-where cargo >nul 2>&1
-if not errorlevel 1 (
-    echo  [INFO] Attempting to launch native Tauri Desktop App...
-    call npm run tauri dev
-    if not errorlevel 1 goto END_LAUNCH
-    echo:
-    echo  [WARNING] Native Tauri build failed ^(C++ Build Tools / link.exe missing^).
-)
-
-echo  [INFO] Launching Beta UI in Browser ^(Vite Dev Server^)...
 start "" "http://localhost:5173"
 call npm run dev
+goto END_LAUNCH
+
+:LAUNCH_TAURI_NATIVE
+echo:
+echo  ==============================================================
+echo   CHECKING NATIVE TAURI DEPENDENCIES...
+echo  ==============================================================
+echo:
+
+:: 1. Check/Install Rust
+where cargo >nul 2>&1
+if not errorlevel 1 goto TAURI_RUST_OK
+if exist "%USERPROFILE%\.cargo\bin\cargo.exe" (
+    set "PATH=%USERPROFILE%\.cargo\bin;%PATH%"
+    goto TAURI_RUST_OK
+)
+
+echo  [SETUP] Installing Rust toolchain via rustup-init...
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$setup = Join-Path $env:TEMP 'rustup-init.exe'; [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri 'https://win.rustup.rs/x86_64' -OutFile $setup; Start-Process -FilePath $setup -ArgumentList '-y' -Wait; Remove-Item -Path $setup -Force -ErrorAction SilentlyContinue;"
+if exist "%USERPROFILE%\.cargo\bin\cargo.exe" set "PATH=%USERPROFILE%\.cargo\bin;%PATH%"
+
+:TAURI_RUST_OK
+
+:: 2. Check/Install MSVC C++ Build Tools
+where link >nul 2>&1
+if not errorlevel 1 goto TAURI_BUILD_TOOLS_OK
+
+echo  [SETUP] MSVC C++ Build Tools (link.exe) not detected.
+echo  [SETUP] Installing Microsoft Visual C++ Build Tools via Winget...
+where winget >nul 2>&1
+if not errorlevel 1 (
+    winget install --id Microsoft.VisualStudio.2022.BuildTools -e --accept-source-agreements --accept-package-agreements --override "--passive --wait --add Microsoft.VisualStudio.Workload.VCTools"
+)
+
+:TAURI_BUILD_TOOLS_OK
+echo:
+echo  ==============================================================
+echo   OBSCURA CLIPS IS LIVE! (Beta UI - Native Desktop App)
+echo   Starting Python Backend and Tauri Desktop App...
+echo   Press Ctrl+C in this terminal window to stop.
+echo  ==============================================================
+echo:
+set OBSCURA_OPEN_BROWSER=0
+start "Obscura Backend" python server.py
+cd obscura-ui
+call npm run tauri dev
+if errorlevel 1 (
+    echo:
+    echo  [WARNING] Native Tauri build failed. Falling back to Browser Localhost...
+    start "" "http://localhost:5173"
+    call npm run dev
+)
 
 :END_LAUNCH
 echo:

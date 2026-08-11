@@ -251,19 +251,37 @@ if [ "$UI_CHOICE" = "1" ]; then
     export OBSCURA_OPEN_BROWSER=1
     exec "$PYTHON" "$DIR/server.py"
 elif [ "$UI_CHOICE" = "2" ]; then
-    log "Starting backend server and Beta UI (Tauri + React)..."
-    log "Press Ctrl+C to stop."
-    echo
+    log "=============================================================="
+    log "                  BETA UI MODE SELECTION"
+    log "=============================================================="
+    echo "[Enter] Launch in Browser Localhost (Fast, light & zero extra dependencies)"
+    echo "[B/b]   Install Tauri C/C++ System Dependencies & Launch Native Desktop App"
+    read -p "Enter your choice [Browser]: " BETA_MODE
+    BETA_MODE=${BETA_MODE:-browser}
+
     export OBSCURA_OPEN_BROWSER=0
     "$PYTHON" "$DIR/server.py" &
     SERVER_PID=$!
     cd "$DIR/obscura-ui"
-    if command -v cargo >/dev/null 2>&1; then
-        log "Launching Tauri Desktop App..."
+
+    if [ "$BETA_MODE" = "B" ] || [ "$BETA_MODE" = "b" ]; then
+        if ! command -v cargo >/dev/null 2>&1 && [ -f "$HOME/.cargo/bin/cargo" ]; then
+            export PATH="$HOME/.cargo/bin:$PATH"
+        fi
+        if ! command -v cargo >/dev/null 2>&1; then
+            log "Installing Rust..."
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y || true
+            [ -f "$HOME/.cargo/bin/cargo" ] && export PATH="$HOME/.cargo/bin:$PATH"
+        fi
+        if ! command -v gcc >/dev/null 2>&1 || ! command -v pkg-config >/dev/null 2>&1; then
+            log "Installing C/C++ dependencies..."
+            if command -v apt-get >/dev/null 2>&1; then
+                sudo apt-get update && sudo apt-get install -y build-essential libssl-dev libgtk-3-dev libwebkit2gtk-4.1-dev || true
+            fi
+        fi
         npm run tauri dev
     else
-        warn "Rust (cargo) is not installed!"
-        log "Falling back to Browser UI (Vite Dev Server)..."
+        log "Launching Beta UI in Browser..."
         if command -v xdg-open >/dev/null 2>&1; then
             xdg-open "http://localhost:5173" &
         fi
