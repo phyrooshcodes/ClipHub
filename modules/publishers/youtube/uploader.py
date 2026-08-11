@@ -69,11 +69,11 @@ def initiate_upload(page: Page, video_path: str, channel_id: str | None = None) 
         except Exception:
             pass
 
-    target_url = "https://studio.youtube.com/"
+    target_url = "https://studio.youtube.com/?d=ud"
     page.goto(target_url, wait_until="domcontentloaded", timeout=60_000)
     
     try:
-        page.wait_for_selector("ytcp-app, ytcp-header, #create-icon", timeout=15_000)
+        page.wait_for_selector("ytcp-app, ytcp-header, #create-icon, #upload-icon, input[type='file']", timeout=20_000)
     except Exception:
         pass
 
@@ -81,19 +81,34 @@ def initiate_upload(page: Page, video_path: str, channel_id: str | None = None) 
     if "accounts.google.com" in page.url:
         raise RuntimeError("YouTube Studio requires authentication. Please log in to YouTube Studio first.")
 
-    logger.info("[YouTube] Uploading video...")
+    logger.info("[YouTube] Locating video upload interface...")
     
-    file_input = page.locator('input[type="file"]').first
-    if file_input.count() == 0:
-        opened = _click_any(page, CREATE_BUTTON_SELECTORS, timeout=10_000)
-        if opened:
-            page.wait_for_timeout(1_200)
-            _click_any(page, UPLOAD_ITEM_SELECTORS, timeout=8_000)
+    deadline = time.monotonic() + 35.0
+    file_input = None
+    
+    while time.monotonic() < deadline:
+        # Check if file input is already available (e.g. from ?d=ud or preloaded dialog)
+        for selector in FILE_INPUT_SELECTORS:
+            inp = page.locator(selector).first
+            if inp.count():
+                file_input = inp
+                break
+        if file_input:
+            break
+
+        # Attempt opening create / upload dialog
+        if _click_any(page, CREATE_BUTTON_SELECTORS, timeout=3_000):
+            page.wait_for_timeout(1_000)
+            _click_any(page, UPLOAD_ITEM_SELECTORS, timeout=5_000)
         else:
-            _click_any(page, DIRECT_UPLOAD_BUTTON_SELECTORS, timeout=10_000)
+            _click_any(page, DIRECT_UPLOAD_BUTTON_SELECTORS, timeout=3_000)
 
-        file_input = _find_file_input(page, timeout=25_000)
+        page.wait_for_timeout(1_000)
 
+    if not file_input:
+        file_input = _find_file_input(page, timeout=10_000)
+
+    logger.info("[YouTube] Uploading video file...")
     file_input.set_input_files(str(Path(video_path).resolve()), timeout=30_000)
 
     logger.info("[YouTube] Processing upload...")

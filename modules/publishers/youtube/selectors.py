@@ -8,17 +8,24 @@ from __future__ import annotations
 # ─── Navigation & Upload Initiation ──────────────────────────────────────────
 CREATE_BUTTON_SELECTORS = (
     "#create-icon",
+    'ytcp-icon-button[id="create-icon"]',
     'button[aria-label="Create"]',
     'ytcp-button:has-text("CREATE")',
-    'ytcp-icon-button[id="create-icon"]',
-    'button:has-text("Create")',
+    'ytcp-button:has-text("Create")',
+    '#create-button',
+    '[aria-label="Create"]',
+    'ytcp-button:has(#create-icon)',
 )
 
 UPLOAD_ITEM_SELECTORS = (
     'tp-yt-paper-item:has-text("Upload videos")',
     'paper-item:has-text("Upload videos")',
     'ytcp-text-menu-item:has-text("Upload videos")',
+    'ytcp-text-menu-item:has-text("Upload video")',
     '[aria-label="Upload videos"]',
+    '#text-item-0',
+    'tp-yt-paper-item:has-text("Upload")',
+    'paper-item:has-text("Upload")',
 )
 
 DIRECT_UPLOAD_BUTTON_SELECTORS = (
@@ -26,11 +33,17 @@ DIRECT_UPLOAD_BUTTON_SELECTORS = (
     'ytcp-icon-button[aria-label="Upload videos"]',
     'ytcp-button:has-text("Upload videos")',
     'ytcp-upload-video-button',
+    '#upload-button',
+    'ytcp-icon-button[id="upload-icon"]',
+    'button[aria-label="Upload videos"]',
+    '#upload-icon-button',
 )
 
 FILE_INPUT_SELECTORS = (
     'input[type="file"][name="Filedata"]',
     'ytcp-uploads-dialog input[type="file"]',
+    '#select-files-button input[type="file"]',
+    'input[type="file"][accept*="video"]',
     'input[type="file"]',
 )
 
