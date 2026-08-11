@@ -877,11 +877,13 @@ select option { background: #111; color: var(--text-main); }
     position: absolute;
     top: 60px;
     right: 12px;
-    background: var(--bg-card);
+    background: rgba(18, 18, 18, 0.95);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
     border: 1px solid var(--border-color);
     padding: 12px;
     border-radius: var(--radius-md);
-    box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+    box-shadow: 0 10px 40px rgba(0,0,0,0.8);
     z-index: 200;
     width: 220px;
     align-items: stretch;
@@ -907,28 +909,30 @@ select option { background: #111; color: var(--text-main); }
   .dropzone i { font-size: 2.2rem; }
   .dropzone-text { font-size: 0.95rem; }
   
-  .yt-input-group {
+  .url-input-wrapper {
     flex-direction: column;
     background: transparent;
     border: none;
     padding: 0;
-    gap: 10px;
-    box-shadow: none;
+    gap: 12px;
   }
-  .yt-input-group .input-icon-wrapper {
-    background: var(--bg-card);
+  .url-input-wrapper i.ri-youtube-line { 
+    display: none; 
+  }
+  .url-input-wrapper input {
+    background: var(--bg-dark);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-md);
-    padding: 0 14px;
-    height: 48px;
+    padding: 14px 16px;
     width: 100%;
+    height: 52px;
   }
-  .yt-input-group .btn-primary {
+  .url-input-wrapper .btn-primary {
     width: 100%;
-    height: 48px;
-    border-radius: var(--radius-md);
+    height: 52px;
     justify-content: center;
-    font-size: 0.9rem;
+    border-radius: var(--radius-md);
+    font-size: 0.95rem;
   }
   
   /* Processing Grid */
