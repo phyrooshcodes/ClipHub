@@ -79,6 +79,25 @@ exit /b 1
 
 :FFMPEG_OK
 
+:: ── 3. Check & Auto-Install Node.js ──────────────────────
+node -v >nul 2>&1
+if not errorlevel 1 goto NODE_OK
+
+echo  [SETUP] Node.js not detected in PATH. Attempting automatic installation via Winget...
+where winget >nul 2>&1
+if not errorlevel 1 (
+    winget install --id OpenJS.NodeJS -e --accept-source-agreements --accept-package-agreements
+)
+
+node -v >nul 2>&1
+if not errorlevel 1 goto NODE_OK
+
+echo  [ERROR] Node.js is required for the new UI. Please install it from https://nodejs.org and re-run.
+pause
+exit /b 1
+
+:NODE_OK
+
 :: ── 3. Create Virtual Environment ─────────────────────────
 if exist "venv\Scripts\activate.bat" goto VENV_OK
 
@@ -123,12 +142,51 @@ python -m pip install -r requirements.txt
 echo  [SETUP] Installing Playwright Chromium browser...
 python -m playwright install chromium
 
-:: ── 6. Build Rust Native Acceleration (Optional) ───────────
+:: ── 6. Check & Auto-Install Rust Toolchain ──────────────────
 where cargo >nul 2>&1
-if not errorlevel 1 goto CHECK_RUST_CORE
+if not errorlevel 1 goto RUST_OK
+if exist "%USERPROFILE%\.cargo\bin\cargo.exe" (
+    set "PATH=%USERPROFILE%\.cargo\bin;%PATH%"
+    goto RUST_OK
+)
+
+echo  [SETUP] Rust compiler not detected. Attempting automatic installation via rustup-init...
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$setup = Join-Path $env:TEMP 'rustup-init.exe'; [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Write-Host ' [SETUP] Downloading rustup-init...'; Invoke-WebRequest -Uri 'https://win.rustup.rs/x86_64' -OutFile $setup; Write-Host ' [SETUP] Installing Rust (default toolchain)...'; Start-Process -FilePath $setup -ArgumentList '-y' -Wait; Remove-Item -Path $setup -Force -ErrorAction SilentlyContinue;"
+
+if exist "%USERPROFILE%\.cargo\bin\cargo.exe" (
+    set "PATH=%USERPROFILE%\.cargo\bin;%PATH%"
+    echo  [SETUP] Rust installation complete!
+    goto RUST_OK
+)
+
+where winget >nul 2>&1
+if not errorlevel 1 (
+    echo  [SETUP] Attempting Winget installation for Rustup...
+    winget install --id Rustlang.Rustup -e --accept-source-agreements --accept-package-agreements
+)
+
+if exist "%USERPROFILE%\.cargo\bin\cargo.exe" (
+    set "PATH=%USERPROFILE%\.cargo\bin;%PATH%"
+    goto RUST_OK
+)
+
+:RUST_OK
+where cargo >nul 2>&1
+if not errorlevel 1 goto CHECK_BUILD_TOOLS
 
 echo  [INFO]  Rust compiler not found. Native acceleration skipped - Python fallback active.
 goto LAUNCH
+
+:CHECK_BUILD_TOOLS
+:: Check for C++ Linker (link.exe / MSVC Build Tools)
+where link >nul 2>&1
+if not errorlevel 1 goto CHECK_RUST_CORE
+
+echo  [SETUP] C++ Build Tools ^(link.exe^) not found. Attempting automatic installation via Winget...
+where winget >nul 2>&1
+if not errorlevel 1 (
+    winget install --id Microsoft.VisualStudio.2022.BuildTools -e --accept-source-agreements --accept-package-agreements --override "--passive --wait --add Microsoft.VisualStudio.Workload.VCTools"
+)
 
 :CHECK_RUST_CORE
 python -c "import clip_engine_core" >nul 2>&1
@@ -163,9 +221,7 @@ echo   Press Ctrl+C in this terminal window to stop the server.
 echo  ==============================================================
 echo:
 
-:: Auto-open browser via Windows start
-start "" "http://localhost:7842"
-
+set OBSCURA_OPEN_BROWSER=1
 python server.py
 goto END_LAUNCH
 
@@ -173,13 +229,30 @@ goto END_LAUNCH
 echo:
 echo  ==============================================================
 echo   OBSCURA CLIPS IS LIVE! (Beta UI)
-echo   Beta UI is currently in development.
-echo   Press Ctrl+C in this terminal window to stop the server.
+echo   Starting Python Backend and Beta UI...
+echo   Press Ctrl+C in this terminal window to stop.
 echo  ==============================================================
 echo:
-:: Future Tauri launch command will go here
-:: For now, we just start the server and wait for the beta client
-python server.py
+set OBSCURA_OPEN_BROWSER=0
+start "Obscura Backend" python server.py
+cd obscura-ui
+
+if exist "%USERPROFILE%\.cargo\bin\cargo.exe" (
+    set "PATH=%USERPROFILE%\.cargo\bin;%PATH%"
+)
+
+where cargo >nul 2>&1
+if not errorlevel 1 (
+    echo  [INFO] Attempting to launch native Tauri Desktop App...
+    call npm run tauri dev
+    if not errorlevel 1 goto END_LAUNCH
+    echo:
+    echo  [WARNING] Native Tauri build failed ^(C++ Build Tools / link.exe missing^).
+)
+
+echo  [INFO] Launching Beta UI in Browser ^(Vite Dev Server^)...
+start "" "http://localhost:5173"
+call npm run dev
 
 :END_LAUNCH
 echo:

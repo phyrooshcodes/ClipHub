@@ -59,6 +59,12 @@ if ! command -v python3 >/dev/null 2>&1; then
     exit 1
 fi
 
+if ! command -v node >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; then
+    err "Node.js and npm are required for the new UI."
+    err "Please install them (e.g., sudo apt install nodejs npm) and run this launcher again."
+    exit 1
+fi
+
 if [ ! -x "$DIR/venv/bin/python" ]; then
     log "Creating a Python virtual environment..."
 
@@ -191,7 +197,29 @@ if ! "$PYTHON" -c 'import fastapi, uvicorn, playwright' >/dev/null 2>&1; then
     }
 fi
 
-# ── Build Rust Native Acceleration ──
+# ── Check & Auto-Install Rust Toolchain ──
+if ! command -v cargo >/dev/null 2>&1 && [ ! -f "$HOME/.cargo/bin/cargo" ]; then
+    log "Rust compiler (cargo) not found. Attempting automatic installation via rustup..."
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y || {
+        warn "Rust installation via rustup failed."
+    }
+fi
+
+if [ -f "$HOME/.cargo/bin/cargo" ]; then
+    export PATH="$HOME/.cargo/bin:$PATH"
+fi
+
+if ! command -v gcc >/dev/null 2>&1 || ! command -v pkg-config >/dev/null 2>&1; then
+    log "C/C++ build tools missing. Attempting automatic installation via package manager..."
+    if command -v apt-get >/dev/null 2>&1; then
+        sudo apt-get update && sudo apt-get install -y build-essential libssl-dev libgtk-3-dev libwebkit2gtk-4.1-dev || true
+    elif command -v dnf >/dev/null 2>&1; then
+        sudo dnf groupinstall -y "Development Tools" && sudo dnf install -y webkit2gtk3-devel openssl-devel || true
+    elif command -v pacman >/dev/null 2>&1; then
+        sudo pacman -S --noconfirm base-devel webkit2gtk || true
+    fi
+fi
+
 if ! command -v cargo >/dev/null 2>&1; then
     warn "Rust compiler (cargo) is not installed. Native acceleration will be skipped."
 else
@@ -220,14 +248,28 @@ if [ "$UI_CHOICE" = "1" ]; then
     log "Starting Classic UI server at http://127.0.0.1:7842"
     log "Press Ctrl+C to stop."
     echo
+    export OBSCURA_OPEN_BROWSER=1
     exec "$PYTHON" "$DIR/server.py"
 elif [ "$UI_CHOICE" = "2" ]; then
-    log "Starting backend server for Beta UI (Tauri + React)..."
-    log "Beta UI client is currently in development."
+    log "Starting backend server and Beta UI (Tauri + React)..."
     log "Press Ctrl+C to stop."
     echo
-    # Future Tauri launch command will go here
-    exec "$PYTHON" "$DIR/server.py"
+    export OBSCURA_OPEN_BROWSER=0
+    "$PYTHON" "$DIR/server.py" &
+    SERVER_PID=$!
+    cd "$DIR/obscura-ui"
+    if command -v cargo >/dev/null 2>&1; then
+        log "Launching Tauri Desktop App..."
+        npm run tauri dev
+    else
+        warn "Rust (cargo) is not installed!"
+        log "Falling back to Browser UI (Vite Dev Server)..."
+        if command -v xdg-open >/dev/null 2>&1; then
+            xdg-open "http://localhost:5173" &
+        fi
+        npm run dev
+    fi
+    kill $SERVER_PID
 else
     err "Invalid choice."
     exit 1

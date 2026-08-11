@@ -70,8 +70,9 @@ def _open_browser():
     webbrowser.open("http://localhost:7842")
 
 if __name__ == "__main__":
-    threading.Thread(target=_open_browser, daemon=True).start()
-    print("\n  *  Obscura Clips - UI server starting")
-    print("  -> http://localhost:7842")
-    print("  -> Press Ctrl+C to stop\n")
+    import os
+    if os.environ.get("OBSCURA_OPEN_BROWSER", "1") == "1":
+        threading.Thread(target=_open_browser, daemon=True).start()
+    print("\n  *  Obscura Clips API server starting")
+    print("  -> http://127.0.0.1:7842\n")
     uvicorn.run(app, host="127.0.0.1", port=7842, log_level="warning")

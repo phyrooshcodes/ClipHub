@@ -12,6 +12,8 @@ credentials/
 !clips_metadata.json
 !package.json
 !tsconfig.json
+!tauri.conf.json
+!obscura-ui/**/*.json
 
 # Application State & Browser Profiles
 .state/
