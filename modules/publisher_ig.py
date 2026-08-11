@@ -480,16 +480,48 @@ def _caption_field(page: Page) -> object:
     """Return the current caption editor without depending on one DOM shape."""
     selectors = (
         'div[contenteditable="true"][aria-label*="caption" i]',
+        'div[contenteditable="true"][aria-label*="Write" i]',
+        'div[contenteditable="true"][role="textbox"]',
+        'div[contenteditable="true"]',
         'textarea[aria-label*="caption" i]',
         'textarea[placeholder*="caption" i]',
     )
     for selector in selectors:
         locator = page.locator(selector).first
-        if locator.count():
+        if locator.count() and locator.is_visible():
             return locator
-    # The final fallback remains limited to the visible creator dialog, so it
-    # cannot accidentally fill a search or message composer in the page.
     return page.locator('[role="dialog"] div[contenteditable="true"]').first
+
+
+def _fill_caption(page: Page, caption_box: object, caption_text: str) -> None:
+    """Fill caption in Instagram's contenteditable editor using keyboard events and JS fallback."""
+    caption_str = (caption_text or "").strip()[:2_200]
+    if not caption_str:
+        return
+
+    logger.info("[Instagram] Entering caption (%d chars)...", len(caption_str))
+    try:
+        caption_box.focus()
+        page.wait_for_timeout(300)
+        # Select all and delete any existing draft text
+        page.keyboard.press("Control+A")
+        page.keyboard.press("Backspace")
+        page.wait_for_timeout(200)
+
+        # Type text using keyboard events so Draft.js / Lexical React state registers it
+        page.keyboard.type(caption_str, delay=2)
+        page.wait_for_timeout(500)
+
+        # Check if text was registered into the DOM
+        box_text = caption_box.inner_text().strip()
+        if not box_text:
+            logger.info("[Instagram] Keyboard typing check empty; applying JS innerText injection...")
+            caption_box.evaluate(
+                "(el, text) => { el.innerText = text; el.dispatchEvent(new Event('input', { bubbles: true })); }",
+                caption_str
+            )
+    except Exception as e:
+        logger.warning("[Instagram] Caption filling fallback notice: %s", e)
 
 
 def _dismiss_video_post_reel_notice(page: Page) -> None:
@@ -583,7 +615,7 @@ def post_instagram_reel(video_path: str, caption: str, progress: Optional[Progre
                 _click_first_available(page, ("Next",), timeout=30_000)
                 caption_box = _caption_field(page)
             caption_box.wait_for(state="visible", timeout=30_000)
-            caption_box.fill(caption[:2_200])
+            _fill_caption(page, caption_box, caption)
             notify(75, "Ready to share")
             _click_first_available(page, ("Share",), timeout=30_000)
             share_clicked = True
