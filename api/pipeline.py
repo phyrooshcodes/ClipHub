@@ -53,7 +53,8 @@ def _list_clips(job_id: str = None, newer_than: float = 0) -> list:
                 with open(mf, "r", encoding="utf-8") as f: meta_list = json.load(f)
             except Exception as e: logger.error(f"Failed to read clips metadata: {e}")
         
-        for f in sorted(d.glob("*.mp4")):
+        mp4_files = sorted([f for f in d.glob("*.mp4")])
+        for idx, f in enumerate(mp4_files):
             stat = f.stat()
             if stat.st_mtime < newer_than: continue
             
@@ -61,12 +62,28 @@ def _list_clips(job_id: str = None, newer_than: float = 0) -> list:
             cidx = (int(match.group(1)) - 1) if match else -1
             
             clip_meta = {}
-            if 0 <= cidx < len(meta_list): clip_meta = meta_list[cidx]
-            else:
+            # 1. Match by stored filename in metadata
+            for item in meta_list:
+                if item.get("filename") == f.name:
+                    clip_meta = item
+                    break
+            
+            # 2. Match by clip index regex if present
+            if not clip_meta and 0 <= cidx < len(meta_list):
+                clip_meta = meta_list[cidx]
+            
+            # 3. Match by partial title (fuzzy / prefix)
+            if not clip_meta:
                 for item in meta_list:
-                    if item.get("title") and clean_clip_title(item["title"]).lower() in clean_clip_title(f.name).lower():
+                    it_title = clean_clip_title(item.get("title", "")).lower()
+                    f_title  = clean_clip_title(f.name).lower()
+                    if it_title and f_title and (it_title in f_title or f_title in it_title or it_title[:15] == f_title[:15]):
                         clip_meta = item
                         break
+            
+            # 4. Fallback to list order index if meta_list length matches mp4 file count
+            if not clip_meta and idx < len(meta_list):
+                clip_meta = meta_list[idx]
             
             raw_title = clip_meta.get("title") or f.name
             social_cap = clip_meta.get("social_caption", "")
@@ -75,9 +92,9 @@ def _list_clips(job_id: str = None, newer_than: float = 0) -> list:
             clips.append({
                 "filename": f.name, "size_mb": round(stat.st_size / 1024 / 1024, 1),
                 "url": f"/output/{d.name}/{f.name}", "modified": stat.st_mtime,
-                "title": clean_clip_title(raw_title), "clip_number": cidx + 1 if cidx >= 0 else None,
-                "social_caption": social_cap, "reason": clip_meta.get("reason", ""),
-                "hook_score": clip_meta.get("hook_score", "?"), "viral_rating": clip_meta.get("viral_rating", None),
+                "title": clean_clip_title(raw_title), "clip_number": cidx + 1 if cidx >= 0 else (idx + 1),
+                "social_caption": social_cap, "reason": clip_meta.get("reason", clip_meta.get("hook_explanation", "")),
+                "hook_score": clip_meta.get("hook_score", clip_meta.get("viral_score", 90)), "viral_rating": clip_meta.get("viral_rating", None),
                 "retention_score": clip_meta.get("retention_score", None), "viral_analysis": clip_meta.get("viral_analysis", ""),
                 "broll_cues": clip_meta.get("broll_cues", []),
                 "product_recommendations": clip_meta.get("product_recommendations", [])

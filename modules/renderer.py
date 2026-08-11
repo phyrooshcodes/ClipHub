@@ -54,10 +54,13 @@ def render_clip(
     use_dynamic = len(dynamic_crop_x) > 0
 
     # Proper path escaping for ASS filter (handles spaces, colons, quotes)
-    import re
-    # Convert absolute path to relative path to avoid Windows drive letter colon issues
+    import re, platform
+    # Convert to forward slashes and escape special chars for FFmpeg filter strings
     rel_sub = os.path.relpath(subtitle_path).replace("\\", "/")
-    safe_sub_path = re.sub(r"([:\\'])", r"\\\1", rel_sub)
+    # On Windows, escape colon in drive letter (e.g. C:/... → C\:/...)
+    if platform.system() == "Windows":
+        rel_sub = re.sub(r'^([A-Za-z]):', r'\1\\:', rel_sub)
+    safe_sub_path = rel_sub.replace("'", "'\\''")
 
     command = [
         "ffmpeg", "-y",
@@ -75,17 +78,23 @@ def render_clip(
             for i, cx in enumerate(dynamic_crop_x):
                 t_start = i / fps
                 t_end = (i + 1) / fps
-                # To crop dynamically using overlay: we shift the video left by cx
+                # To crop dynamically using overlay: shift video left by cx on 9:16 canvas
                 f.write(f"{t_start:.3f}-{t_end:.3f} [enter] overlay x {-cx};\n")
         
-        # Add black canvas background
+        # Add black canvas matching 9:16 crop aspect box
         command += ["-f", "lavfi", "-i", f"color=c=black:s={crop_w}x{crop_h}:r={fps}:d={duration_s:.3f}"]
         
-        # Filter complex: overlay video on black canvas, scale to 1080x1080, and add subtitles
+        # Build a Windows-safe sendcmd path for FFmpeg
+        sendcmd_ffmpeg = sendcmd_path.replace("\\", "/")
+        import platform as _plat
+        if _plat.system() == "Windows":
+            sendcmd_ffmpeg = re.sub(r'^([A-Za-z]):', r'\1\\:', sendcmd_ffmpeg)
+        
+        # Filter complex: overlay video on 9:16 canvas, scale to 1080x1920 HD vertical, and add subtitles
         filter_complex = (
-            f"[1:v]sendcmd=f='{sendcmd_path}'[v_cmd]; "
+            f"[1:v]sendcmd=f='{sendcmd_ffmpeg}'[v_cmd]; "
             f"[v_cmd][0:v]overlay[over_out]; "
-            f"[over_out]scale=1080:1080,"
+            f"[over_out]scale=1080:1920,"
             f"ass='{safe_sub_path}'[v_final]"
         )
     else:
@@ -94,7 +103,7 @@ def render_clip(
         crop_y = 0
         vf_filter = (
             f"crop={crop_w}:{crop_h}:{crop_x}:{crop_y},"
-            f"scale=1080:1080,"
+            f"scale=1080:1920,"
             f"ass='{safe_sub_path}'"
         )
 
@@ -131,14 +140,14 @@ def render_clip(
     use_nvenc = check_nvenc_available() if encoder == "auto" else (encoder == "h264_nvenc")
     
     if use_nvenc:
-        enc_args = ["-c:v", "h264_nvenc", "-preset", NVENC_PRESET, "-cq", NVENC_CQ]
+        enc_args = ["-c:v", "h264_nvenc", "-preset", NVENC_PRESET, "-cq", NVENC_CQ, "-r", "60"]
     else:
-        enc_args = ["-c:v", "libx264", "-preset", "fast", "-crf", "23"]
+        enc_args = ["-c:v", "libx264", "-preset", "fast", "-crf", "23", "-r", "60"]
 
     if vf_filter:
         command += ["-vf", vf_filter]
         
-    command += [
+    command += enc_args + [
         "-c:a", "aac",
         "-b:a", AUDIO_BITRATE,
         "-pix_fmt", "yuv420p",

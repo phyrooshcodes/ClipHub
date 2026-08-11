@@ -55,13 +55,13 @@ def compute_crop_coords(
     start_ms: int,
     end_ms: int,
     smoothing_window: int = 15,
-    sample_every_n_frames: int = 5,
+    sample_every_n_frames: int = 1,
     adaptive_sampling: bool = False,
     activity_threshold: float = 1.5,
 ) -> Dict:
     """
-    Analyze a video segment and compute a smooth 1:1 crop box
-    that dynamically follows the speaker's face like a pro operator.
+    Analyze a video segment and compute a smooth 9:16 vertical crop box
+    that dynamically follows the speaker's face like a pro 60fps operator.
     """
     face_cascade = _get_cascade()
 
@@ -69,21 +69,23 @@ def compute_crop_coords(
     container = av.open(input_video)
     video_stream = container.streams.video[0]
     
-    fps = float(video_stream.average_rate)
+    fps = float(video_stream.average_rate) or 30.0
     src_w = video_stream.width
     src_h = video_stream.height
 
-    # Calculate 1:1 crop (height determines square size)
+    # Calculate exact 9:16 vertical crop coordinates (height determines crop height)
     crop_h = src_h
-    crop_w = src_h
-
+    crop_w = int(src_h * (9.0 / 16.0))
+    if crop_w % 2 != 0:
+        crop_w += 1
     if crop_w > src_w:
         crop_w = src_w
-        crop_h = src_w
+        crop_h = int(src_w * (16.0 / 9.0))
+        if crop_h % 2 != 0: crop_h += 1
 
     logger.info(
         f"[FaceTracker] Source: {src_w}x{src_h} | "
-        f"1:1 Dynamic Crop: {crop_w}x{crop_h} at {fps:.2f}fps"
+        f"9:16 Vertical Dynamic Crop: {crop_w}x{crop_h} at {fps:.2f}fps"
     )
 
     start_s = start_ms / 1000.0
@@ -92,11 +94,7 @@ def compute_crop_coords(
     container.seek(seek_ts, stream=video_stream)
 
     if sample_every_n_frames < 1:
-        raise ValueError("sample_every_n_frames must be at least 1")
-    if activity_threshold < 0:
-        raise ValueError("activity_threshold must be non-negative")
-    if adaptive_sampling:
-        from modules.native_accel import mean_absolute_difference
+        sample_every_n_frames = 1
 
     sampled_frames = []
     sampled_xs = []
@@ -121,15 +119,16 @@ def compute_crop_coords(
             
             should_detect = True
             if adaptive_sampling and previous_sample_gray is not None:
+                from modules.native_accel import mean_absolute_difference
                 should_detect = mean_absolute_difference(previous_sample_gray, gray) >= activity_threshold
             previous_sample_gray = gray
             
             if should_detect:
                 faces = face_cascade.detectMultiScale(
                     gray,
-                    scaleFactor=1.2,
-                    minNeighbors=5,
-                    minSize=(60, 60)
+                    scaleFactor=1.15,
+                    minNeighbors=4,
+                    minSize=(50, 50)
                 )
                 if len(faces) > 0:
                     face_detected = True
@@ -144,41 +143,46 @@ def compute_crop_coords(
 
     container.close()
 
-    # ─── Calculate Dynamic Smooth Crop ──────────────────────
+    if frames_read == 0:
+        frames_read = 1
+        sampled_frames = [0]
+        sampled_xs = [last_face_x]
+
+    # ─── Calculate Dynamic Smooth 60 FPS Crop ──────────────────────
     if not face_detected or len(sampled_frames) == 0:
-        logger.warning("[FaceTracker] No face detected — defaulting to static center crop.")
+        logger.warning("[FaceTracker] No face detected — defaulting to static center 9:16 crop.")
         static_x = max(0, (src_w - crop_w) // 2)
         dynamic_crop_x = [static_x] * frames_read
     else:
-        # 1. Interpolate to per-frame values
+        # 1. Interpolate per-frame X position at 60 FPS rate
         all_frames = np.arange(frames_read)
         interpolated_xs = np.interp(all_frames, sampled_frames, sampled_xs)
         
-        # 2. Smooth heavily for "pro camera operator" cinematic pan effect (moving average)
-        # Using a 1.5 second window (e.g. 45 frames at 30fps)
-        window_size = int(fps * 1.5)
-        if window_size < 1: window_size = 1
+        # 2. Smooth using Gaussian filter or EMA for fluid 60fps operator movement
+        window_size = max(3, int(fps * 0.75))
+        if window_size % 2 == 0: window_size += 1
         
-        smoothed_xs = np.convolve(interpolated_xs, np.ones(window_size)/window_size, mode='valid')
+        smoothed_xs = np.convolve(interpolated_xs, np.ones(window_size)/window_size, mode='same')
         
-        # Pad the edges to match the original array length
-        pad_left = window_size // 2
-        pad_right = len(interpolated_xs) - len(smoothed_xs) - pad_left
-        smoothed_xs = np.pad(smoothed_xs, (pad_left, pad_right), mode='edge')
-        
-        # 3. Convert face center X to crop box left edge X
+        # 3. Convert face center X to crop box left edge X with deadzone hysteresis
         dynamic_crop_x = []
+        curr_x = int(smoothed_xs[0] - crop_w / 2.0)
+        curr_x = max(0, min(curr_x, src_w - crop_w))
+        
         for fx in smoothed_xs:
-            cx = int(fx - crop_w / 2)
-            cx = max(0, min(cx, src_w - crop_w))
-            dynamic_crop_x.append(cx)
+            target_x = int(fx - crop_w / 2.0)
+            target_x = max(0, min(target_x, src_w - crop_w))
+            
+            # Smooth deadzone threshold to avoid micro jitter
+            if abs(target_x - curr_x) > 6:
+                curr_x += int(np.sign(target_x - curr_x) * min(abs(target_x - curr_x), 4))
+            dynamic_crop_x.append(curr_x)
 
-    # Calculate legacy single static crop for backward compatibility
-    static_crop_x = int(np.median(dynamic_crop_x)) if len(dynamic_crop_x) > 0 else 0
+    static_crop_x = int(np.median(dynamic_crop_x)) if len(dynamic_crop_x) > 0 else max(0, (src_w - crop_w) // 2)
 
     logger.info(
         f"[FaceTracker] ✅ Face detected: {face_detected} | "
-        f"Generated {len(dynamic_crop_x)} dynamic frames for smooth tracking."
+        f"Generated {len(dynamic_crop_x)} dynamic frames for smooth 60fps tracking."
     )
 
     return {

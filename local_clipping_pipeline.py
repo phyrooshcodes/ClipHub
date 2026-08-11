@@ -31,6 +31,17 @@ from pathlib import Path
 from dotenv import load_dotenv
 load_dotenv(Path(__file__).parent / ".env")
 
+# ── Inject local bin/ into PATH so FFmpeg is found even as a subprocess ──
+_BASE = Path(__file__).parent
+for _bin_candidate in [
+    _BASE / "bin",
+    Path("C:/ffmpeg/bin"),
+    Path(os.environ.get("LOCALAPPDATA", "")) / "Microsoft" / "WinGet" / "Packages",
+]:
+    if _bin_candidate.exists() and str(_bin_candidate) not in os.environ.get("PATH", ""):
+        os.environ["PATH"] = str(_bin_candidate) + os.pathsep + os.environ.get("PATH", "")
+
+
 
 # ─── Setup Logging ───────────────────────────────────────────
 logging.basicConfig(
@@ -385,6 +396,7 @@ def run_pipeline(args: argparse.Namespace) -> None:
         safe_title = "".join(c if c.isalnum() or c in " _-" else "" for c in title)
         safe_title = safe_title.strip().replace(" ", "_")[:40]
         clip_filename = f"{safe_title}.mp4"
+        clip["filename"] = clip_filename
         output_path   = os.path.join(output_dir, clip_filename)
         sub_path      = os.path.join(temp_dir, f"subtitles_{clip_num:02d}.ass")
         clip_words = [
@@ -481,6 +493,15 @@ def run_pipeline(args: argparse.Namespace) -> None:
                 logger.info("   [B-Roll] No B-Roll cues detected by LLM for this clip.")
         elif args.broll and not args.pexels_key:
             logger.warning("   [B-Roll] ⚠️ --broll enabled but no --pexels-key provided. Skipping B-Roll.")
+
+    # Save final updated clips metadata with filenames
+    metadata_file = os.path.join(output_dir, "clips_metadata.json")
+    try:
+        with open(metadata_file, "w", encoding="utf-8") as f:
+            json.dump(clips, f, indent=2, ensure_ascii=False)
+        logger.info(f"   Saved updated clips metadata -> {metadata_file}")
+    except Exception as e:
+        logger.warning(f"   Failed to save clips metadata: {e}")
 
         # Keep publishing independent from generation: enqueue only. The
         # persistent queue owns browser work on its own worker thread.
