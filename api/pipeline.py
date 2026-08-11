@@ -36,7 +36,7 @@ def clean_clip_title(raw_title: str) -> str:
     if not raw_title: return "Untitled Clip"
     title = str(raw_title).strip()
     if title.lower().endswith(".mp4"): title = title[:-4]
-    title = re.sub(r'^(?:clip[_\s\-]*\d+[_\s\-]*)+', '', title, flags=re.I).strip()
+    title = re.sub(r'^(?:clip[_\s\-]*\d+[_\s\-]*|\d+[\.\:\-]\s*)+', '', title, flags=re.I).strip()
     if "_" in title and " " not in title: title = title.replace("_", " ")
     return title.strip() or "Untitled Clip"
 
@@ -87,7 +87,7 @@ def _list_clips(job_id: str = None, newer_than: float = 0) -> list:
             
             raw_title = clip_meta.get("title") or f.name
             social_cap = clip_meta.get("social_caption", "")
-            if social_cap: social_cap = re.sub(r'^(?:clip[_\s\-]*\d+[_\s\-]*)+', '', social_cap, flags=re.I).strip()
+            if social_cap: social_cap = re.sub(r'^(?:clip[_\s\-]*\d+[_\s\-]*|\d+[\.\:\-]\s*)+', '', social_cap, flags=re.I).strip()
             
             clips.append({
                 "filename": f.name, "size_mb": round(stat.st_size / 1024 / 1024, 1),

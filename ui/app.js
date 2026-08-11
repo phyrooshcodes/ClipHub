@@ -1146,8 +1146,8 @@ document.addEventListener("DOMContentLoaded", () => {
     clips.forEach((clip, i) => {
       const score = typeof clip.hook_score !== 'undefined' ? clip.hook_score : '?';
       const rawTitle = clip.title || ('Viral Clip ' + (i+1));
-      const cleanTitle = rawTitle.replace(/^(?:clip[_\s\-]*\d+[_\s\-]*)+/i, '').trim() || rawTitle;
-      const cleanCaption = (clip.social_caption || '').replace(/^(?:clip[_\s\-]*\d+[_\s\-]*)+/i, '').trim();
+      const cleanTitle = rawTitle.replace(/^(?:clip[_\s\-]*\d+[_\s\-]*|\d+[\.\:\-]\s*)+/i, '').trim() || rawTitle;
+      const cleanCaption = (clip.social_caption || '').replace(/^(?:clip[_\s\-]*\d+[_\s\-]*|\d+[\.\:\-]\s*)+/i, '').trim();
       
       const numBadgeHtml = clip.clip_number 
         ? `<span class="clip-num-badge" style="background:rgba(99, 102, 241, 0.15); color:#818cf8; border:1px solid rgba(99, 102, 241, 0.3); padding:2px 8px; border-radius:12px; font-weight:700; font-size:0.75rem; letter-spacing:0.5px;">Clip #${clip.clip_number}</span>`
@@ -1183,7 +1183,7 @@ document.addEventListener("DOMContentLoaded", () => {
               ${numBadgeHtml}
               <div class="clip-score" style="margin-top:0;"><i class="ri-fire-fill" style="color:#f59e0b;"></i> Score: ${score}/100</div>
             </div>
-            <h3 class="clip-title" style="margin-bottom:8px; font-size:1.05rem; font-weight:700;">${i+1}. ${escapeHtml(cleanTitle)}</h3>
+            <h3 class="clip-title" style="margin-bottom:8px; font-size:1.05rem; font-weight:700;">${escapeHtml(cleanTitle)}</h3>
             <div style="position:relative;">
                <p class="clip-caption" style="font-size:0.85rem; color:#8b8b99; margin-bottom:15px; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden;">${escapeHtml(cleanCaption)}</p>
                <button class="btn-outline btn-sm btn-copy" data-text="${encodeURIComponent(cleanTitle + '\n\n' + cleanCaption)}" style="position:absolute; right:0; top:-10px; padding:2px 6px; font-size:0.7rem;"><i class="ri-clipboard-line"></i> Copy</button>
