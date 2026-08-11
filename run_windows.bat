@@ -210,6 +210,9 @@ echo   Press Ctrl+C in this terminal window to stop the server.
 echo  ==============================================================
 echo:
 
+:: Free port 7842 if a previous server instance is still running
+for /f "tokens=5" %%a in ('netstat -aon 2^>nul ^| findstr :7842 ^| findstr LISTENING') do taskkill /f /pid %%a >nul 2>&1
+
 set OBSCURA_OPEN_BROWSER=1
 python server.py
 goto END_LAUNCH
@@ -235,6 +238,10 @@ echo   Opening Web Browser...
 echo   Press Ctrl+C in this terminal window to stop.
 echo  ==============================================================
 echo:
+
+:: Free port 7842 if a previous server instance is still running
+for /f "tokens=5" %%a in ('netstat -aon 2^>nul ^| findstr :7842 ^| findstr LISTENING') do taskkill /f /pid %%a >nul 2>&1
+
 set OBSCURA_OPEN_BROWSER=0
 start "Obscura Backend" python server.py
 cd obscura-ui
@@ -248,6 +255,9 @@ echo  ==============================================================
 echo   CHECKING NATIVE TAURI DEPENDENCIES...
 echo  ==============================================================
 echo:
+
+:: Free port 7842 if a previous server instance is still running
+for /f "tokens=5" %%a in ('netstat -aon 2^>nul ^| findstr :7842 ^| findstr LISTENING') do taskkill /f /pid %%a >nul 2>&1
 
 :: 1. Check/Install Rust
 where cargo >nul 2>&1

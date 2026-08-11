@@ -248,6 +248,7 @@ if [ "$UI_CHOICE" = "1" ]; then
     log "Starting Classic UI server at http://127.0.0.1:7842"
     log "Press Ctrl+C to stop."
     echo
+    if command -v fuser >/dev/null 2>&1; then fuser -k 7842/tcp >/dev/null 2>&1 || true; fi
     export OBSCURA_OPEN_BROWSER=1
     exec "$PYTHON" "$DIR/server.py"
 elif [ "$UI_CHOICE" = "2" ]; then
@@ -259,6 +260,7 @@ elif [ "$UI_CHOICE" = "2" ]; then
     read -p "Enter your choice [Browser]: " BETA_MODE
     BETA_MODE=${BETA_MODE:-browser}
 
+    if command -v fuser >/dev/null 2>&1; then fuser -k 7842/tcp >/dev/null 2>&1 || true; fi
     export OBSCURA_OPEN_BROWSER=0
     "$PYTHON" "$DIR/server.py" &
     SERVER_PID=$!
