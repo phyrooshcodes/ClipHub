@@ -406,28 +406,37 @@ def connect_youtube_playwright() -> bool:
 
             deadline = time.monotonic() + 300.0
             logged_in = False
+            login_success_count = 0
             while time.monotonic() < deadline and not page.is_closed():
                 try:
                     url = page.url.lower()
                     if "accounts.google.com" not in url and "channel_switcher" not in url:
-                        if page.locator("#create-icon, ytcp-header #avatar-btn").count() > 0:
+                        if page.locator("#create-icon, ytcp-header #avatar-btn, ytcp-header").count() > 0:
                             logged_in = True
-                            extract_channel_info_from_page(page)
+                            name, handle, cid = extract_channel_info_from_page(page)
+                            login_success_count += 1
                             try:
-                                page.evaluate("""() => {
-                                    if (!document.getElementById('obscura-login-banner')) {
+                                page.evaluate(f"""() => {{
+                                    if (!document.getElementById('obscura-login-banner')) {{
                                         const div = document.createElement('div');
                                         div.id = 'obscura-login-banner';
-                                        div.innerHTML = '<h2>✅ Logged in successfully! Please close this window manually!</h2>';
+                                        div.innerHTML = '<h2>✅ Connected to {name or "YouTube Channel"}! Saving session...</h2>';
                                         div.style.position = 'fixed'; div.style.top = '10px'; div.style.left = '50%';
                                         div.style.transform = 'translateX(-50%)'; div.style.background = '#4CAF50';
-                                        div.style.color = 'white'; div.style.padding = '15px'; div.style.zIndex = '999999';
-                                        div.style.borderRadius = '8px'; div.style.boxShadow = '0 4px 6px rgba(0,0,0,0.1)';
+                                        div.style.color = 'white'; div.style.padding = '15px 25px'; div.style.zIndex = '999999';
+                                        div.style.borderRadius = '8px'; div.style.boxShadow = '0 4px 12px rgba(0,0,0,0.3)';
+                                        div.style.fontFamily = 'sans-serif';
                                         document.body.appendChild(div);
-                                    }
-                                }""")
+                                    }}
+                                }}""")
                             except Exception:
                                 pass
+                            
+                            # If we confirmed channel details or spent 2 seconds after login, exit loop cleanly
+                            if login_success_count >= 2:
+                                logger.info("[YouTube] Successfully saved session for channel: %s (%s)", name, cid)
+                                page.wait_for_timeout(1500)
+                                break
                 except Exception:
                     pass
                 try:
