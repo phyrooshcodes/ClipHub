@@ -107,6 +107,23 @@ document.addEventListener("DOMContentLoaded", () => {
   gsap.fromTo(".divider", { opacity: 0 }, { opacity: 1, duration: 0.5, delay: 0.3, ease: "power2.out" });
   gsap.fromTo(".url-input-wrapper", { y: 15, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, delay: 0.4, ease: "power2.out" });
 
+  // Auto-reconnect to active job
+  const savedJobId = localStorage.getItem('currentJobId');
+  if (savedJobId) {
+    const ytUrl = localStorage.getItem('ytUrl');
+    sectionUpload.classList.add('hidden');
+    sectionProcessing.classList.remove('hidden');
+    currentJobId = savedJobId;
+    if (ytUrl) {
+      document.getElementById('step-download').classList.remove('hidden');
+      updateProgress('step-download', "Reconnecting to YouTube Download...", 0);
+      connectYoutubeWS(savedJobId, ytUrl);
+    } else {
+      updateProgress(null, "Reconnecting to Processing Job...", 0);
+      connectPipelineWS(savedJobId);
+    }
+  }
+
   // Handle Upload Events
   dropzone.addEventListener('click', () => fileInput.click());
   dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('dragover'); });

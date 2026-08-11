@@ -93,13 +93,16 @@ async def _run_ytdl(job: DownloadJob, python_exe: str, save_path: str):
                         "type": "ytdl_progress", "percent": float(m.group(1)),
                         "size": m.group(2), "speed": m.group(3), "eta": m.group(4),
                     })
+                    print(f"[YouTube Download] {text}", flush=True)
                     continue
                 job.events.append({"type": "ytdl_log", "raw": text})
+                print(f"[YouTube Download] {text}", flush=True)
 
             await process.wait()
             return process.returncode == 0 and Path(save_path).exists()
         except Exception as e:
             job.events.append({"type": "ytdl_log", "raw": f"Execution error: {e}"})
+            print(f"[YouTube Download Error] {e}", flush=True)
             return False
 
     try:
@@ -125,7 +128,7 @@ async def _run_ytdl(job: DownloadJob, python_exe: str, save_path: str):
         job.done = True
 
 @router.websocket("/ws-ytdl/{job_id}")
-async def download_url_ws(websocket: WebSocket, job_id: str, url: str = Query(...)):
+async def download_url_ws(websocket: WebSocket, job_id: str, url: str = ""):
     await websocket.accept()
     
     python_exe = str(BASE_DIR / "venv" / "Scripts" / "python.exe")
