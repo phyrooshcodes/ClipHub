@@ -293,18 +293,18 @@ async def get_history():
             if d.is_dir():
                 has_meta = (d / "metadata.json").exists()
                 has_clips_meta = (d / "clips_metadata.json").exists()
-                if has_meta or has_clips_meta:
-                    try:
-                        if has_meta:
+                clips = _list_clips(job_id=d.name)
+                if clips:
+                    meta = {"job_id": d.name, "created": d.stat().st_mtime}
+                    if has_meta:
+                        try:
                             with open(d / "metadata.json", "r", encoding="utf-8") as f:
-                                meta = json.load(f)
-                        else:
-                            meta = {"job_id": d.name, "filename": "CLI Job", "created": d.stat().st_mtime}
-                        clips = list(d.glob("*.mp4"))
-                        if clips:
-                            meta["clip_count"] = len(clips)
-                            history.append(meta)
-                    except Exception as e: logger.error(f"Error reading metadata for {d.name}: {e}")
+                                meta.update(json.load(f))
+                        except Exception: pass
+                    meta["filename"] = meta.get("filename") or d.name
+                    meta["clip_count"] = len(clips)
+                    meta["clips"] = clips
+                    history.append(meta)
     return {"history": sorted(history, key=lambda x: x.get("created", 0), reverse=True)}
 
 @router.get("/history/{job_id}/clips")

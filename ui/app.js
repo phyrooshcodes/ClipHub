@@ -1354,75 +1354,108 @@ document.addEventListener("DOMContentLoaded", () => {
 
   async function renderHistory() {
     const container = document.getElementById('history-container');
-    container.innerHTML = '<p>Loading history...</p>';
+    container.innerHTML = '<p class="text-muted">Loading history...</p>';
     
     try {
-      const res = await fetch('/clips');
+      const res = await fetch('/history');
       const data = await res.json();
-      const pastClips = data.clips || [];
+      const historyJobs = data.history || [];
       
-      if(pastClips.length === 0) {
-        container.innerHTML = '<p class="text-muted">No history found.</p>';
+      if(historyJobs.length === 0) {
+        container.innerHTML = '<p class="text-muted">No processing history found.</p>';
         return;
       }
       
       let html = '';
       
-      pastClips.forEach((clip, i) => {
-        const score = typeof clip.hook_score !== 'undefined' ? clip.hook_score : '?';
-        const rawTitle = clip.title || 'Past Clip';
-        const cleanTitle = rawTitle.replace(/^(?:clip[_\s\-]*\d+[_\s\-]*)+/i, '').trim() || rawTitle;
-        const cleanCaption = (clip.social_caption || '').replace(/^(?:clip[_\s\-]*\d+[_\s\-]*)+/i, '').trim();
+      historyJobs.forEach((job) => {
+        const clips = job.clips || [];
+        if (clips.length === 0) return;
+        
+        const createdDate = job.created ? new Date(job.created * 1000).toLocaleString() : 'Recent';
+        const videoName = job.filename || job.job_id;
+        
+        let clipsHtml = '';
+        clips.forEach((clip, i) => {
+          const score = typeof clip.hook_score !== 'undefined' ? clip.hook_score : '?';
+          const rawTitle = clip.title || ('Viral Clip ' + (i+1));
+          const cleanTitle = rawTitle.replace(/^(?:clip[_\s\-]*\d+[_\s\-]*|\d+[\.\:\-]\s*)+/i, '').trim() || rawTitle;
+          const cleanCaption = (clip.social_caption || '').replace(/^(?:clip[_\s\-]*\d+[_\s\-]*|\d+[\.\:\-]\s*)+/i, '').trim();
 
-        const numBadgeHtml = clip.clip_number 
-          ? `<span class="clip-num-badge" style="background:rgba(99, 102, 241, 0.15); color:#818cf8; border:1px solid rgba(99, 102, 241, 0.3); padding:2px 8px; border-radius:12px; font-weight:700; font-size:0.75rem; letter-spacing:0.5px;">Clip #${clip.clip_number}</span>`
-          : `<span class="clip-num-badge" style="background:rgba(99, 102, 241, 0.15); color:#818cf8; border:1px solid rgba(99, 102, 241, 0.3); padding:2px 8px; border-radius:12px; font-weight:700; font-size:0.75rem; letter-spacing:0.5px;">Clip #${i + 1}</span>`;
+          const numBadgeHtml = clip.clip_number 
+            ? `<span class="clip-num-badge" style="background:rgba(99, 102, 241, 0.15); color:#818cf8; border:1px solid rgba(99, 102, 241, 0.3); padding:2px 8px; border-radius:12px; font-weight:700; font-size:0.75rem; letter-spacing:0.5px;">Clip #${clip.clip_number}</span>`
+            : `<span class="clip-num-badge" style="background:rgba(99, 102, 241, 0.15); color:#818cf8; border:1px solid rgba(99, 102, 241, 0.3); padding:2px 8px; border-radius:12px; font-weight:700; font-size:0.75rem; letter-spacing:0.5px;">Clip #${i + 1}</span>`;
 
-        let productsHtml = '';
-        if (clip.product_recommendations && clip.product_recommendations.length > 0) {
-          productsHtml = `<div class="product-suggestions" style="margin-bottom: 15px; background: rgba(255, 153, 0, 0.1); border-left: 3px solid #ff9900; padding: 10px; border-radius: 6px;">
-            <div style="font-size: 0.75rem; font-weight: 700; color: #ff9900; text-transform: uppercase; margin-bottom: 6px; letter-spacing: 0.5px;"><i class="ri-amazon-fill"></i> Amazon Suggestion</div>
-          `;
-          clip.product_recommendations.forEach(prod => {
-            const amzSearch = `https://www.amazon.com/s?k=${encodeURIComponent(prod.search_query)}`;
-            productsHtml += `
-              <div style="margin-bottom: 8px; font-size: 0.85rem; color: #d1d5db;">
-                <strong style="color: #f3f4f6;">${escapeHtml(prod.product_name)}</strong> <span style="font-size: 0.75rem; color: #9ca3af;">(${escapeHtml(prod.category)})</span>
-                <p style="margin: 4px 0; font-size: 0.8rem; line-height: 1.3; color: #9ca3af;">${escapeHtml(prod.reasoning)}</p>
-                <a href="${amzSearch}" target="_blank" style="color: #ff9900; text-decoration: none; font-size: 0.75rem; font-weight: 600;">Search on Amazon &rarr;</a>
-              </div>
+          let productsHtml = '';
+          if (clip.product_recommendations && clip.product_recommendations.length > 0) {
+            productsHtml = `<div class="product-suggestions" style="margin-bottom: 15px; background: rgba(255, 153, 0, 0.1); border-left: 3px solid #ff9900; padding: 10px; border-radius: 6px;">
+              <div style="font-size: 0.75rem; font-weight: 700; color: #ff9900; text-transform: uppercase; margin-bottom: 6px; letter-spacing: 0.5px;"><i class="ri-amazon-fill"></i> Amazon Suggestion</div>
             `;
-          });
-          productsHtml += `</div>`;
-        }
+            const amzTag = (localStorage.getItem('amazonStoreTag') || '').trim();
+            clip.product_recommendations.forEach(prod => {
+              let amzSearch = `https://www.amazon.com/s?k=${encodeURIComponent(prod.search_query || prod.product_name)}`;
+              if (amzTag) amzSearch += `&tag=${encodeURIComponent(amzTag)}`;
+              productsHtml += `
+                <div style="margin-bottom: 8px; font-size: 0.85rem; color: #d1d5db;">
+                  <strong style="color: #f3f4f6;">${escapeHtml(prod.product_name)}</strong> <span style="font-size: 0.75rem; color: #9ca3af;">(${escapeHtml(prod.category)})</span>
+                  <p style="margin: 4px 0; font-size: 0.8rem; line-height: 1.3; color: #9ca3af;">${escapeHtml(prod.reasoning)}</p>
+                  <a href="${amzSearch}" target="_blank" style="color: #ff9900; text-decoration: none; font-size: 0.75rem; font-weight: 600;">Search on Amazon &rarr;</a>
+                </div>
+              `;
+            });
+            productsHtml += `</div>`;
+          }
 
-        html += `
-          <div class="clip-card" style="opacity:0; transform:translateY(30px);">
-            <div style="position:relative;">
-              <video src="${clip.url}" class="clip-video" controls></video>
-            </div>
-            <div class="clip-body">
-              <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
-                ${numBadgeHtml}
-                <div class="clip-score" style="margin-top:0;"><i class="ri-fire-fill" style="color:#f59e0b;"></i> Score: ${score}/100</div>
-              </div>
-              <h3 class="clip-title" style="margin-bottom:8px; font-size:1.05rem; font-weight:700;">${i+1}. ${escapeHtml(cleanTitle)}</h3>
+          clipsHtml += `
+            <div class="clip-card" style="opacity:0; transform:translateY(20px);">
               <div style="position:relative;">
-                 <p class="clip-caption" style="font-size:0.85rem; color:#8b8b99; margin-bottom:15px; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden;">${escapeHtml(cleanCaption)}</p>
-                 <button class="btn-outline btn-sm btn-copy" data-text="${encodeURIComponent(cleanTitle + '\n\n' + cleanCaption)}" style="position:absolute; right:0; top:-10px; padding:2px 6px; font-size:0.7rem;"><i class="ri-clipboard-line"></i> Copy</button>
+                <video src="${clip.url}" class="clip-video" controls></video>
               </div>
-              ${productsHtml}
-              <div class="clip-footer">
-                <span class="text-xs text-muted" style="font-weight:600; letter-spacing:1px; text-transform:uppercase;">History</span>
-                <div class="platform-toggles">
-                  <a href="${clip.url}" download class="btn-outline btn-sm" style="padding:4px 12px; margin-right:8px; font-size:0.8rem; text-decoration:none;"><i class="ri-download-cloud-2-line"></i></a>
-                  <button class="btn-primary btn-sm btn-publish" data-clip="${clip.url}" style="padding:4px 12px; font-size:0.8rem;">Publish</button>
+              <div class="clip-body">
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+                  ${numBadgeHtml}
+                  <div class="clip-score" style="margin-top:0;"><i class="ri-fire-fill" style="color:#f59e0b;"></i> Score: ${score}/100</div>
+                </div>
+                <h3 class="clip-title" style="margin-bottom:8px; font-size:1.05rem; font-weight:700;">${escapeHtml(cleanTitle)}</h3>
+                <div style="position:relative;">
+                   <p class="clip-caption" style="font-size:0.85rem; color:#8b8b99; margin-bottom:15px; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden;">${escapeHtml(cleanCaption)}</p>
+                   <button class="btn-outline btn-sm btn-copy" data-text="${encodeURIComponent(cleanTitle + '\n\n' + cleanCaption)}" style="position:absolute; right:0; top:-10px; padding:2px 6px; font-size:0.7rem;"><i class="ri-clipboard-line"></i> Copy</button>
+                </div>
+                ${productsHtml}
+                <div class="clip-footer">
+                  <span class="text-xs text-muted" style="font-weight:600; letter-spacing:1px; text-transform:uppercase;">History</span>
+                  <div class="platform-toggles">
+                    <a href="${clip.url}" download class="btn-outline btn-sm" style="padding:4px 12px; margin-right:8px; font-size:0.8rem; text-decoration:none;"><i class="ri-download-cloud-2-line"></i></a>
+                    <button class="btn-primary btn-sm btn-publish" data-clip="${clip.url}" data-products='${JSON.stringify(clip.product_recommendations || []).replace(/'/g, "&#39;")}' style="padding:4px 12px; font-size:0.8rem;">Publish</button>
+                  </div>
                 </div>
               </div>
+            </div>
+          `;
+        });
+
+        html += `
+          <div class="job-history-block" style="margin-bottom: 35px; background: rgba(18, 18, 20, 0.8); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 12px; padding: 20px;">
+            <div class="job-history-header" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; padding-bottom: 12px; border-bottom: 1px solid rgba(255, 255, 255, 0.08);">
+              <div>
+                <h3 style="font-size: 1.1rem; font-weight: 700; color: #f3f4f6; margin-bottom: 4px; display: flex; align-items: center; gap: 8px;">
+                  <i class="ri-film-line" style="color: #818cf8;"></i> ${escapeHtml(videoName)}
+                </h3>
+                <span style="font-size: 0.8rem; color: #9ca3af;">
+                  <i class="ri-time-line"></i> ${createdDate} · <strong style="color: #e5e7eb;">${clips.length} Clip${clips.length > 1 ? 's' : ''}</strong>
+                </span>
+              </div>
+              <button class="btn-primary btn-sm btn-job-mass-post" data-job-id="${escapeHtml(job.job_id)}" style="background: linear-gradient(135deg, #6366f1, #4f46e5); padding: 8px 16px; border-radius: 8px; font-weight: 600; font-size: 0.85rem; display: flex; align-items: center; gap: 6px;">
+                <i class="ri-rocket-line"></i> Mass Post Video Clips (${clips.length})
+              </button>
+            </div>
+            <div id="job-grid-${escapeHtml(job.job_id)}" class="clips-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px;">
+              ${clipsHtml}
             </div>
           </div>
         `;
       });
+      
       container.innerHTML = html;
       gsap.to("#history-container .clip-card", { y: 0, opacity: 1, duration: 0.4, stagger: 0.05, ease: "power2.out", delay: 0.1 });
       
@@ -1512,6 +1545,16 @@ document.addEventListener("DOMContentLoaded", () => {
     btn.innerHTML = '<i class="ri-check-line"></i> Mass Post Initiated';
     btn.classList.add('btn-success');
     triggerMassPublish('#history-container');
+  });
+
+  document.addEventListener('click', (e) => {
+    const jobBtn = e.target.closest('.btn-job-mass-post');
+    if (jobBtn) {
+      const jobId = jobBtn.getAttribute('data-job-id');
+      jobBtn.innerHTML = '<i class="ri-check-line"></i> Mass Post Initiated';
+      jobBtn.classList.add('btn-success');
+      triggerMassPublish(`#job-grid-${jobId}`);
+    }
   });
 
   document.addEventListener('click', async (e) => {
