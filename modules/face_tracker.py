@@ -1,53 +1,104 @@
 # ============================================================
 # face_tracker.py — Module 4: Face Tracking & Crop Calculation
-# Hardware Target: CPU — Google MediaPipe
-# Purpose: Detect the speaker's face frame-by-frame and
-#          compute a smooth 9:16 vertical crop window.
-#          Zero GPU shader usage — pure CPU optimized graph.
+# Purpose: High-precision face detection + 1-Euro Filter camera motion.
+#          Zero GPU shader usage — pure CPU / DNN optimized graph.
 # ============================================================
 
+import os
+os.environ["OPENCV_LOG_LEVEL"] = "OFF"
 import cv2
 import numpy as np
 import logging
+import math
+from pathlib import Path
 from typing import List, Dict, Tuple, Optional
 
 logger = logging.getLogger(__name__)
 
-TARGET_ASPECT_W = 1
-TARGET_ASPECT_H = 1
+TARGET_ASPECT_W = 9
+TARGET_ASPECT_H = 16
 
-_global_face_cascade = None
 
-def _get_cascade():
-    global _global_face_cascade
-    if _global_face_cascade is not None:
-        return _global_face_cascade
+class OneEuroFilter:
+    """1-Euro Filter for sub-pixel, zero-jitter, buttery-smooth camera tracking."""
+    def __init__(self, freq: float = 30.0, min_cutoff: float = 0.3, beta: float = 0.005, d_cutoff: float = 1.0):
+        self.freq = float(freq)
+        self.min_cutoff = float(min_cutoff)
+        self.beta = float(beta)
+        self.d_cutoff = float(d_cutoff)
+        self.x_prev = None
+        self.dx_prev = None
 
-    from pathlib import Path
-    import urllib.request
-    import os
-    import tempfile
+    def _alpha(self, cutoff: float) -> float:
+        tau = 1.0 / (2.0 * math.pi * cutoff)
+        te = 1.0 / self.freq
+        return 1.0 / (1.0 + tau / te)
+
+    def filter(self, x: float) -> float:
+        if self.x_prev is None:
+            self.x_prev = x
+            self.dx_prev = 0.0
+            return x
+
+        dx = (x - self.x_prev) * self.freq
+        edx = self._alpha(self.d_cutoff) * dx + (1.0 - self._alpha(self.d_cutoff)) * self.dx_prev
+        cutoff = self.min_cutoff + self.beta * abs(edx)
+        a = self._alpha(cutoff)
+        x_hat = a * x + (1.0 - a) * self.x_prev
+        self.x_prev = x_hat
+        self.dx_prev = edx
+        return x_hat
+
+
+_yunet_detector = None
+_haar_cascade = None
+
+def _get_detector():
+    """Returns (yunet_detector, haar_cascade). Prefers YuNet ONNX DNN face detector."""
+    global _yunet_detector, _haar_cascade
+    if _yunet_detector is not None or _haar_cascade is not None:
+        return _yunet_detector, _haar_cascade
+
+    import urllib.request, os, tempfile
+    models_dir = Path(__file__).parent
+    yunet_path = models_dir / "yunet.onnx"
     
-    cascade_path = Path(__file__).parent / "haarcascade_frontalface_default.xml"
+    if not yunet_path.exists():
+        url = "https://github.com/opencv/opencv_zoo/raw/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx"
+        try:
+            logger.info(f"[FaceTracker] Downloading YuNet DNN face model to {yunet_path}...")
+            with urllib.request.urlopen(url, timeout=20) as resp:
+                fd, tmp = tempfile.mkstemp(dir=str(models_dir))
+                with os.fdopen(fd, 'wb') as f:
+                    f.write(resp.read())
+                os.replace(tmp, yunet_path)
+            logger.info(f"[FaceTracker] ✅ YuNet DNN model ready!")
+        except Exception as e:
+            logger.warning(f"[FaceTracker] Could not download YuNet ONNX: {e}. Falling back to Haar Cascade.")
+
+    if yunet_path.exists() and hasattr(cv2, "FaceDetectorYN"):
+        try:
+            _yunet_detector = cv2.FaceDetectorYN.create(str(yunet_path), "", (320, 320), score_threshold=0.6, nms_threshold=0.3)
+            logger.info("[FaceTracker] ✅ Initialized YuNet DNN face detector.")
+            return _yunet_detector, None
+        except Exception as e:
+            logger.warning(f"[FaceTracker] Failed to init YuNet: {e}")
+
+    # Fallback to Haar Cascade
+    cascade_path = models_dir / "haarcascade_frontalface_default.xml"
     if not cascade_path.exists():
-        logger.info(f"[FaceTracker] Cascade file not found locally. Downloading from official OpenCV GitHub...")
         url = "https://raw.githubusercontent.com/opencv/opencv/master/data/haarcascades/haarcascade_frontalface_default.xml"
         try:
-            with urllib.request.urlopen(url, timeout=20) as response:
-                fd, tmp_path = tempfile.mkstemp(dir=str(cascade_path.parent))
+            with urllib.request.urlopen(url, timeout=20) as resp:
+                fd, tmp = tempfile.mkstemp(dir=str(models_dir))
                 with os.fdopen(fd, 'wb') as f:
-                    f.write(response.read())
-                os.replace(tmp_path, cascade_path)
-            logger.info(f"[FaceTracker] Successfully downloaded cascade file to: {cascade_path}")
+                    f.write(resp.read())
+                os.replace(tmp, cascade_path)
         except Exception as e:
-            if 'tmp_path' in locals() and os.path.exists(tmp_path):
-                os.remove(tmp_path)
-            raise RuntimeError(f"[FaceTracker] Failed to download Haar Cascade XML from {url}: {e}") from e
+            raise RuntimeError(f"Failed to download Haar cascade: {e}") from e
 
-    _global_face_cascade = cv2.CascadeClassifier(str(cascade_path))
-    if _global_face_cascade.empty():
-        raise RuntimeError(f"[FaceTracker] Failed to load Haar Cascade from {cascade_path}")
-    return _global_face_cascade
+    _haar_cascade = cv2.CascadeClassifier(str(cascade_path))
+    return None, _haar_cascade
 
 
 def compute_crop_coords(
@@ -60,10 +111,10 @@ def compute_crop_coords(
     activity_threshold: float = 1.5,
 ) -> Dict:
     """
-    Analyze a video segment and compute a smooth 9:16 vertical crop box
-    that dynamically follows the speaker's face like a pro 60fps operator.
+    Analyze video segment and compute buttery-smooth 9:16 vertical crop coordinates
+    following the speaker's face using YuNet DNN + 1-Euro Filter.
     """
-    face_cascade = _get_cascade()
+    yunet, cascade = _get_detector()
 
     import av
     container = av.open(input_video)
@@ -73,11 +124,10 @@ def compute_crop_coords(
     src_w = video_stream.width
     src_h = video_stream.height
 
-    # Calculate exact 9:16 vertical crop coordinates (height determines crop height)
+    # Calculate exact 9:16 crop width based on source height
     crop_h = src_h
     crop_w = int(src_h * (9.0 / 16.0))
-    if crop_w % 2 != 0:
-        crop_w += 1
+    if crop_w % 2 != 0: crop_w += 1
     if crop_w > src_w:
         crop_w = src_w
         crop_h = int(src_w * (16.0 / 9.0))
@@ -85,7 +135,7 @@ def compute_crop_coords(
 
     logger.info(
         f"[FaceTracker] Source: {src_w}x{src_h} | "
-        f"9:16 Vertical Dynamic Crop: {crop_w}x{crop_h} at {fps:.2f}fps"
+        f"9:16 Vertical Crop: {crop_w}x{crop_h} at {fps:.2f}fps (YuNet={yunet is not None})"
     )
 
     start_s = start_ms / 1000.0
@@ -93,18 +143,17 @@ def compute_crop_coords(
     seek_ts = int(start_s / video_stream.time_base)
     container.seek(seek_ts, stream=video_stream)
 
-    if sample_every_n_frames < 1:
-        sample_every_n_frames = 1
-
     sampled_frames = []
     sampled_xs = []
     
     face_detected = False
-    previous_sample_gray: Optional[np.ndarray] = None
     frames_read = 0
 
-    # Default fallback center
+    # Default center fallback
     last_face_x = src_w / 2.0
+
+    if yunet:
+        yunet.setInputSize((src_w, src_h))
 
     for frame in container.decode(video=0):
         t = frame.time
@@ -113,32 +162,27 @@ def compute_crop_coords(
         if t > end_s:
             break
 
-        if frames_read % sample_every_n_frames == 0:
-            img = frame.to_ndarray(format="bgr24")
+        img = frame.to_ndarray(format="bgr24")
+        
+        if yunet:
+            _, faces = yunet.detect(img)
+            if faces is not None and len(faces) > 0:
+                face_detected = True
+                # Sort by confidence / area
+                faces = sorted(faces, key=lambda f: f[2] * f[3], reverse=True)
+                fx, fy, fw, fh = faces[0][:4]
+                last_face_x = fx + (fw / 2.0)
+        else:
             gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-            
-            should_detect = True
-            if adaptive_sampling and previous_sample_gray is not None:
-                from modules.native_accel import mean_absolute_difference
-                should_detect = mean_absolute_difference(previous_sample_gray, gray) >= activity_threshold
-            previous_sample_gray = gray
-            
-            if should_detect:
-                faces = face_cascade.detectMultiScale(
-                    gray,
-                    scaleFactor=1.15,
-                    minNeighbors=4,
-                    minSize=(50, 50)
-                )
-                if len(faces) > 0:
-                    face_detected = True
-                    faces = sorted(faces, key=lambda f: f[2] * f[3], reverse=True)
-                    fx, fy, fw, fh = faces[0]
-                    last_face_x = fx + (fw / 2.0)
-            
-            sampled_frames.append(frames_read)
-            sampled_xs.append(last_face_x)
+            faces = cascade.detectMultiScale(gray, scaleFactor=1.15, minNeighbors=4, minSize=(50, 50))
+            if len(faces) > 0:
+                face_detected = True
+                faces = sorted(faces, key=lambda f: f[2] * f[3], reverse=True)
+                fx, fy, fw, fh = faces[0]
+                last_face_x = fx + (fw / 2.0)
 
+        sampled_frames.append(frames_read)
+        sampled_xs.append(last_face_x)
         frames_read += 1
 
     container.close()
@@ -148,41 +192,34 @@ def compute_crop_coords(
         sampled_frames = [0]
         sampled_xs = [last_face_x]
 
-    # ─── Calculate Dynamic Smooth 60 FPS Crop ──────────────────────
-    if not face_detected or len(sampled_frames) == 0:
-        logger.warning("[FaceTracker] No face detected — defaulting to static center 9:16 crop.")
+    # ─── 1-Euro Filter Cinematic Motion Smoothing ──────────────────
+    dynamic_crop_x = []
+    if not face_detected or len(sampled_xs) == 0:
+        logger.warning("[FaceTracker] No face detected — using static center 9:16 crop.")
         static_x = max(0, (src_w - crop_w) // 2)
         dynamic_crop_x = [static_x] * frames_read
     else:
-        # 1. Interpolate per-frame X position at 60 FPS rate
-        all_frames = np.arange(frames_read)
-        interpolated_xs = np.interp(all_frames, sampled_frames, sampled_xs)
+        # Initialize 1-Euro Filter for buttery smooth sub-pixel tracking
+        euro_filter = OneEuroFilter(freq=fps, min_cutoff=0.25, beta=0.005)
         
-        # 2. Smooth using Gaussian filter or EMA for fluid 60fps operator movement
-        window_size = max(3, int(fps * 0.75))
-        if window_size % 2 == 0: window_size += 1
-        
-        smoothed_xs = np.convolve(interpolated_xs, np.ones(window_size)/window_size, mode='same')
-        
-        # 3. Convert face center X to crop box left edge X with deadzone hysteresis
-        dynamic_crop_x = []
-        curr_x = int(smoothed_xs[0] - crop_w / 2.0)
-        curr_x = max(0, min(curr_x, src_w - crop_w))
-        
-        for fx in smoothed_xs:
-            target_x = int(fx - crop_w / 2.0)
-            target_x = max(0, min(target_x, src_w - crop_w))
-            
-            # Smooth deadzone threshold to avoid micro jitter
-            if abs(target_x - curr_x) > 6:
-                curr_x += int(np.sign(target_x - curr_x) * min(abs(target_x - curr_x), 4))
-            dynamic_crop_x.append(curr_x)
+        # Pre-smooth raw detections with Gaussian window (sigma=5) to eliminate single-frame glitches
+        try:
+            from scipy.ndimage import gaussian_filter1d
+            raw_smoothed = gaussian_filter1d(sampled_xs, sigma=5.0, mode='nearest')
+        except ImportError:
+            raw_smoothed = sampled_xs
+
+        for raw_x in raw_smoothed:
+            smooth_center_x = euro_filter.filter(float(raw_x))
+            cx = int(round(smooth_center_x - crop_w / 2.0))
+            cx = max(0, min(cx, src_w - crop_w))
+            dynamic_crop_x.append(cx)
 
     static_crop_x = int(np.median(dynamic_crop_x)) if len(dynamic_crop_x) > 0 else max(0, (src_w - crop_w) // 2)
 
     logger.info(
         f"[FaceTracker] ✅ Face detected: {face_detected} | "
-        f"Generated {len(dynamic_crop_x)} dynamic frames for smooth 60fps tracking."
+        f"Generated {len(dynamic_crop_x)} dynamic crop positions (1-Euro Filter smooth)."
     )
 
     return {
