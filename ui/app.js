@@ -107,22 +107,6 @@ document.addEventListener("DOMContentLoaded", () => {
   gsap.fromTo(".divider", { opacity: 0 }, { opacity: 1, duration: 0.5, delay: 0.3, ease: "power2.out" });
   gsap.fromTo(".url-input-wrapper", { y: 15, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, delay: 0.4, ease: "power2.out" });
 
-  // Auto-reconnect to active job
-  const savedJobId = localStorage.getItem('currentJobId');
-  if (savedJobId) {
-    const ytUrl = localStorage.getItem('ytUrl');
-    sectionUpload.classList.add('hidden');
-    sectionProcessing.classList.remove('hidden');
-    currentJobId = savedJobId;
-    if (ytUrl) {
-      document.getElementById('step-download').classList.remove('hidden');
-      updateProgress('step-download', "Reconnecting to YouTube Download...", 0);
-      connectYoutubeWS(savedJobId, ytUrl);
-    } else {
-      updateProgress(null, "Reconnecting to Processing Job...", 0);
-      connectPipelineWS(savedJobId);
-    }
-  }
 
   // Handle Upload Events
   dropzone.addEventListener('click', () => fileInput.click());
@@ -145,9 +129,13 @@ document.addEventListener("DOMContentLoaded", () => {
   const savedJobId = (() => {
     const jid = localStorage.getItem('currentJobId');
     const ts = Number(localStorage.getItem('currentJobId_ts') || 0);
-    if (jid && Date.now() - ts < 24 * 3600 * 1000) return jid;
+    const hasYtUrl = !!localStorage.getItem('ytUrl');
+    
+    if (jid && (hasYtUrl || Date.now() - ts < 24 * 3600 * 1000)) return jid;
+    
     localStorage.removeItem('currentJobId');
     localStorage.removeItem('currentJobId_ts');
+    localStorage.removeItem('ytUrl');
     return null;
   })();
   const savedYtUrl = localStorage.getItem('ytUrl');
