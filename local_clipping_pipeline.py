@@ -494,15 +494,6 @@ def run_pipeline(args: argparse.Namespace) -> None:
         elif args.broll and not args.pexels_key:
             logger.warning("   [B-Roll] ⚠️ --broll enabled but no --pexels-key provided. Skipping B-Roll.")
 
-    # Save final updated clips metadata with filenames
-    metadata_file = os.path.join(output_dir, "clips_metadata.json")
-    try:
-        with open(metadata_file, "w", encoding="utf-8") as f:
-            json.dump(clips, f, indent=2, ensure_ascii=False)
-        logger.info(f"   Saved updated clips metadata -> {metadata_file}")
-    except Exception as e:
-        logger.warning(f"   Failed to save clips metadata: {e}")
-
         # Keep publishing independent from generation: enqueue only. The
         # persistent queue owns browser work on its own worker thread.
         if args.auto_publish:
@@ -535,6 +526,15 @@ def run_pipeline(args: argparse.Namespace) -> None:
 
         rendered_clips.append(output_path)
         logger.info(f"   ✅ Done → {output_path}")
+
+    # Save final updated clips metadata with filenames
+    metadata_file = os.path.join(output_dir, "clips_metadata.json")
+    try:
+        with open(metadata_file, "w", encoding="utf-8") as f:
+            json.dump(clips, f, indent=2, ensure_ascii=False)
+        logger.info(f"   Saved updated clips metadata -> {metadata_file}")
+    except Exception as e:
+        logger.warning(f"   Failed to save clips metadata: {e}")
 
     # ─── Cleanup ─────────────────────────────────────────────
     if not args.keep_temp and os.path.exists(temp_dir):
