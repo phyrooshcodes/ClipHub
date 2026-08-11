@@ -43,6 +43,22 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
   refreshSystemBadges();
+
+  // Mobile Menu Toggle
+  const btnMobileMenu = document.getElementById('btn-mobile-menu');
+  const navActionsMenu = document.getElementById('nav-actions-menu');
+  if (btnMobileMenu && navActionsMenu) {
+    btnMobileMenu.addEventListener('click', (e) => {
+      e.stopPropagation();
+      navActionsMenu.classList.toggle('show');
+    });
+    // Close menu when clicking outside
+    document.addEventListener('click', (e) => {
+      if (!navActionsMenu.contains(e.target) && !btnMobileMenu.contains(e.target)) {
+        navActionsMenu.classList.remove('show');
+      }
+    });
+  }
   // Refresh badges every 30s
   setInterval(refreshSystemBadges, 30000);
   

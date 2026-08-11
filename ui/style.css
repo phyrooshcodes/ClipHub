@@ -150,6 +150,7 @@ body {
   color: var(--text-main);
   transform: none;
 }
+.mobile-only { display: none; }
 
 /* ─── Container ──────────────────────────────────────────── */
 .container { max-width: 1200px; margin: 0 auto; padding: 48px 20px; }
@@ -869,22 +870,32 @@ select option { background: #111; color: var(--text-main); }
   /* Layout & Container */
   .app-container { padding: 15px 12px 60px 12px; }
   .top-nav { padding: 0 12px; height: 56px; }
+  .mobile-only { display: flex; }
   .nav-actions {
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none; /* Firefox */
-    padding-bottom: 2px;
+    display: none;
+    flex-direction: column;
+    position: absolute;
+    top: 60px;
+    right: 12px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    padding: 12px;
+    border-radius: var(--radius-md);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+    z-index: 200;
+    width: 220px;
+    align-items: stretch;
+    gap: 8px;
   }
-  .nav-actions::-webkit-scrollbar {
-    display: none; /* Chrome/Safari */
-  }
+  .nav-actions.show { display: flex; }
   .nav-actions .btn-outline { 
-    white-space: nowrap; 
-    padding: 6px 10px; 
-    font-size: 0.75rem; 
+    width: 100%;
+    justify-content: flex-start;
+    padding: 10px 12px; 
+    font-size: 0.85rem; 
   }
   .nav-actions .icon-btn {
-    flex-shrink: 0;
+    align-self: flex-end;
   }
   /* Hero Section */
   .hero-section { margin-top: 15px; margin-bottom: 25px; }
