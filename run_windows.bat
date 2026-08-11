@@ -188,17 +188,22 @@ maturin develop --release --manifest-path clip_engine_core/Cargo.toml
 :LAUNCH
 
 :: ── 7. Choose UI and Launch App Server ────────────────────
+if not "%UI_CHOICE%"=="" goto PROCESS_CHOICE
+
 echo:
 echo  ==============================================================
-echo   SELECT USER INTERFACE
+echo   SELECT USER INTERFACE MODE
 echo  ==============================================================
-echo   [1] Classic Web UI (FastAPI)
+echo   [1] Classic Web UI (FastAPI - Launches local browser)
 echo   [2] Beta UI (Tauri + React)
+echo   [3] Mobile ^& Wi-Fi Server Mode (Terminal Only - For Phone/Tablet use)
 echo:
-set /p UI_CHOICE="Enter your choice (1 or 2) [1]: "
+set /p UI_CHOICE="Enter your choice (1, 2, or 3) [1]: "
 if "%UI_CHOICE%"=="" set UI_CHOICE=1
 
+:PROCESS_CHOICE
 if "%UI_CHOICE%"=="2" goto LAUNCH_BETA
+if "%UI_CHOICE%"=="3" goto LAUNCH_MOBILE_SERVER
 
 :LAUNCH_CLASSIC
 echo:
@@ -214,6 +219,25 @@ echo:
 for /f "tokens=5" %%a in ('netstat -aon 2^>nul ^| findstr :7842 ^| findstr LISTENING') do taskkill /f /pid %%a >nul 2>&1
 
 set OBSCURA_OPEN_BROWSER=1
+python server.py
+goto END_LAUNCH
+
+:LAUNCH_MOBILE_SERVER
+echo:
+echo  ==============================================================
+echo   OBSCURA CLIPS — MOBILE ^& WI-FI SERVER MODE
+echo  ==============================================================
+echo   Server is running in terminal (local browser pop-up disabled).
+echo   Access the app from any phone, tablet, or PC on your Wi-Fi!
+echo:
+echo   Press Ctrl+C in this terminal window to stop the server.
+echo  ==============================================================
+echo:
+
+:: Free port 7842 if a previous server instance is still running
+for /f "tokens=5" %%a in ('netstat -aon 2^>nul ^| findstr :7842 ^| findstr LISTENING') do taskkill /f /pid %%a >nul 2>&1
+
+set OBSCURA_OPEN_BROWSER=0
 python server.py
 goto END_LAUNCH
 
