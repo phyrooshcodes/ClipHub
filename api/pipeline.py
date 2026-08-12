@@ -254,6 +254,8 @@ async def run_pipeline_ws(websocket: WebSocket, job_id: str):
             cmd += ["--broll", "--pexels-key", config.get("pexels_key").strip()]
         if config.get("language", "").strip():
             cmd += ["--language", config.get("language").strip()]
+        if config.get("auto_publish"): 
+            cmd += ["--auto-publish"]
         
 
         asyncio.create_task(_run_process(job_id, cmd, job.start_time))
