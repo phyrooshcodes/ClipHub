@@ -161,6 +161,13 @@ class YouTubePersistentWorker:
                 except queue.Empty:
                     pass
                 except Exception as e:
+                    if str(e) == "RESTART_HEADFUL":
+                        logger.info("[YouTube Worker] Restarting browser context in HEADFUL mode...")
+                        if self._context:
+                            try: self._context.close()
+                            except: pass
+                            self._context = None
+                        break
                     logger.error(f"[YouTube Worker] Queue error: {e}")
                     time.sleep(1)
 
@@ -261,6 +268,15 @@ class YouTubePersistentWorker:
             
         except Exception as exc:
             detail = f"Stage '{current_stage}' failed: {exc}"
+            
+            if "Google Security Verification required" in str(exc) and not getattr(self, "_force_headful", False):
+                logger.info(f"[YouTube Worker] 2FA detected! Relaunching browser in HEADFUL mode to allow manual verification...")
+                self._force_headful = True
+                os.environ["OBSCURA_YOUTUBE_HEADLESS"] = "0"
+                os.environ["OBSCURA_YOUTUBE_WAIT_FOR_2FA"] = "1"
+                self._queue.put(job)
+                raise RuntimeError("RESTART_HEADFUL")
+                
             if self._context and page:
                 diag_dir = _save_diagnostics(self._context, page, f"failure-{current_stage}", console_lines)
                 detail += f" Diagnostics saved to {diag_dir}."

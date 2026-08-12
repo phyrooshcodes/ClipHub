@@ -52,7 +52,15 @@ def check_for_verification_dialog(page: Page) -> None:
     try:
         verify = page.locator("text=/Verify it's you|confirm it's really you|extra layer of security/i").first
         if verify.count() and verify.is_visible():
-            raise RuntimeError("Google Security Verification required ('Verify it's you'). Please reconnect YouTube Studio in Settings to complete 2FA.")
+            if os.environ.get("OBSCURA_YOUTUBE_WAIT_FOR_2FA") == "1":
+                logger.info("[YouTube] 2FA Challenge Detected! Pausing automation for up to 5 minutes to allow manual user verification...")
+                try:
+                    verify.wait_for(state="hidden", timeout=300000)
+                    logger.info("[YouTube] 2FA resolved! Resuming automation...")
+                except Exception:
+                    raise RuntimeError("Google Security Verification timed out after 5 minutes of waiting.")
+            else:
+                raise RuntimeError("Google Security Verification required ('Verify it's you'). Please reconnect YouTube Studio in Settings to complete 2FA.")
     except PlaywrightError:
         pass
 
