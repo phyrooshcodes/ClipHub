@@ -154,7 +154,7 @@ class UploadNetworkTelemetry:
 def wait_for_upload_completion(page: Page, telemetry: UploadNetworkTelemetry | None = None, timeout: int | None = None) -> None:
     """Wait until YouTube Studio confirms that the raw video file upload transfer is 100% complete across the network."""
     if timeout is None:
-        timeout = int(os.environ.get("OBSCURA_UPLOAD_TIMEOUT_S", "300")) * 1000
+        timeout = int(os.environ.get("CLIPHUB_UPLOAD_TIMEOUT_S", "300")) * 1000
         
     logger.info("[YouTube] Waiting for file upload transfer across network to complete...")
     deadline = time.monotonic() + (timeout / 1000.0)

@@ -9,7 +9,7 @@ import unittest
 from datetime import datetime, time as dtime
 from pathlib import Path
 
-TEST_STATE = Path(tempfile.gettempdir()) / "obscura-youtube-publisher-tests"
+TEST_STATE = Path(tempfile.gettempdir()) / "cliphub-youtube-publisher-tests"
 os.environ["XDG_STATE_HOME"] = str(TEST_STATE)
 
 from modules.publishers.youtube.scheduler import calculate_schedule_target
@@ -66,7 +66,7 @@ class YouTubePublisherTests(unittest.TestCase):
             txt_file.unlink(missing_ok=True)
 
     def test_youtube_connected_and_disconnect(self) -> None:
-        profile = TEST_STATE / "obscura-clips" / "youtube" / "browser-profile"
+        profile = TEST_STATE / "cliphub" / "youtube" / "browser-profile"
         profile.mkdir(parents=True, exist_ok=True)
         (profile / "state.dat").write_text("session")
         

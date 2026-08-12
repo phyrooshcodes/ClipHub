@@ -42,7 +42,7 @@ def calculate_schedule_target(now: datetime | None = None) -> tuple[datetime, st
     
     # Format date string for YouTube Studio (e.g. "Jul 21, 2026" or "Jul 5, 2026" without leading zero)
     date_str = f"{target_dt.strftime('%b')} {target_dt.day}, {target_dt.year}"
-    time_str = os.environ.get("OBSCURA_SCHEDULE_TIME", "12:00 AM")
+    time_str = os.environ.get("CLIPHUB_SCHEDULE_TIME", "12:00 AM")
     
     return target_dt, date_str, time_str
 
@@ -52,7 +52,7 @@ def check_for_verification_dialog(page: Page) -> None:
     try:
         verify = page.locator("text=/Verify it's you|confirm it's really you|extra layer of security/i").first
         if verify.count() and verify.is_visible():
-            if os.environ.get("OBSCURA_YOUTUBE_WAIT_FOR_2FA") == "1":
+            if os.environ.get("CLIPHUB_YOUTUBE_WAIT_FOR_2FA") == "1":
                 logger.info("[YouTube] 2FA Challenge Detected! Pausing automation for up to 5 minutes to allow manual user verification...")
                 try:
                     verify.wait_for(state="hidden", timeout=300000)

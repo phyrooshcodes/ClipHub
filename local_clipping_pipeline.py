@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # ============================================================
-# local_clipping_pipeline.py — Obscura Clips Orchestrator
+# local_clipping_pipeline.py — ClipHub Orchestrator
 # ============================================================
 # Zero-Strain Local-Hybrid AI Video Clipper
 # Built for: Asus TUF A15 (Ryzen 7 + RTX 3050 4GB)
@@ -64,7 +64,7 @@ BANNER = """
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Obscura Clips — AI-powered vertical video clipper.",
+        description="ClipHub — AI-powered vertical video clipper.",
         formatter_class=argparse.RawTextHelpFormatter
     )
     parser.add_argument(
@@ -181,15 +181,25 @@ def parse_args() -> argparse.Namespace:
         help="Disable the permanent title hook banner at the top of the video."
     )
     parser.add_argument(
-        "--broll",
-        action="store_true",
-        help="Enable AI-powered B-Roll stock footage overlays on clips."
+        "--commentary-mode",
+        default="hook_commentary",
+        choices=["off", "hook_only", "hook_commentary", "full_editorial"],
+        help="AI Commentary Mode:\n"
+             "  off             -> Standard clip extraction (no AI voice)\n"
+             "  hook_only       -> AI Hook + Source Clip\n"
+             "  hook_commentary -> AI Hook + Source Clip + AI Commentary (default)\n"
+             "  full_editorial  -> AI Hook + Source Clip + AI Commentary + AI Takeaway"
     )
     parser.add_argument(
-        "--pexels-key",
-        default="",
-        help="Pexels API key for downloading stock footage B-Roll. "
-             "Required when --broll is enabled. Get one free at pexels.com/api"
+        "--commentary-voice",
+        default="af_sarah",
+        help="Voice ID for Kokoro TTS (default: af_sarah)."
+    )
+    parser.add_argument(
+        "--intro-duration",
+        type=float,
+        default=2.5,
+        help="Duration of the visual blur/zoom during the AI intro hook (seconds)."
     )
     parser.add_argument(
         "--auto-publish",
@@ -345,6 +355,46 @@ def run_pipeline(args: argparse.Namespace) -> None:
 
     logger.info(f"   {len(clips)} clips queued for rendering.\n")
 
+    # ─── STAGE 3.5: AI Commentary Generation ───────────
+    if getattr(args, "commentary_mode", "off") != "off":
+        logger.info(f"═══ STAGE 3.5/6 ─ AI Commentary ({args.commentary_mode}) ══════")
+        from modules.commentary_generator import generate_commentary
+        
+        for i, clip in enumerate(clips):
+            if "editorial_data" in clip:
+                continue
+                
+            start_s = clip["start_ms"] / 1000.0
+            end_s = clip["end_ms"] / 1000.0
+            
+            clip_words = [w for w in words if start_s <= w["start"] <= end_s]
+            clip_transcript = " ".join([w["word"].strip() for w in clip_words])
+            
+            ctx_start = max(0, start_s - 30.0)
+            ctx_end = min(video_duration, end_s + 30.0)
+            ctx_words = [w for w in words if ctx_start <= w["start"] <= ctx_end]
+            surrounding_context = " ".join([w["word"].strip() for w in ctx_words])
+            
+            logger.info(f"   Generating commentary for clip {i+1}...")
+            editorial_data = generate_commentary(
+                clip_transcript=clip_transcript,
+                surrounding_context=surrounding_context,
+                topic=clip.get("title", "Unknown")
+            )
+            
+            # Enforce modes
+            if args.commentary_mode == "hook_only":
+                editorial_data["commentary_segments"] = []
+                editorial_data["takeaway"] = None
+            elif args.commentary_mode == "hook_commentary":
+                editorial_data["takeaway"] = None
+                
+            clip["editorial_data"] = editorial_data
+            
+        # Update cache
+        with open(hooks_cache_path, "w", encoding="utf-8") as f:
+            json.dump(clips, f, indent=2, ensure_ascii=False)
+
     # Save clips metadata to a JSON file for the Web UI/server to read
     metadata_file = os.path.join(output_dir, "clips_metadata.json")
     try:
@@ -404,15 +454,6 @@ def run_pipeline(args: argparse.Namespace) -> None:
             if word["start"] >= start_ms / 1000.0 and word["end"] <= end_ms / 1000.0
         ]
 
-        logger.info(
-            f"\n═══ CLIP {clip_num}/{len(clips)} ══════════════════════════════\n"
-            f"   Title:  {title}\n"
-            f"   Score:  {score}\n"
-            f"   Reason: {clip.get('reason', 'N/A')}\n"
-            f"   Range:  [{start_ms/1000:.1f}s → {end_ms/1000:.1f}s] "
-            f"({(end_ms - start_ms)/1000:.1f}s)\n"
-        )
-
         # ─── Stage 4: Face Tracking ──────────────────────────
         logger.info(f"   [4/6] Face Tracking (CPU — MediaPipe) ...")
         crop_coords = compute_crop_coords(
@@ -421,11 +462,24 @@ def run_pipeline(args: argparse.Namespace) -> None:
             end_ms=end_ms
         )
 
+        # ─── Stage 4.5: AI Editorial Composition ──────────────
+        ai_audio_events = []
+        if getattr(args, "commentary_mode", "off") != "off":
+            logger.info(f"   [4.5/6] Building Editorial Timeline ...")
+            from modules.editorial_compositor import align_editorial_timeline
+            clip_words, ai_audio_events = align_editorial_timeline(
+                clip=clip,
+                source_words=clip_words,
+                temp_dir=temp_dir,
+                voice_id=getattr(args, "commentary_voice", "af_sarah")
+            )
+            clip["ai_audio_events"] = ai_audio_events
+
         # ─── Stage 5: Subtitle Generation ────────────────────
         logger.info(f"   [5/6] Generating kinetic subtitles ...")
         clip_title_str = "" if args.no_title else title
         generate_ass_subtitles(
-            words=words,
+            words=clip_words,
             clip_start_s=start_ms / 1000.0,
             clip_end_s=end_ms   / 1000.0,
             output_path=sub_path,
@@ -458,6 +512,10 @@ def run_pipeline(args: argparse.Namespace) -> None:
 
         # ─── Stage 6: NVENC Render ───────────────────────────
         logger.info(f"   [6/6] Rendering with {'NVENC ⚡' if use_nvenc else 'libx264 (CPU fallback)'} ...")
+        
+        # Prepare editorial arguments
+        editorial_data = clip.get("editorial_data") if getattr(args, "commentary_mode", "off") != "off" else None
+        
         render_clip(
             input_video=input_video,
             output_path=output_path,
@@ -467,32 +525,12 @@ def run_pipeline(args: argparse.Namespace) -> None:
             subtitle_path=sub_path,
             music_choice=music_choice,
             clip_index=idx,
-            encoder="auto" if use_nvenc else "libx264"
+            encoder="auto" if use_nvenc else "libx264",
+            editorial_data=editorial_data,
+            commentary_voice=getattr(args, "commentary_voice", "af_sarah"),
+            intro_duration=getattr(args, "intro_duration", 2.5),
+            ai_audio_events=clip.get("ai_audio_events", [])
         )
-
-        # ─── B-Roll Overlay (optional post-render composite) ──
-        if args.broll and args.pexels_key:
-            broll_cues = clip.get("broll_cues", [])
-            if broll_cues:
-                try:
-                    from modules.broll_engine import composite_broll_overlays
-                    logger.info(f"   [B-Roll] Compositing {len(broll_cues)} B-Roll overlay(s) ...")
-                    composite_broll_overlays(
-                        base_clip_path=output_path,
-                        broll_cues=broll_cues,
-                        api_key=args.pexels_key,
-                        temp_dir=temp_dir,
-                        output_path=None  # Replace in-place
-                    )
-                    logger.info(f"   [B-Roll] ✅ B-Roll compositing complete.")
-                except ImportError:
-                    logger.warning("   [B-Roll] ⚠️ broll_engine module not found. Skipping B-Roll.")
-                except Exception as e:
-                    logger.warning(f"   [B-Roll] ⚠️ B-Roll overlay failed: {e}. Keeping original clip.")
-            else:
-                logger.info("   [B-Roll] No B-Roll cues detected by LLM for this clip.")
-        elif args.broll and not args.pexels_key:
-            logger.warning("   [B-Roll] ⚠️ --broll enabled but no --pexels-key provided. Skipping B-Roll.")
 
         # Keep publishing independent from generation: enqueue only. The
         # persistent queue owns browser work on its own worker thread.
@@ -559,7 +597,7 @@ def run_pipeline(args: argparse.Namespace) -> None:
     # ─── Summary ─────────────────────────────────────────────
     total_elapsed = time.time() - total_start
     logger.info("\n" + "═" * 60)
-    logger.info("  ✦  OBSCURA CLIPS — DONE")
+    logger.info("  ✦  CLIPHUB CLIPS — DONE")
     logger.info("═" * 60)
     logger.info(f"  Clips rendered : {len(rendered_clips)}")
     logger.info(f"  Output folder  : {output_dir}")

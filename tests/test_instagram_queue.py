@@ -11,7 +11,7 @@ import uuid
 from pathlib import Path
 
 
-TEST_STATE = Path(tempfile.gettempdir()) / "obscura-instagram-queue-tests"
+TEST_STATE = Path(tempfile.gettempdir()) / "cliphub-instagram-queue-tests"
 os.environ["XDG_STATE_HOME"] = str(TEST_STATE)
 
 from modules import instagram_queue  # noqa: E402
@@ -31,7 +31,7 @@ class InstagramQueueTests(unittest.TestCase):
 
     def setUp(self) -> None:
         self.queue.set_paused(False)
-        self.video = Path(tempfile.gettempdir()) / f"obscura-instagram-queue-{uuid.uuid4()}.mp4"
+        self.video = Path(tempfile.gettempdir()) / f"cliphub-instagram-queue-{uuid.uuid4()}.mp4"
         self.video.write_bytes(f"test-video-{uuid.uuid4()}".encode())
 
     def tearDown(self) -> None:

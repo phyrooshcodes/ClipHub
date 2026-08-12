@@ -34,7 +34,7 @@ def _state_dir() -> Path:
         base = Path(os.getenv("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
     else:
         base = Path.home() / ".local" / "state"
-    directory = base / "obscura-clips" / "instagram"
+    directory = base / "cliphub" / "instagram"
     directory.mkdir(parents=True, exist_ok=True)
     return directory
 
@@ -67,7 +67,7 @@ class InstagramUploadResult:
 
 
 def _headless() -> bool:
-    return os.getenv("OBSCURA_INSTAGRAM_HEADLESS", "1").strip().lower() not in {"0", "false", "no"}
+    return os.getenv("CLIPHUB_INSTAGRAM_HEADLESS", "1").strip().lower() not in {"0", "false", "no"}
 
 
 def validate_reel_video(video_path: str) -> float:

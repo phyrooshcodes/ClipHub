@@ -1,6 +1,6 @@
 @echo off
 chcp 65001 >nul 2>&1
-title Obscura Clips - Zero-Click AI Video Clipper
+title ClipHub - Zero-Click AI Video Clipper
 color 0B
 cls
 
@@ -209,7 +209,7 @@ if "%UI_CHOICE%"=="3" goto LAUNCH_MOBILE_SERVER
 :LAUNCH_CLASSIC
 echo:
 echo  +==============================================================+
-echo  ^|                 OBSCURA CLIPS IS LIVE!                       ^|
+echo  ^|                 CLIPHUB CLIPS IS LIVE!                       ^|
 echo  ^|                 Classic Web UI Mode                          ^|
 echo  ^|                 Server URL: http://localhost:7842            ^|
 echo  ^|                 Status: Active ^& Listening...                 ^|
@@ -221,14 +221,14 @@ echo:
 :: Free port 7842 if a previous server instance is still running
 for /f "tokens=5" %%a in ('netstat -aon 2^>nul ^| findstr :7842 ^| findstr LISTENING') do taskkill /f /pid %%a >nul 2>&1
 
-set OBSCURA_OPEN_BROWSER=1
+set CLIPHUB_OPEN_BROWSER=1
 python server.py
 goto END_LAUNCH
 
 :LAUNCH_MOBILE_SERVER
 echo:
 echo  +==============================================================+
-echo  ^|         OBSCURA CLIPS - MOBILE ^& WI-FI SERVER MODE           ^|
+echo  ^|         CLIPHUB CLIPS - MOBILE ^& WI-FI SERVER MODE           ^|
 echo  ^|                                                              ^|
 echo  ^|   Status: Active ^& Ready for Phone Connections!               ^|
 echo  ^|   Mobile Access: Connect to your PC IP on port 7842          ^|
@@ -240,7 +240,7 @@ echo:
 :: Free port 7842 if a previous server instance is still running
 for /f "tokens=5" %%a in ('netstat -aon 2^>nul ^| findstr :7842 ^| findstr LISTENING') do taskkill /f /pid %%a >nul 2>&1
 
-set OBSCURA_OPEN_BROWSER=0
+set CLIPHUB_OPEN_BROWSER=0
 python server.py
 goto END_LAUNCH
 
@@ -260,7 +260,7 @@ if /i "%BETA_MODE%"=="B" goto LAUNCH_TAURI_NATIVE
 :LAUNCH_BROWSER
 echo:
 echo  +==============================================================+
-echo  ^|                 OBSCURA CLIPS IS LIVE!                       ^|
+echo  ^|                 CLIPHUB CLIPS IS LIVE!                       ^|
 echo  ^|                 Beta UI - Browser Localhost                  ^|
 echo  ^|                 Server URL: http://localhost:5173            ^|
 echo  ^|                                                              ^|
@@ -271,17 +271,17 @@ echo:
 :: Free port 7842 if a previous server instance is still running
 for /f "tokens=5" %%a in ('netstat -aon 2^>nul ^| findstr :7842 ^| findstr LISTENING') do taskkill /f /pid %%a >nul 2>&1
 
-set OBSCURA_OPEN_BROWSER=0
-start "Obscura Backend" python server.py
+set CLIPHUB_OPEN_BROWSER=0
+start "ClipHub Backend" python server.py
 
-if not exist "obscura-ui\node_modules" (
+if not exist "cliphub-ui\node_modules" (
     echo  [SETUP] Installing frontend dependencies for Beta UI...
-    cd obscura-ui
+    cd cliphub-ui
     call npm install
     cd ..
 )
 
-cd obscura-ui
+cd cliphub-ui
 start "" "http://localhost:5173"
 call npm run dev
 goto END_LAUNCH
@@ -324,24 +324,24 @@ if not errorlevel 1 (
 :TAURI_BUILD_TOOLS_OK
 echo:
 echo  +==============================================================+
-echo  ^|                 OBSCURA CLIPS IS LIVE!                       ^|
+echo  ^|                 CLIPHUB CLIPS IS LIVE!                       ^|
 echo  ^|                 Beta UI - Native Desktop App                 ^|
 echo  ^|                                                              ^|
 echo  ^|   Starting Python Backend and Tauri Desktop App...           ^|
 echo  ^|   Press Ctrl+C in this terminal window to stop.              ^|
 echo  +==============================================================+
 echo:
-set OBSCURA_OPEN_BROWSER=0
-start "Obscura Backend" python server.py
+set CLIPHUB_OPEN_BROWSER=0
+start "ClipHub Backend" python server.py
 
-if not exist "obscura-ui\node_modules" (
+if not exist "cliphub-ui\node_modules" (
     echo  [SETUP] Installing frontend dependencies for Beta UI...
-    cd obscura-ui
+    cd cliphub-ui
     call npm install
     cd ..
 )
 
-cd obscura-ui
+cd cliphub-ui
 call npm run tauri dev
 if errorlevel 1 (
     echo:

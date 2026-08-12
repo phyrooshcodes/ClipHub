@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0"/>
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; font-src 'self' https://fonts.gstatic.com https://cdn.jsdelivr.net;">
-  <title>Obscura | AI Video Engine</title>
+  <title>ClipHub | AI Video Engine</title>
   
   <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -315,8 +315,8 @@
     <i class="ri-instagram-line"></i><span id="upload-status-text">Manual Publish · Upload Center</span>
   </button>
 
-  <!-- Settings Modal -->
-  <div class="modal-backdrop hidden" id="modal-settings">
+  <!-- Settings Drawer -->
+  <div class="modal-backdrop hidden drawer-mode" id="modal-settings">
     <div class="modal">
       <div class="modal-header">
         <h3>Settings & Connections</h3>
@@ -361,6 +361,23 @@
             <option value="tiny">Tiny (fastest)</option>
             <option value="base">Base</option>
             <option value="small" selected>Small (recommended)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Commentary Mode</label>
+          <select id="config-commentary-mode">
+            <option value="off">Off (Standard Clips)</option>
+            <option value="hook_commentary" selected>Hook + Commentary</option>
+            <option value="full_editorial">Full Editorial (Hook+Comm+Takeaway)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Kokoro AI Voice</label>
+          <select id="config-commentary-voice">
+            <option value="af_sarah" selected>Sarah (American Female)</option>
+            <option value="am_adam">Adam (American Male)</option>
+            <option value="bf_emma">Emma (British Female)</option>
+            <option value="bm_george">George (British Male)</option>
           </select>
         </div>
         <div class="form-group">

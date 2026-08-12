@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Obscura Clips Linux launcher.
+# ClipHub Linux launcher.
 # Run this file from any directory: it always starts the server from this folder.
 #
 # Double-click from a file manager? The script detects the missing terminal
@@ -10,7 +10,7 @@ set -u
 
 DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 cd "$DIR" || {
-    echo "[ERROR] Cannot open the Obscura Clips folder: $DIR" >&2
+    echo "[ERROR] Cannot open the ClipHub folder: $DIR" >&2
     exit 1
 }
 
@@ -249,7 +249,7 @@ if [ "$UI_CHOICE" = "1" ]; then
     log "Press Ctrl+C to stop."
     echo
     if command -v fuser >/dev/null 2>&1; then fuser -k 7842/tcp >/dev/null 2>&1 || true; fi
-    export OBSCURA_OPEN_BROWSER=1
+    export CLIPHUB_OPEN_BROWSER=1
     exec "$PYTHON" "$DIR/server.py"
 elif [ "$UI_CHOICE" = "2" ]; then
     log "=============================================================="
@@ -261,10 +261,10 @@ elif [ "$UI_CHOICE" = "2" ]; then
     BETA_MODE=${BETA_MODE:-browser}
 
     if command -v fuser >/dev/null 2>&1; then fuser -k 7842/tcp >/dev/null 2>&1 || true; fi
-    export OBSCURA_OPEN_BROWSER=0
+    export CLIPHUB_OPEN_BROWSER=0
     "$PYTHON" "$DIR/server.py" &
     SERVER_PID=$!
-    cd "$DIR/obscura-ui"
+    cd "$DIR/cliphub-ui"
 
     if [ "$BETA_MODE" = "B" ] || [ "$BETA_MODE" = "b" ]; then
         if ! command -v cargo >/dev/null 2>&1 && [ -f "$HOME/.cargo/bin/cargo" ]; then

@@ -250,8 +250,10 @@ async def run_pipeline_ws(websocket: WebSocket, job_id: str):
             "--outline-color", config.get("outline_color", "#000000"),
         ]
         if config.get("no_title"): cmd += ["--no-title"]
-        if config.get("broll") and config.get("pexels_key", "").strip():
-            cmd += ["--broll", "--pexels-key", config.get("pexels_key").strip()]
+        commentary_mode = config.get("commentary_mode", "hook_commentary")
+        cmd += ["--commentary-mode", commentary_mode]
+        if config.get("commentary_voice"):
+            cmd += ["--commentary-voice", config.get("commentary_voice")]
         if config.get("language", "").strip():
             cmd += ["--language", config.get("language").strip()]
         if config.get("auto_publish"): 

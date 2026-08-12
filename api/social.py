@@ -171,7 +171,7 @@ async def api_tools_generate_products(file: UploadFile = File(...)):
         tmp_path = tmp.name
     try:
         python_exe = sys.executable
-        if BASE_DIR.name == "Obscura-Clips":
+        if BASE_DIR.name == "ClipHub":
             python_exe = str(BASE_DIR / "venv" / "bin" / "python")
             if not Path(python_exe).exists():
                 python_exe = sys.executable

@@ -1,4 +1,4 @@
-"""YouTube publisher module for Obscura Clips."""
+"""YouTube publisher module for ClipHub."""
 
 from modules.publishers.youtube.publisher import (
     post_youtube_video,

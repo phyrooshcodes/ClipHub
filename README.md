@@ -1,6 +1,6 @@
 <div align="center">
 
-  <h1>✦ Obscura Clips ✦</h1>
+  <h1>✦ ClipHub ✦</h1>
   
   <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=600&size=24&pause=1000&color=FF9900&center=true&vCenter=true&width=600&height=60&lines=Zero-Strain+Local-Hybrid+AI+Clipper;GPU-Accelerated+%26+Thermally+Optimized;Powered+by+Rust+%26+NVIDIA+NIM;Fully+Automated+Social+Pipeline" alt="Typing SVG" />
   
@@ -30,8 +30,8 @@ Get the project up and running in minutes with our new Zero-Click launchers!
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/phyrooshcodes/Obscura-Clips.git
-   cd Obscura-Clips
+   git clone https://github.com/phyrooshcodes/ClipHub.git
+   cd ClipHub
    ```
 
 2. **Launch the Engine**
@@ -47,7 +47,7 @@ Get the project up and running in minutes with our new Zero-Click launchers!
 ## 🛠️ Technical Details & Features
 
 ### What It Does
-Obscura Clips takes any long-form video (such as podcasts, interviews, or lectures) and automatically produces viral-ready **9:16 vertical clips** with:
+ClipHub takes any long-form video (such as podcasts, interviews, or lectures) and automatically produces viral-ready **9:16 vertical clips** with:
 
 - 🎙️ **GPU AI Transcription** — `faster-whisper` (runs on CUDA with float16 fallback to CPU INT8)
 - 🧠 **Viral Hook Detection** — Llama 3.3 70B (with Llama 3.1 405B fallback) via NVIDIA NIM cloud API (evaluates transcription chunks, finds standalone viral loops, and outputs **Amazon Product Recommendations**)
@@ -73,7 +73,7 @@ Obscura Clips takes any long-form video (such as podcasts, interviews, or lectur
 <br/>
 
 ### 📱 Automated Social Publishing
-Obscura Clips features an entirely automated publish pipeline for YouTube and Instagram:
+ClipHub features an entirely automated publish pipeline for YouTube and Instagram:
 - **Instagram Reels**: Uses an automated Playwright session tied to your local browser. It manages a persistent local login without needing the Meta Graph API or Business Accounts.
 - **YouTube Shorts**: Automates posting to YouTube via standard uploads or authenticated browser sessions.
 - **Queue System**: Uploads are queued via SQLite. Errors, duplicates, and terminal rejects are handled cleanly in the background while video generation continues unaffected.
@@ -109,7 +109,7 @@ python local_clipping_pipeline.py --input video.mp4 --max-clips 15 --music lofi
 ## 📁 Project Structure
 
 ```text
-Obscura Clips/
+ClipHub/
 ├── run_windows.bat          ← Double click to run the app
 ├── clip_engine_core/        ← Rust Native Acceleration backend
 ├── api/                     ← FastAPI backend routers (Jobs, Social)

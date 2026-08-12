@@ -1,1 +1,1 @@
-# Obscura Clips — Module Package
+# ClipHub — Module Package

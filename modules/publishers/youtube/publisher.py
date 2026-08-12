@@ -46,7 +46,7 @@ def _state_dir() -> Path:
         base = Path(os.getenv("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
     else:
         base = Path.home() / ".local" / "state"
-    directory = base / "obscura-clips" / "youtube"
+    directory = base / "cliphub" / "youtube"
     directory.mkdir(parents=True, exist_ok=True)
     return directory
 
@@ -117,7 +117,7 @@ class YouTubeUploadResult:
 
 
 def _headless() -> bool:
-    return os.getenv("OBSCURA_YOUTUBE_HEADLESS", os.getenv("OBSCURA_HEADLESS", "1")).strip().lower() not in {"0", "false", "no"}
+    return os.getenv("CLIPHUB_YOUTUBE_HEADLESS", os.getenv("CLIPHUB_HEADLESS", "1")).strip().lower() not in {"0", "false", "no"}
 
 
 def validate_youtube_video(video_path: str) -> float:
@@ -417,9 +417,9 @@ def connect_youtube_playwright() -> bool:
                             login_success_count += 1
                             try:
                                 page.evaluate(f"""() => {{
-                                    if (!document.getElementById('obscura-login-banner')) {{
+                                    if (!document.getElementById('cliphub-login-banner')) {{
                                         const div = document.createElement('div');
-                                        div.id = 'obscura-login-banner';
+                                        div.id = 'cliphub-login-banner';
                                         div.innerHTML = '<h2>✅ Connected to {name or "YouTube Channel"}! Saving session...</h2>';
                                         div.style.position = 'fixed'; div.style.top = '10px'; div.style.left = '50%';
                                         div.style.transform = 'translateX(-50%)'; div.style.background = '#4CAF50';

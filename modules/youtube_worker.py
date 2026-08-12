@@ -272,8 +272,8 @@ class YouTubePersistentWorker:
             if "Google Security Verification required" in str(exc) and not getattr(self, "_force_headful", False):
                 logger.info(f"[YouTube Worker] 2FA detected! Relaunching browser in HEADFUL mode to allow manual verification...")
                 self._force_headful = True
-                os.environ["OBSCURA_YOUTUBE_HEADLESS"] = "0"
-                os.environ["OBSCURA_YOUTUBE_WAIT_FOR_2FA"] = "1"
+                os.environ["CLIPHUB_YOUTUBE_HEADLESS"] = "0"
+                os.environ["CLIPHUB_YOUTUBE_WAIT_FOR_2FA"] = "1"
                 self._queue.put(job)
                 raise RuntimeError("RESTART_HEADFUL")
                 

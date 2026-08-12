@@ -1,1 +1,1 @@
-"""Publishers package for Obscura Clips."""
+"""Publishers package for ClipHub."""

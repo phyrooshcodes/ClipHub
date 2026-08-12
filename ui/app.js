@@ -964,6 +964,8 @@ document.addEventListener("DOMContentLoaded", () => {
           async function sendConfig(jobId) {
             const model = document.getElementById('config-model')?.value || 'small';
             const captionStyle = localStorage.getItem('captionStyle') || document.getElementById('config-caption-style')?.value || 'kinetic_slide';
+            const commentaryMode = document.getElementById('config-commentary-mode')?.value || 'hook_commentary';
+            const commentaryVoice = document.getElementById('config-commentary-voice')?.value || 'af_sarah';
             try {
               await fetch(`/config/${jobId}`, {
                 method: 'POST',
@@ -971,7 +973,9 @@ document.addEventListener("DOMContentLoaded", () => {
                 body: JSON.stringify({ 
                    model: model,
                    caption_style: captionStyle,
-                   auto_publish: currentPublishingMode() === 'auto'
+                   auto_publish: currentPublishingMode() === 'auto',
+                   commentary_mode: commentaryMode,
+                   commentary_voice: commentaryVoice
                 })
               });
             } catch(e) {}
@@ -1364,7 +1368,7 @@ document.addEventListener("DOMContentLoaded", () => {
         else {
           const link = document.createElement('a');
           link.href = URL.createObjectURL(new Blob([timeline], {type:'text/plain'}));
-          link.download = `obscura-upload-${uploadId}.log`;
+          link.download = `cliphub-upload-${uploadId}.log`;
           link.click();
           URL.revokeObjectURL(link.href);
         }

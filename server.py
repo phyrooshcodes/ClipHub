@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # ============================================================
-# server.py — Obscura Clips Web UI Server
-# Orchestrator for the Obscura Clips Web UI
+# server.py — ClipHub Web UI Server
+# Orchestrator for the ClipHub Web UI
 # ============================================================
 
 import threading
@@ -36,7 +36,7 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 # ─── FastAPI App ────────────────────────────────────────────
-app = FastAPI(title="Obscura Clips")
+app = FastAPI(title="ClipHub")
 
 @app.on_event("startup")
 async def start_instagram_queue_worker() -> None:
@@ -91,10 +91,10 @@ async def server_info():
 
 if __name__ == "__main__":
     import os
-    if os.environ.get("OBSCURA_OPEN_BROWSER", "1") == "1":
+    if os.environ.get("CLIPHUB_OPEN_BROWSER", "1") == "1":
         threading.Thread(target=_open_browser, daemon=True).start()
     local_ip = get_local_ip()
-    print("\n  ✦ OBSCURA CLIPS — Server Started")
+    print("\n  ✦ CLIPHUB CLIPS — Server Started")
     print(f"  -> Local PC   : http://localhost:7842")
     print(f"  -> Phone/Wi-Fi : http://{local_ip}:7842\n")
     uvicorn.run(app, host="0.0.0.0", port=7842, log_level="warning")
