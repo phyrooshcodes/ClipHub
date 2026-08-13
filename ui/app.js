@@ -28,16 +28,19 @@ document.addEventListener("DOMContentLoaded", () => {
 
   async function refreshSystemBadges() {
     try {
-      const data = await fetch('/api/publisher/health').then(r => r.json());
-      const badgeNvenc = document.getElementById('badge-nvenc');
-      if (badgeNvenc) {
-        badgeNvenc.innerHTML = data.nvenc_available ? '<i class="ri-cpu-line"></i> ⚡ NVENC Active' : '<i class="ri-cpu-line"></i> 🖥 CPU Mode';
-        if (data.nvenc_available) badgeNvenc.classList.add('glow');
-      }
-      const badgeModel = document.getElementById('badge-model');
-      if (badgeModel) {
-        badgeModel.innerHTML = '<i class="ri-brain-line"></i> ' + (data.active_model || 'Local Model');
-      }
+      const data = await fetch('/api/system-status').then(r => r.json());
+      const bGpu = document.getElementById('ui-gpu-status');
+      const bNvenc = document.getElementById('ui-nvenc-status');
+      const bKokoro = document.getElementById('ui-kokoro-status');
+      const bWhisper = document.getElementById('ui-whisper-status');
+      
+      const renderBadge = (txt, isGood) => `${txt} <div class="dot-green" style="${isGood ? '' : 'background:#e2e8f0;box-shadow:none;'}"></div>`;
+      
+      if (bGpu) bGpu.innerHTML = renderBadge(data.gpu, data.gpu !== 'CPU Only' && data.gpu !== 'CPU / Unknown');
+      if (bNvenc) bNvenc.innerHTML = renderBadge(data.nvenc, data.nvenc === 'Ready');
+      if (bKokoro) bKokoro.innerHTML = renderBadge(data.kokoro, data.kokoro === 'Ready');
+      if (bWhisper) bWhisper.innerHTML = renderBadge(data.whisper, data.whisper === 'Ready');
+      
     } catch (e) {
       console.error("Failed to refresh badges", e);
     }
@@ -109,20 +112,92 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
   // Handle Upload Events
-  dropzone.addEventListener('click', () => fileInput.click());
+  let stagedFile = null;
+
+  function updateDropzoneUI() {
+    const title = document.getElementById('dz-title');
+    const sub = document.getElementById('dz-sub');
+    const btnRemove = document.getElementById('btn-remove-file');
+    const btnBrowse = document.querySelector('.btn-browse');
+    
+    if (stagedFile) {
+      title.textContent = "File Ready for Processing";
+      sub.textContent = stagedFile.name;
+      btnRemove.classList.remove('hidden');
+      btnBrowse.classList.add('hidden');
+    } else {
+      title.textContent = "Drop your video here";
+      sub.textContent = "MP4, MOV, MKV — any format works";
+      btnRemove.classList.add('hidden');
+      btnBrowse.classList.remove('hidden');
+    }
+  }
+
+  dropzone.addEventListener('click', (e) => {
+    if (!stagedFile && !e.target.closest('.yt-input-wrapper') && !e.target.closest('#btn-proceed')) {
+      fileInput.click();
+    }
+  });
   dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('dragover'); });
   dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
   dropzone.addEventListener('drop', (e) => {
     e.preventDefault();
     dropzone.classList.remove('dragover');
-    if (e.dataTransfer.files.length) openCaptionStudio(e.dataTransfer.files[0], false, false, false);
+    if (e.dataTransfer.files.length) {
+      stagedFile = e.dataTransfer.files[0];
+      updateDropzoneUI();
+    }
   });
   fileInput.addEventListener('change', (e) => {
-    if (e.target.files.length) openCaptionStudio(e.target.files[0], false, false, false);
+    if (e.target.files.length) {
+      stagedFile = e.target.files[0];
+      updateDropzoneUI();
+    }
   });
-  btnStartYt.addEventListener('click', () => {
-    const url = document.getElementById('youtube-url').value;
-    if (url) openCaptionStudio(url, true, false, false);
+  
+  document.getElementById('btn-remove-file')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    stagedFile = null;
+    fileInput.value = '';
+    updateDropzoneUI();
+  });
+  
+  document.getElementById('btn-proceed')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const ytUrl = document.getElementById('yt-link-input').value.trim();
+    
+    if (stagedFile && ytUrl) {
+      Toast.show("Please choose either a file OR a YouTube link to process, not both!", "error");
+      return;
+    }
+    
+    if (stagedFile) {
+      openCaptionStudio(stagedFile, false, false, false);
+    } else if (ytUrl) {
+      openCaptionStudio(ytUrl, true, false, false);
+    } else {
+      Toast.show("Please select a file or enter a YouTube link first.", "info");
+    }
+  });
+  
+  // Wire up sidebar mockups
+  const sidebarNavs = ['btn-back-home', 'btn-nav-review', 'btn-nav-gallery', 'btn-history', 'btn-nav-studio'];
+  sidebarNavs.forEach(id => {
+    const btn = document.getElementById(id);
+    if (btn) {
+      // Remove any previously attached listeners if possible by replacing clone, but addEventListener is fine
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        
+        // Update active class
+        document.querySelectorAll('.sidebar-nav .nav-item').forEach(el => el.classList.remove('active'));
+        btn.classList.add('active');
+        
+        if (id !== 'btn-nav-studio') {
+          Toast.show("This dedicated view is currently under development.", "info");
+        }
+      });
+    }
   });
 
   // --- Initialization & Resume Logic ---
@@ -782,27 +857,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }, { passive: true });
   });
 
-  // History Interactions
-  btnHistory.addEventListener('click', () => {
-    // Show clip history by default
-    document.getElementById('tab-clip-history').classList.replace('btn-outline', 'btn-primary');
-    document.getElementById('tab-caption-history').classList.replace('btn-primary', 'btn-outline');
-    document.getElementById('history-container').classList.remove('hidden');
-    document.getElementById('caption-history-container').classList.add('hidden');
-    
-    gsap.to([sectionUpload, sectionProcessing, sectionClips], { 
-      opacity: 0, y: -30, duration: 0.4, 
-      onComplete: () => {
-        sectionUpload.classList.add('hidden');
-        sectionProcessing.classList.add('hidden');
-        sectionClips.classList.add('hidden');
-        
-        sectionHistory.classList.remove('hidden');
-        gsap.fromTo(sectionHistory, { y: 30, opacity: 0 }, { y: 0, opacity: 1, duration: 0.6 });
-        renderHistory();
-      }
-    });
-  });
+  // Legacy history interactions removed to prevent JS errors with new UI layout
 
   const tabClip = document.getElementById('tab-clip-history');
   const tabCaption = document.getElementById('tab-caption-history');
@@ -866,14 +921,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  btnBackHome.addEventListener('click', () => {
-    gsap.to(sectionHistory, { y: 30, opacity: 0, duration: 0.4, ease: "power2.inOut", onComplete: () => {
-        sectionHistory.classList.add('hidden');
-        sectionUpload.classList.remove('hidden');
-        gsap.fromTo(sectionUpload, { y: -30, opacity: 0 }, { y: 0, opacity: 1, duration: 0.6, ease: "power3.out" });
-      }
-    });
-  });
+  // Legacy btnBackHome listener removed
 
   // ----------------------------------------------------
   // Core API Logic & WebSockets
@@ -899,13 +947,16 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     if (stepId) {
-      document.querySelectorAll('.step-card').forEach(c => c.classList.remove('active'));
+      document.querySelectorAll('.step').forEach(c => c.classList.remove('active'));
       const card = document.getElementById(stepId);
       if (card) {
         card.classList.remove('hidden');
         card.classList.add('active');
+        const iconContainer = card.querySelector('.step-icon');
+        if (iconContainer) iconContainer.innerHTML = '<i class="ri-loader-4-line spin"></i>';
+        
         // mark previous ones as done based on typical order
-        const steps = Array.from(document.querySelectorAll('.step-card:not(.hidden)'));
+        const steps = Array.from(document.querySelectorAll('.step:not(.hidden)'));
         const idx = steps.indexOf(card);
         if (idx > 0) {
           for(let i=0; i<idx; i++) {
@@ -913,7 +964,8 @@ document.addEventListener("DOMContentLoaded", () => {
              if (!prev.classList.contains('done')) {
                prev.classList.remove('active');
                prev.classList.add('done');
-               prev.querySelector('.step-status').innerHTML = '<i class="ri-check-line"></i>';
+               const pIcon = prev.querySelector('.step-icon');
+               if (pIcon) pIcon.innerHTML = '<i class="ri-check-line"></i>';
              }
           }
         }
@@ -929,6 +981,8 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function appendLog(html) {
+    const empty = document.getElementById('empty-log-state');
+    if (empty) empty.remove();
     const p = document.createElement('p');
     p.innerHTML = html;
     consoleOutput.appendChild(p);
@@ -937,12 +991,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function resetSteps() {
     pipelineClip = { current: 0, total: 0 };
-    document.querySelectorAll('.step-card').forEach(c => {
+    document.querySelectorAll('.step').forEach((c, i) => {
       c.classList.remove('active', 'done');
-      c.querySelector('.step-status').innerHTML = '<i class="ri-loader-4-line spin"></i>';
+      const icon = c.querySelector('.step-icon');
+      if (icon) icon.innerHTML = i + 1;
     });
     document.getElementById('step-download').classList.add('hidden');
-    consoleOutput.innerHTML = '';
+    consoleOutput.innerHTML = '<div id="empty-log-state" style="text-align:center; padding:20px; color:#a0a0aa; font-size:13px;">No activity yet</div>';
   }
 
   async function startProcessing(fileOrUrl, isYoutube=false, isExistingUpload=false) {
@@ -1096,6 +1151,21 @@ document.addEventListener("DOMContentLoaded", () => {
         if (data.raw) {
           appendLog(`<span class="log-info" style="color:var(--text-muted)">[Log]</span> ${data.raw}`);
         }
+      } else if (data.type === 'video_metadata') {
+        if (!data.error) {
+          const trySet = (id, txt) => { const el = document.getElementById(id); if (el) el.innerText = txt; };
+          trySet('footer-fps', `FPS: ${data.fps}`);
+          trySet('footer-format', `Format: ${data.format}`);
+          trySet('footer-audio', `Audio: ${data.audio}`);
+          trySet('footer-dur', `Duration: ${data.duration}`);
+          trySet('footer-path', `Path: ${data.path}`);
+          
+          trySet('ui-res', data.resolution);
+          trySet('ui-dur', data.duration);
+          trySet('ui-fmt', data.format);
+          
+          trySet('proc-job-meta', `Resolution: ${data.resolution} \u00a0\u00a0 Duration: ${data.duration}`);
+        }
       } else if (data.type === 'clip_ready') {
         // Rendering repeats once per generated clip. Advance the last stage
         // so the UI reflects work after the first render begins.
@@ -1132,10 +1202,102 @@ document.addEventListener("DOMContentLoaded", () => {
         // notices show up, which is exactly the info that was missing
         // during long "stuck" stages.
         appendLog(`<span class="log-warning">[Warning]</span> ${data.raw}`);
+      } else if (data.type === 'phase_1_complete') {
+        appendLog(`<span class="log-highlight">[System]</span> Phase 1 complete. Waiting for Human Review...`);
+        showHumanReviewUI(jobId, data.metadata);
       } else if (data.type === 'done') {
-        updateProgress('step-render', "Finished Processing", 100);
-        appendLog(`<span class="log-highlight">[Success]</span> Pipeline completed.`);
-        setTimeout(() => fetchClips(jobId), 1000);
+        if (!data.is_phase_1) {
+          updateProgress('step-render', "Finished Processing", 100);
+          appendLog(`<span class="log-highlight">[Success]</span> Pipeline completed.`);
+          setTimeout(() => fetchClips(jobId), 1000);
+        }
+      }
+    };
+  }
+
+  function showHumanReviewUI(jobId, metadata) {
+    document.getElementById('section-progress').classList.add('hidden');
+    const reviewSection = document.getElementById('section-human-review');
+    reviewSection.classList.remove('hidden');
+    
+    const container = document.getElementById('review-cards-container');
+    container.innerHTML = '';
+    
+    metadata.forEach((clip, idx) => {
+      if (!clip.editorial_data) return;
+      
+      const card = document.createElement('div');
+      card.className = 'review-card';
+      
+      let html = `<div class="rc-header"><span>Clip ${idx + 1}: ${clip.title}</span><div class="rc-actions"><select class="rc-select"><option>Keep</option><option>Discard</option></select></div></div>`;
+      
+      if (clip.editorial_data.hook) {
+        html += `<div style="margin-bottom:12px;">
+          <label style="display:block; margin-bottom:5px; font-weight:600; color:var(--text-purple); font-size:12px;">AI Hook</label>
+          <textarea class="review-hook rc-text" data-idx="${idx}" style="width:100%; height:60px; background:var(--bg-app); border:1px solid var(--border-light); padding:8px; border-radius:4px; font-family:inherit;">${clip.editorial_data.hook.text}</textarea>
+        </div>`;
+      }
+      
+      if (clip.editorial_data.commentary_segments && clip.editorial_data.commentary_segments.length > 0) {
+        html += `<div style="margin-bottom:12px;">
+          <label style="display:block; margin-bottom:5px; font-weight:600; color:var(--text-purple); font-size:12px;">AI Commentary</label>`;
+        clip.editorial_data.commentary_segments.forEach((seg, sIdx) => {
+          html += `<textarea class="review-commentary rc-text" data-idx="${idx}" data-sidx="${sIdx}" style="width:100%; height:60px; margin-bottom:8px; background:var(--bg-app); border:1px solid var(--border-light); padding:8px; border-radius:4px; font-family:inherit;">${seg.text}</textarea>`;
+        });
+        html += `</div>`;
+      }
+      
+      if (clip.editorial_data.takeaway) {
+        html += `<div style="margin-bottom:12px;">
+          <label style="display:block; margin-bottom:5px; font-weight:600; color:var(--text-purple); font-size:12px;">AI Takeaway</label>
+          <textarea class="review-takeaway rc-text" data-idx="${idx}" style="width:100%; height:60px; background:var(--bg-app); border:1px solid var(--border-light); padding:8px; border-radius:4px; font-family:inherit;">${clip.editorial_data.takeaway.text}</textarea>
+        </div>`;
+      }
+      
+      card.innerHTML = html;
+      container.appendChild(card);
+    });
+    
+    document.getElementById('btn-approve-review').onclick = async () => {
+      // Gather updated data
+      document.querySelectorAll('.review-hook').forEach(ta => {
+        const idx = ta.getAttribute('data-idx');
+        metadata[idx].editorial_data.hook.text = ta.value;
+      });
+      document.querySelectorAll('.review-commentary').forEach(ta => {
+        const idx = ta.getAttribute('data-idx');
+        const sIdx = ta.getAttribute('data-sidx');
+        metadata[idx].editorial_data.commentary_segments[sIdx].text = ta.value;
+      });
+      document.querySelectorAll('.review-takeaway').forEach(ta => {
+        const idx = ta.getAttribute('data-idx');
+        metadata[idx].editorial_data.takeaway.text = ta.value;
+      });
+      
+      document.getElementById('btn-approve-review').disabled = true;
+      document.getElementById('btn-approve-review').innerHTML = '<i class="ri-loader-4-line spin"></i> Submitting...';
+      
+      try {
+        const res = await fetch(`/api/submit-review/${jobId}`, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(metadata)
+        });
+        const data = await res.json();
+        if (data.status === 'ok') {
+          reviewSection.classList.add('hidden');
+          document.getElementById('section-progress').classList.remove('hidden');
+          updateProgress('step-render', "Rendering Clips (Phase 2)", 80);
+          connectPipelineWS(jobId);
+        } else {
+          alert("Error: " + data.error);
+          document.getElementById('btn-approve-review').disabled = false;
+          document.getElementById('btn-approve-review').innerHTML = '<i class="ri-check-line"></i> Approve & Render Videos';
+        }
+      } catch (e) {
+        alert("Failed to submit review: " + e.message);
+        document.getElementById('btn-approve-review').disabled = false;
+        document.getElementById('btn-approve-review').innerHTML = '<i class="ri-check-line"></i> Approve & Render Videos';
       }
     };
   }
