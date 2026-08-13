@@ -95,9 +95,12 @@
             <!-- Dropzone Overlay -->
             <div class="dropzone-area" id="dropzone">
               <div class="dropzone-icon-box"></div>
-              <div class="dropzone-title">Drop your video here</div>
-              <div class="dropzone-sub">MP4, MOV, MKV — any format works</div>
-              <button class="btn-browse" onclick="document.getElementById('file-input').click()">Browse Files</button>
+              <div class="dropzone-title" id="dz-title">Drop your video here</div>
+              <div class="dropzone-sub" id="dz-sub">MP4, MOV, MKV — any format works</div>
+              <div class="dz-actions">
+                <button class="btn-browse">Browse Files</button>
+                <button class="btn-remove hidden" id="btn-remove-file">Remove Upload</button>
+              </div>
               
               <div class="yt-input-wrapper">
                 <span class="yt-or">or</span>
@@ -106,6 +109,8 @@
                   <button id="btn-yt-import">Import</button>
                 </div>
               </div>
+              
+              <button class="btn-primary-gradient mt-4" id="btn-proceed" style="width: 100%; margin-top: 15px;">Proceed to Processing</button>
               <input type="file" id="file-input" accept="video/*" hidden>
             </div>
             
@@ -324,6 +329,7 @@
       <button id="btn-mass-post-history"></button>
       <div id="modal-publish"></div>
       
+      <div id="step-download"></div>
       <span id="proc-filename"></span>
     </div>
     
