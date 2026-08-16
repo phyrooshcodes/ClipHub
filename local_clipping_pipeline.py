@@ -22,6 +22,7 @@
 
 import argparse
 import io
+import json
 import logging
 import os
 import sys
@@ -206,6 +207,15 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Queue each completed clip for personal Instagram publishing in the background."
     )
+    parser.add_argument(
+        "--phase",
+        default="all",
+        choices=["1", "2", "all"],
+        help="Pipeline Execution Phase:\n"
+             "  1   -> Run Analysis & AI Generation only (Hooks, Commentary) and exit.\n"
+             "  2   -> Run Rendering only (loads metadata from phase 1).\n"
+             "  all -> Run end-to-end (default)."
+    )
     return parser.parse_args()
 
 
@@ -253,9 +263,9 @@ def preflight_checks(input_video: str) -> None:
     except ImportError:
         missing.append("opencv-python")
     try:
-        import mediapipe
+        import soundfile
     except ImportError:
-        missing.append("mediapipe")
+        missing.append("soundfile")
     try:
         import numpy
     except ImportError:
@@ -293,116 +303,139 @@ def run_pipeline(args: argparse.Namespace) -> None:
 
     total_start = time.time()
 
-    # ─── STAGE 1: Audio Demux ────────────────────────────────
-    logger.info("═══ STAGE 1/6 ─ Audio Demux (CPU) ══════════════════")
-    from modules.audio_demux import extract_audio, get_video_duration
+    if args.phase in ("1", "all"):
+        # ─── STAGE 1: Audio Demux ────────────────────────────────
+        logger.info("═══ STAGE 1/6 ─ Audio Demux (CPU) ══════════════════")
+        from modules.audio_demux import extract_audio, get_video_duration
 
-    audio_path = os.path.join(temp_dir, "audio.wav")
-    extract_audio(input_video, audio_path)
-    video_duration = get_video_duration(input_video)
-    logger.info(f"   Video duration: {video_duration:.1f}s\n")
+        audio_path = os.path.join(temp_dir, "audio.wav")
+        extract_audio(input_video, audio_path)
+        video_duration = get_video_duration(input_video)
+        logger.info(f"   Video duration: {video_duration:.1f}s\n")
+    else:
+        # Phase 2 fallback logic to get duration and audio_path
+        from modules.audio_demux import get_video_duration
+        audio_path = os.path.join(temp_dir, "audio.wav")
+        video_duration = get_video_duration(input_video)
 
-    # ─── STAGE 2: ASR Transcription (Whisper) ─────────────────
-    logger.info("═══ STAGE 2/6 ─ ASR Transcription (🖥 Local GPU/CPU) ═══")
+    # Define cache keys and paths
     import hashlib
-    import json
-    from modules.transcriber import words_to_timed_transcript, transcribe_audio
-    
-    file_stat = os.stat(args.input)
-    hash_str = f"{os.path.abspath(args.input)}_{file_stat.st_size}_{args.language}"
+    file_stat = os.stat(input_video)
+    hash_str = f"{input_video}_{file_stat.st_size}_{args.language}"
     cache_key = hashlib.md5(hash_str.encode()).hexdigest()[:8]
     words_cache_path = os.path.join(temp_dir, f"words_{cache_key}.json")
     
-    if os.path.exists(words_cache_path):
-        logger.info(f"[Transcriber] Found cached transcription: {words_cache_path}")
+    metadata_file = os.path.join(output_dir, "clips_metadata.json")
+    hooks_cache_path = os.path.join(temp_dir, f"hooks_{cache_key}_{args.max_clips}.json")
+    
+    if args.phase in ("1", "all"):
+        # ─── STAGE 2: ASR Transcription (Whisper) ─────────────────
+        logger.info("═══ STAGE 2/6 ─ ASR Transcription (🖥 Local GPU/CPU) ═══")
+        from modules.transcriber import words_to_timed_transcript, transcribe_audio
+        
+        if os.path.exists(words_cache_path):
+            logger.info(f"[Transcriber] Found cached transcription: {words_cache_path}")
+            with open(words_cache_path, "r", encoding="utf-8") as f:
+                words = json.load(f)
+        else:
+            words = transcribe_audio(audio_path, model_size=args.model, language=args.language)
+            with open(words_cache_path, "w", encoding="utf-8") as f:
+                json.dump(words, f, indent=2, ensure_ascii=False)
+                
+        timed_transcript = words_to_timed_transcript(words)
+        transcript_path = os.path.join(temp_dir, "transcript.txt")
+        with open(transcript_path, "w", encoding="utf-8") as f:
+            f.write(timed_transcript)
+        logger.info(f"   Transcript saved → {transcript_path}\n")
+
+        # ─── STAGE 3: Hook Detection (NVIDIA NIM Cloud) ───────────
+        logger.info("═══ STAGE 3/6 ─ Hook Detection (☁ NVIDIA NIM) ══════")
+        from modules.hook_detector import detect_hooks
+
+        if os.path.exists(hooks_cache_path):
+            logger.info(f"[HookDetector] Found cached hooks: {hooks_cache_path}")
+            with open(hooks_cache_path, "r", encoding="utf-8") as f:
+                clips = json.load(f)
+        else:
+            clips = detect_hooks(
+                words=words,
+                video_duration_seconds=video_duration,
+                max_clips=args.max_clips
+            )
+            with open(hooks_cache_path, "w", encoding="utf-8") as f:
+                json.dump(clips, f, indent=2, ensure_ascii=False)
+
+        if not clips:
+            logger.warning("⚠️  No hooks detected. Exiting.")
+            return
+
+        logger.info(f"   {len(clips)} clips queued for rendering.\n")
+
+        # ─── STAGE 3.5: AI Commentary Generation ───────────
+        if getattr(args, "commentary_mode", "off") != "off":
+            logger.info(f"═══ STAGE 3.5/6 ─ AI Commentary ({args.commentary_mode}) ══════")
+            from modules.commentary_generator import generate_commentary
+            
+            for i, clip in enumerate(clips):
+                if "editorial_data" in clip:
+                    continue
+                    
+                start_s = clip["start_ms"] / 1000.0
+                end_s = clip["end_ms"] / 1000.0
+                
+                clip_words = [w for w in words if start_s <= w["start"] <= end_s]
+                clip_transcript = " ".join([w["word"].strip() for w in clip_words])
+                
+                ctx_start = max(0, start_s - 30.0)
+                ctx_end = min(video_duration, end_s + 30.0)
+                ctx_words = [w for w in words if ctx_start <= w["start"] <= ctx_end]
+                surrounding_context = " ".join([w["word"].strip() for w in ctx_words])
+                
+                logger.info(f"   Generating commentary for clip {i+1}...")
+                editorial_data = generate_commentary(
+                    clip_transcript=clip_transcript,
+                    surrounding_context=surrounding_context,
+                    topic=clip.get("title", "Unknown")
+                )
+                
+                # Enforce modes
+                if args.commentary_mode == "hook_only":
+                    editorial_data["commentary_segments"] = []
+                    editorial_data["takeaway"] = None
+                elif args.commentary_mode == "hook_commentary":
+                    editorial_data["takeaway"] = None
+                    
+                clip["editorial_data"] = editorial_data
+                
+            with open(hooks_cache_path, "w", encoding="utf-8") as f:
+                json.dump(clips, f, indent=2, ensure_ascii=False)
+
+        # Save metadata JSON file
+        try:
+            with open(metadata_file, "w", encoding="utf-8") as f:
+                json.dump(clips, f, indent=2, ensure_ascii=False)
+            logger.info(f"   Saved clips metadata -> {metadata_file}")
+        except Exception as e:
+            logger.warning(f"   Failed to save clips metadata: {e}")
+
+        if args.phase == "1":
+            logger.info("\n[Phase 1] Analysis and AI Generation complete. Exiting cleanly.")
+            return
+    else:
+        # Phase 2 -> Load required state from disk
+        logger.info(f"═══ STAGE 4-6 ─ Loading Phase 1 Data ({metadata_file}) ══════")
+        if not os.path.exists(metadata_file):
+            logger.error(f"❌ Cannot start Phase 2: Metadata file not found ({metadata_file})")
+            sys.exit(1)
+        if not os.path.exists(words_cache_path):
+            logger.error(f"❌ Cannot start Phase 2: Words cache not found ({words_cache_path})")
+            sys.exit(1)
+            
         with open(words_cache_path, "r", encoding="utf-8") as f:
             words = json.load(f)
-    else:
-        words = transcribe_audio(audio_path, model_size=args.model, language=args.language)
-        # Cache for subsequent runs
-        with open(words_cache_path, "w", encoding="utf-8") as f:
-            json.dump(words, f, indent=2, ensure_ascii=False)
-            
-    timed_transcript = words_to_timed_transcript(words)
-
-    # Save transcript for debugging
-    transcript_path = os.path.join(temp_dir, "transcript.txt")
-    with open(transcript_path, "w", encoding="utf-8") as f:
-        f.write(timed_transcript)
-    logger.info(f"   Transcript saved → {transcript_path}\n")
-
-    # ─── STAGE 3: Hook Detection (NVIDIA NIM Cloud) ───────────
-    logger.info("═══ STAGE 3/6 ─ Hook Detection (☁ NVIDIA NIM) ══════")
-    from modules.hook_detector import detect_hooks
-
-    hooks_cache_path = os.path.join(temp_dir, f"hooks_{cache_key}_{args.max_clips}.json")
-    if os.path.exists(hooks_cache_path):
-        logger.info(f"[HookDetector] Found cached hooks: {hooks_cache_path}")
-        with open(hooks_cache_path, "r", encoding="utf-8") as f:
+        with open(metadata_file, "r", encoding="utf-8") as f:
             clips = json.load(f)
-    else:
-        clips = detect_hooks(
-            words=words,
-            video_duration_seconds=video_duration,
-            max_clips=args.max_clips
-        )
-        with open(hooks_cache_path, "w", encoding="utf-8") as f:
-            json.dump(clips, f, indent=2, ensure_ascii=False)
-
-    if not clips:
-        logger.warning("⚠️  No hooks detected. Exiting.")
-        return
-
-    logger.info(f"   {len(clips)} clips queued for rendering.\n")
-
-    # ─── STAGE 3.5: AI Commentary Generation ───────────
-    if getattr(args, "commentary_mode", "off") != "off":
-        logger.info(f"═══ STAGE 3.5/6 ─ AI Commentary ({args.commentary_mode}) ══════")
-        from modules.commentary_generator import generate_commentary
-        
-        for i, clip in enumerate(clips):
-            if "editorial_data" in clip:
-                continue
-                
-            start_s = clip["start_ms"] / 1000.0
-            end_s = clip["end_ms"] / 1000.0
             
-            clip_words = [w for w in words if start_s <= w["start"] <= end_s]
-            clip_transcript = " ".join([w["word"].strip() for w in clip_words])
-            
-            ctx_start = max(0, start_s - 30.0)
-            ctx_end = min(video_duration, end_s + 30.0)
-            ctx_words = [w for w in words if ctx_start <= w["start"] <= ctx_end]
-            surrounding_context = " ".join([w["word"].strip() for w in ctx_words])
-            
-            logger.info(f"   Generating commentary for clip {i+1}...")
-            editorial_data = generate_commentary(
-                clip_transcript=clip_transcript,
-                surrounding_context=surrounding_context,
-                topic=clip.get("title", "Unknown")
-            )
-            
-            # Enforce modes
-            if args.commentary_mode == "hook_only":
-                editorial_data["commentary_segments"] = []
-                editorial_data["takeaway"] = None
-            elif args.commentary_mode == "hook_commentary":
-                editorial_data["takeaway"] = None
-                
-            clip["editorial_data"] = editorial_data
-            
-        # Update cache
-        with open(hooks_cache_path, "w", encoding="utf-8") as f:
-            json.dump(clips, f, indent=2, ensure_ascii=False)
-
-    # Save clips metadata to a JSON file for the Web UI/server to read
-    metadata_file = os.path.join(output_dir, "clips_metadata.json")
-    try:
-        with open(metadata_file, "w", encoding="utf-8") as f:
-            json.dump(clips, f, indent=2, ensure_ascii=False)
-        logger.info(f"   Saved clips metadata -> {metadata_file}")
-    except Exception as e:
-        logger.warning(f"   Failed to save clips metadata: {e}")
     # ─── STAGES 4-6: Per-Clip Processing ─────────────────────
     from modules.face_tracker   import compute_crop_coords
     from modules.subtitle_engine import generate_ass_subtitles
@@ -451,7 +484,7 @@ def run_pipeline(args: argparse.Namespace) -> None:
         sub_path      = os.path.join(temp_dir, f"subtitles_{clip_num:02d}.ass")
         clip_words = [
             word for word in words
-            if word["start"] >= start_ms / 1000.0 and word["end"] <= end_ms / 1000.0
+            if word["end"] > start_ms / 1000.0 and word["start"] < end_ms / 1000.0
         ]
 
         # ─── Stage 4: Face Tracking ──────────────────────────
@@ -537,7 +570,6 @@ def run_pipeline(args: argparse.Namespace) -> None:
         if args.auto_publish:
             try:
                 import urllib.request
-                import json
                 
                 caption = clip.get("social_caption") or clip.get("caption") or title
                 job_id_val = os.path.basename(os.path.normpath(args.output_dir))
@@ -551,8 +583,9 @@ def run_pipeline(args: argparse.Namespace) -> None:
                     "platforms": ["instagram", "youtube"],
                     "allow_duplicate": True
                 }
+                server_base = os.environ.get("CLIPHUB_SERVER_URL", "http://127.0.0.1:7842").rstrip("/")
                 req = urllib.request.Request(
-                    "http://127.0.0.1:7842/api/social/post",
+                    f"{server_base}/api/social/post",
                     data=json.dumps(req_data).encode("utf-8"),
                     headers={"Content-Type": "application/json"}
                 )

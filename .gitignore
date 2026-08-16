@@ -37,11 +37,57 @@ Cargo.lock
 *.mp4
 *.mp3
 *.ass
+# Virtual Environment
+venv/
+env/
+ENV/
+
+# Sensitive & Secret Files
+.env
+credentials/
+!.credentials/README.md
+*.pkl
+*.json
+!clips_metadata.json
+!package.json
+!tsconfig.json
+!tauri.conf.json
+!obscura-ui/**/*.json
+
+# Application State & Browser Profiles
+.state/
+
+# Caches & Temporary Directories
+__pycache__/
+*.pyc
+broll_cache/
+temp/
+scratch/
+output/
+bin/
+.agents/
+.claude/
+
+# Rust / Build
+target/
+Cargo.lock
+
+# Temporary Media & Test Files
+*.mp4
+*.mp3
+*.ass
 *.wav
 audit_plan.md
 obscura_engineering_audit.md
 ui_modal_fix_plan.md
 walkthrough.md
+
+# Large Model Weights
+models/
+*.onnx
+*.bin
+modules/*.onnx
+modules/*.xml
 
 # Operating System Files
 .DS_Store

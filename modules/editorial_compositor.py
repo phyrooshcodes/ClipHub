@@ -4,7 +4,7 @@ import logging
 from pathlib import Path
 from typing import List, Dict, Any, Tuple
 import asyncio
-from modules.kokoro_tts import generate_tts
+from modules.kokoro_tts import generate_tts_sync, generate_tts
 from modules.transcriber import transcribe_audio
 
 logger = logging.getLogger(__name__)
@@ -42,8 +42,8 @@ def align_editorial_timeline(
         safe_text = "".join(c if c.isalnum() else "_" for c in text[:20])
         audio_path = os.path.join(temp_dir, f"{seg_type}_{clip['start_ms']}_{safe_text}.wav")
         
-        # Generate TTS
-        duration = asyncio.run(generate_tts(text, voice_id, audio_path))
+        # Generate TTS synchronously without event loop conflicts
+        duration = generate_tts_sync(text, voice_id, audio_path)
         if duration <= 0:
             return start_time_rel
             
@@ -69,8 +69,10 @@ def align_editorial_timeline(
 
     # 1. Hook (Starts at 0.0)
     current_time = 0.0
-    if editorial_data.get("hook"):
-        process_segment(editorial_data["hook"], current_time, "hook")
+    hook_val = editorial_data.get("hook")
+    hook_text = hook_val.get("text", "") if isinstance(hook_val, dict) else (hook_val or "")
+    if isinstance(hook_text, str) and hook_text.strip():
+        process_segment(hook_text.strip(), current_time, "hook")
 
     # 2. Commentary Segments
     # Find insertion points based on source words
@@ -98,12 +100,12 @@ def align_editorial_timeline(
             process_segment(seg.get("text", ""), insert_time, "commentary")
             
     # 3. Takeaway (Aligned to end of clip)
-    if editorial_data.get("takeaway"):
-        # We need to know duration first, so generate TTS, then set start time
-        text = editorial_data["takeaway"]
+    takeaway_val = editorial_data.get("takeaway")
+    takeaway_text = takeaway_val.get("text", "") if isinstance(takeaway_val, dict) else (takeaway_val or "")
+    if isinstance(takeaway_text, str) and takeaway_text.strip():
+        text = takeaway_text.strip()
         safe_text = "".join(c if c.isalnum() else "_" for c in text[:20])
-        audio_path = os.path.join(temp_dir, f"takeaway_{clip['start_ms']}_{safe_text}.wav")
-        duration = asyncio.run(generate_tts(text, voice_id, audio_path))
+        duration = generate_tts_sync(text, voice_id, audio_path)
         
         if duration > 0:
             insert_time = max(0.0, clip_duration - duration)

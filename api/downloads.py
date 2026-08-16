@@ -17,6 +17,7 @@ OUTPUT_DIR = BASE_DIR / "output"
 
 @router.post("/prepare-download")
 async def prepare_download():
+    _clean_old_downloads()
     job_id = str(uuid.uuid4())[:8]
     return {"job_id": job_id}
 
@@ -30,8 +31,19 @@ class DownloadJob:
         self.events = []
         self.done = False
         self.task = None
+        self.created_at = time.time()
 
 active_downloads: Dict[str, DownloadJob] = {}
+
+def _clean_old_downloads():
+    now = time.time()
+    # Remove jobs older than 1 hour or evict oldest when size > 40
+    stale_keys = [k for k, job in active_downloads.items() if (now - getattr(job, "created_at", now)) > 3600 and job.done]
+    for k in stale_keys:
+        active_downloads.pop(k, None)
+    if len(active_downloads) > 40:
+        for k in list(active_downloads.keys())[:20]:
+            active_downloads.pop(k, None)
 
 def _get_cookies_args():
     home = Path.home()
@@ -69,7 +81,7 @@ async def _run_ytdl(job: DownloadJob, python_exe: str, save_path: str):
         cmd.extend([
             "--remote-components", "ejs:github",
             "--js-runtimes", "node",
-            "--format", "bestvideo[ext=mp4][height<=1080]+bestaudio[ext=m4a]/best[ext=mp4]/best",
+            "--format", "bestvideo[height<=1080]+bestaudio/best[height<=1080]/best",
             "--merge-output-format", "mp4",
             "--output", save_path,
             "--newline", "--no-playlist", "--no-part", "--", job.url
@@ -165,6 +177,7 @@ async def download_url_ws(websocket: WebSocket, job_id: str, url: str = ""):
         try: await websocket.send_json({"type": "error", "message": str(e)})
         except: pass
     finally:
+        _clean_old_downloads()
         try: await websocket.close()
         except: pass
 

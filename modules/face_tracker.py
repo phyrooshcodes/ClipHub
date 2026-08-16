@@ -130,8 +130,8 @@ def compute_crop_coords(
     if crop_w % 2 != 0: crop_w += 1
     if crop_w > src_w:
         crop_w = src_w
-        crop_h = int(src_w * (16.0 / 9.0))
-        if crop_h % 2 != 0: crop_h += 1
+        crop_h = min(src_h, int(src_w * (16.0 / 9.0)))
+        if crop_h % 2 != 0: crop_h -= 1
 
     logger.info(
         f"[FaceTracker] Source: {src_w}x{src_h} | "
@@ -140,8 +140,12 @@ def compute_crop_coords(
 
     start_s = start_ms / 1000.0
     end_s = end_ms / 1000.0
-    seek_ts = int(start_s / video_stream.time_base)
-    container.seek(seek_ts, stream=video_stream)
+    tb = video_stream.time_base or (1.0 / fps)
+    seek_ts = int(start_s / tb)
+    try:
+        container.seek(seek_ts, stream=video_stream)
+    except Exception:
+        pass
 
     sampled_frames = []
     sampled_xs = []
@@ -152,38 +156,44 @@ def compute_crop_coords(
     # Default center fallback
     last_face_x = src_w / 2.0
 
+    sample_step = max(1, int(sample_every_n_frames))
+    frame_idx = 0
+
     if yunet:
         yunet.setInputSize((src_w, src_h))
 
     for frame in container.decode(video=0):
         t = frame.time
-        if t < start_s:
-            continue
-        if t > end_s:
-            break
+        if t is not None:
+            if t < start_s:
+                continue
+            if t > end_s:
+                break
 
-        img = frame.to_ndarray(format="bgr24")
-        
-        if yunet:
-            _, faces = yunet.detect(img)
-            if faces is not None and len(faces) > 0:
-                face_detected = True
-                # Sort by confidence / area
-                faces = sorted(faces, key=lambda f: f[2] * f[3], reverse=True)
-                fx, fy, fw, fh = faces[0][:4]
-                last_face_x = fx + (fw / 2.0)
-        else:
-            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-            faces = cascade.detectMultiScale(gray, scaleFactor=1.15, minNeighbors=4, minSize=(50, 50))
-            if len(faces) > 0:
-                face_detected = True
-                faces = sorted(faces, key=lambda f: f[2] * f[3], reverse=True)
-                fx, fy, fw, fh = faces[0]
-                last_face_x = fx + (fw / 2.0)
+        # Only run DNN face detection on sampled frames for performance
+        if frame_idx % sample_step == 0:
+            img = frame.to_ndarray(format="bgr24")
+            if yunet:
+                _, faces = yunet.detect(img)
+                if faces is not None and len(faces) > 0:
+                    face_detected = True
+                    # Sort by area (largest face)
+                    faces = sorted(faces, key=lambda f: f[2] * f[3], reverse=True)
+                    fx, fy, fw, fh = faces[0][:4]
+                    last_face_x = fx + (fw / 2.0)
+            else:
+                gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+                faces = cascade.detectMultiScale(gray, scaleFactor=1.15, minNeighbors=4, minSize=(50, 50))
+                if len(faces) > 0:
+                    face_detected = True
+                    faces = sorted(faces, key=lambda f: f[2] * f[3], reverse=True)
+                    fx, fy, fw, fh = faces[0]
+                    last_face_x = fx + (fw / 2.0)
 
         sampled_frames.append(frames_read)
         sampled_xs.append(last_face_x)
         frames_read += 1
+        frame_idx += 1
 
     container.close()
 
@@ -219,7 +229,7 @@ def compute_crop_coords(
 
     logger.info(
         f"[FaceTracker] ✅ Face detected: {face_detected} | "
-        f"Generated {len(dynamic_crop_x)} dynamic crop positions (1-Euro Filter smooth)."
+        f"Generated {len(dynamic_crop_x)} dynamic crop positions (1-Euro Filter smooth, sample_step={sample_step})."
     )
 
     return {
@@ -232,123 +242,3 @@ def compute_crop_coords(
         "src_h":         src_h,
         "face_detected": face_detected
     }
-
-
-class KalmanCropSmoother:
-    """
-    1D constant-velocity Kalman filter for face-position smoothing.
-
-    State vector:  x = [position, velocity]  (2×1)
-    Observation:   z = [position]             (1×1, measures position only)
-
-    Matrices
-    --------
-    F  (2×2) — state transition (assumes dt = 1 frame)
-    H  (1×2) — observation model
-    Q  (2×2) — process noise covariance
-    R  (1×1) — measurement noise covariance
-    P  (2×2) — state error covariance (initialised to R on diagonal)
-    K  (2×1) — Kalman gain (computed each step)
-    """
-
-    def __init__(
-        self,
-        process_noise_q: float = 1.0,
-        measurement_noise_r: float = 50.0,
-    ) -> None:
-        self.q = float(process_noise_q)
-        self.r = float(measurement_noise_r)
-
-        dt: float = 1.0
-
-        # State-transition matrix  F
-        self.F: np.ndarray = np.array([[1.0, dt],
-                                        [0.0, 1.0]])
-
-        # Observation matrix  H  (we only measure position)
-        self.H: np.ndarray = np.array([[1.0, 0.0]])
-
-        # Process-noise covariance  Q
-        self.Q: np.ndarray = self.q * np.array([
-            [dt ** 4 / 4.0, dt ** 3 / 2.0],
-            [dt ** 3 / 2.0, dt ** 2],
-        ])
-
-        # Measurement-noise covariance  R
-        self.R: np.ndarray = np.array([[self.r]])
-
-    def smooth(self, measurements: List[float]) -> List[float]:
-        """
-        Run the Kalman filter forward pass over *measurements* and return
-        a list of smoothed position estimates (one per measurement).
-
-        Args:
-            measurements: Raw face-center X positions (pixels), one per
-                          sampled frame.
-
-        Returns:
-            List of filtered position values, same length as *measurements*.
-        """
-        if not measurements:
-            return []
-
-        # Initialise state from the first observation
-        x: np.ndarray = np.array([[measurements[0]],
-                                    [0.0]])          # [position, velocity]
-        P: np.ndarray = np.array([[self.r, 0.0],
-                                    [0.0,   self.r]])  # initial covariance
-
-        smoothed: List[float] = []
-
-        for z_val in measurements:
-            # ── Predict ──────────────────────────────────────────
-            x_pred: np.ndarray = self.F @ x
-            P_pred: np.ndarray = self.F @ P @ self.F.T + self.Q
-
-            # ── Update ───────────────────────────────────────────
-            z: np.ndarray = np.array([[z_val]])
-            S: np.ndarray = self.H @ P_pred @ self.H.T + self.R   # innovation covariance
-            K: np.ndarray = P_pred @ self.H.T @ np.linalg.inv(S)  # Kalman gain  (2×1)
-
-            y: np.ndarray = z - self.H @ x_pred                   # innovation
-            x = x_pred + K @ y
-            P = (np.eye(2) - K @ self.H) @ P_pred
-
-            smoothed.append(float(x[0, 0]))  # record filtered position
-
-        return smoothed
-
-
-def _calculate_smooth_crop_x(
-    face_x_positions: List[float],
-    crop_w: int,
-    src_w: int,
-    smoothing_window: int
-) -> int:
-    """
-    Calculate the optimal crop X offset based on collected face positions.
-
-    Uses a Kalman filter for smooth, stable crop placement.
-    Falls back to center crop if no faces were detected.
-
-    Args:
-        face_x_positions: List of face center X coordinates (pixels).
-        crop_w:           Width of the 9:16 crop box.
-        src_w:            Source video width.
-        smoothing_window: Retained for API compatibility (unused by Kalman).
-
-    Returns:
-        Integer X offset (left edge of crop box).
-    """
-    if not face_x_positions:
-        # No face detected → center crop fallback
-        logger.warning("[FaceTracker] No face detected — defaulting to center crop.")
-        return max(0, (src_w - crop_w) // 2)
-
-    # Apply the 1-D Kalman filter and take the median of the smoothed series.
-    # The median is robust against transient detection outliers.
-    smoothed = KalmanCropSmoother().smooth(face_x_positions)
-    avg_face_x = float(np.median(smoothed))
-
-    crop_x = int(avg_face_x - crop_w / 2)
-    return max(0, min(crop_x, src_w - crop_w))

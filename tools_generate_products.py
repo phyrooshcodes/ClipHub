@@ -1,31 +1,44 @@
 import sys
 import json
 import os
+import re
 import subprocess
 from pathlib import Path
 from openai import OpenAI
-from faster_whisper import WhisperModel
+
+BASE_DIR = Path(__file__).parent.resolve()
+if str(BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(BASE_DIR))
 
 def extract_audio(video_path, audio_path):
     cmd = [
-        "ffmpeg", "-y", "-i", video_path,
+        "ffmpeg", "-y", "-i", str(video_path),
         "-vn", "-acodec", "pcm_s16le", "-ar", "16000", "-ac", "1",
-        audio_path
+        str(audio_path)
     ]
-    subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
 
-def transcribe(audio_path):
-    model = WhisperModel("base", device="cpu", compute_type="int8")
-    segments, info = model.transcribe(audio_path, beam_size=5)
-    text = ""
-    for segment in segments:
-        text += segment.text + " "
-    return text.strip()
+def transcribe(audio_path, model_size="base"):
+    from modules.transcriber import transcribe_audio, words_to_full_text
+    words = transcribe_audio(audio_path, model_size=model_size)
+    return words_to_full_text(words)
 
 def generate_products(transcript):
+    from dotenv import load_dotenv
+    load_dotenv()
+    
+    api_key = os.environ.get("NVIDIA_API_KEY", "").strip()
+    base_url = os.environ.get("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1")
+    model = os.environ.get("NVIDIA_MODEL", "meta/llama-3.3-70b-instruct")
+
+    if not api_key:
+        base_url = "http://localhost:1234/v1"
+        api_key = "lm-studio"
+        model = "qwen2.5-14b-instruct"
+
     client = OpenAI(
-        base_url="http://localhost:1234/v1",
-        api_key="lm-studio"
+        base_url=base_url,
+        api_key=api_key
     )
     
     prompt = f"""You are an affiliate marketing expert and product researcher.
@@ -60,7 +73,7 @@ Transcript:
 """
     try:
         response = client.chat.completions.create(
-            model="qwen2.5-14b-instruct",
+            model=model,
             messages=[
                 {"role": "system", "content": "You are a product suggestion expert. Always reply with raw JSON."},
                 {"role": "user", "content": prompt}
@@ -69,21 +82,23 @@ Transcript:
             max_tokens=500,
         )
         content = response.choices[0].message.content.strip()
-        if content.startswith("```json"):
-            content = content[7:-3].strip()
-        elif content.startswith("```"):
-            content = content[3:-3].strip()
-        return json.loads(content)
+        cleaned = re.sub(r"```(?:json)?", "", content).strip().strip("`").strip()
+        return json.loads(cleaned)
     except Exception as e:
         return {"products": [], "error": str(e)}
 
 if __name__ == "__main__":
+    if len(sys.argv) < 2:
+        print(json.dumps({"error": "Usage: tools_generate_products.py <video_path> [model_size]"}))
+        sys.exit(1)
+
     video_path = sys.argv[1]
+    model_size = sys.argv[2] if len(sys.argv) > 2 else "base"
     audio_path = video_path + ".wav"
     
     try:
         extract_audio(video_path, audio_path)
-        transcript = transcribe(audio_path)
+        transcript = transcribe(audio_path, model_size=model_size)
         if not transcript:
             print(json.dumps({"error": "No speech detected in video."}))
             sys.exit(0)
@@ -95,4 +110,7 @@ if __name__ == "__main__":
         print(json.dumps({"error": str(e)}))
     finally:
         if os.path.exists(audio_path):
-            os.remove(audio_path)
+            try:
+                os.remove(audio_path)
+            except Exception:
+                pass

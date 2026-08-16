@@ -151,12 +151,38 @@ def validate_youtube_video(video_path: str) -> float:
     return duration
 
 
+def _get_platform_user_agent() -> str:
+    if os.name == "nt":
+        return "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+    elif sys.platform == "darwin":
+        return "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+    return "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+
+
 def _find_system_chrome() -> Optional[str]:
     """Find installed system Google Chrome binary to bypass automation detection."""
-    for binary in ("google-chrome-stable", "google-chrome", "chromium-browser", "chromium"):
+    for binary in ("google-chrome-stable", "google-chrome", "chromium-browser", "chromium", "chrome"):
         path = shutil.which(binary)
         if path:
             return path
+            
+    if os.name == "nt":
+        candidates = [
+            Path(os.environ.get("PROGRAMFILES", "C:\\Program Files")) / "Google" / "Chrome" / "Application" / "chrome.exe",
+            Path(os.environ.get("PROGRAMFILES(X86)", "C:\\Program Files (x86)")) / "Google" / "Chrome" / "Application" / "chrome.exe",
+            Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local")) / "Google" / "Chrome" / "Application" / "chrome.exe",
+            Path(os.environ.get("PROGRAMFILES", "C:\\Program Files")) / "BraveSoftware" / "Brave-Browser" / "Application" / "brave.exe",
+            Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local")) / "BraveSoftware" / "Brave-Browser" / "Application" / "brave.exe",
+        ]
+        for c in candidates:
+            if c.is_file():
+                return str(c)
+                
+    if sys.platform == "darwin":
+        mac_chrome = Path("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
+        if mac_chrome.is_file():
+            return str(mac_chrome)
+
     return None
 
 
@@ -182,6 +208,7 @@ def _launch_persistent_context(playwright, user_data_dir: str, headless: bool, v
         except Exception:
             pass
 
+    user_agent_str = _get_platform_user_agent()
     system_chrome = _find_system_chrome()
     if system_chrome:
         if cdp_port is None:
@@ -198,7 +225,7 @@ def _launch_persistent_context(playwright, user_data_dir: str, headless: bool, v
             "--disable-blink-features=AutomationControlled",
             "--disable-infobars",
             "--window-size=1440,1000",
-            "--user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+            f"--user-agent={user_agent_str}",
             "about:blank",
         ]
         if headless:
@@ -210,12 +237,14 @@ def _launch_persistent_context(playwright, user_data_dir: str, headless: bool, v
             browser = playwright.chromium.connect_over_cdp(f"http://localhost:{port}")
             context = browser.contexts[0] if browser.contexts else browser.new_context(viewport=viewport)
             return context, proc
-        except Exception as cdp_err:
-            logger.warning("[YouTube] CDP connect failed (%s); falling back to native launch...", cdp_err)
-            if proc.poll() is None:
+        except Exception as e:
+            logger.warning(f"[YouTube] CDP connect failed on port {port}: {e}, falling back to standard launch...")
+            try:
                 proc.terminate()
+            except Exception:
+                pass
 
-    # Native Playwright persistent context (no CDP, no port conflicts)
+    # Fallback to standard launch
     kwargs = {
         "user_data_dir": user_data_dir,
         "headless": headless,
@@ -227,7 +256,7 @@ def _launch_persistent_context(playwright, user_data_dir: str, headless: bool, v
             "--disable-infobars",
             "--disable-dev-shm-usage",
         ],
-        "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+        "user_agent": user_agent_str,
     }
     if system_chrome:
         kwargs["executable_path"] = system_chrome

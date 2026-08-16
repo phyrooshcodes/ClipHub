@@ -180,24 +180,94 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
   
-  // Wire up sidebar mockups
-  const sidebarNavs = ['btn-back-home', 'btn-nav-review', 'btn-nav-gallery', 'btn-history', 'btn-nav-studio'];
-  sidebarNavs.forEach(id => {
-    const btn = document.getElementById(id);
-    if (btn) {
-      // Remove any previously attached listeners if possible by replacing clone, but addEventListener is fine
-      btn.addEventListener('click', (e) => {
-        e.preventDefault();
-        
-        // Update active class
-        document.querySelectorAll('.sidebar-nav .nav-item').forEach(el => el.classList.remove('active'));
-        btn.classList.add('active');
-        
-        if (id !== 'btn-nav-studio') {
-          Toast.show("This dedicated view is currently under development.", "info");
-        }
-      });
+  // YouTube link import button
+  document.getElementById('btn-yt-import')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const ytUrl = document.getElementById('yt-link-input')?.value.trim();
+    if (!ytUrl) {
+      Toast.show("Please paste a valid YouTube URL first.", "info");
+      return;
     }
+    openCaptionStudio(ytUrl, true, false, false);
+  });
+  
+  document.getElementById('yt-link-input')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      document.getElementById('btn-yt-import')?.click();
+    }
+  });
+
+  // Wire up sidebar navigation and modals
+  document.getElementById('btn-nav-studio')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    document.querySelectorAll('.sidebar-nav .nav-item').forEach(el => el.classList.remove('active'));
+    document.getElementById('btn-nav-studio')?.classList.add('active');
+    document.getElementById('modal-gallery')?.classList.add('hidden');
+    document.getElementById('modal-history')?.classList.add('hidden');
+  });
+
+  document.getElementById('btn-back-home')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    document.querySelectorAll('.sidebar-nav .nav-item').forEach(el => el.classList.remove('active'));
+    document.getElementById('btn-nav-studio')?.classList.add('active');
+    document.getElementById('modal-gallery')?.classList.add('hidden');
+    document.getElementById('modal-history')?.classList.add('hidden');
+    document.getElementById('dropzone')?.scrollIntoView({ behavior: 'smooth' });
+  });
+
+  document.getElementById('btn-nav-review')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    document.querySelectorAll('.sidebar-nav .nav-item').forEach(el => el.classList.remove('active'));
+    document.getElementById('btn-nav-review')?.classList.add('active');
+    document.getElementById('section-human-review')?.scrollIntoView({ behavior: 'smooth' });
+  });
+
+  document.getElementById('btn-nav-gallery')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    document.querySelectorAll('.sidebar-nav .nav-item').forEach(el => el.classList.remove('active'));
+    document.getElementById('btn-nav-gallery')?.classList.add('active');
+    const modal = document.getElementById('modal-gallery');
+    if (modal) {
+      modal.classList.remove('hidden');
+      if (currentJobId) fetchClips(currentJobId);
+      else fetchHistory();
+    }
+  });
+
+  document.getElementById('btn-back-from-clips')?.addEventListener('click', () => {
+    document.getElementById('modal-gallery')?.classList.add('hidden');
+    document.getElementById('btn-nav-studio')?.classList.add('active');
+    document.getElementById('btn-nav-gallery')?.classList.remove('active');
+  });
+
+  document.getElementById('btn-history')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    document.querySelectorAll('.sidebar-nav .nav-item').forEach(el => el.classList.remove('active'));
+    document.getElementById('btn-history')?.classList.add('active');
+    const modal = document.getElementById('modal-history');
+    if (modal) {
+      modal.classList.remove('hidden');
+      fetchHistory();
+    }
+  });
+
+  document.getElementById('btn-close-history')?.addEventListener('click', () => {
+    document.getElementById('modal-history')?.classList.add('hidden');
+    document.getElementById('btn-nav-studio')?.classList.add('active');
+    document.getElementById('btn-history')?.classList.remove('active');
+  });
+
+  document.getElementById('btn-settings')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    document.getElementById('modal-settings')?.classList.remove('hidden');
+    refreshNvidiaKeyStatus();
+    refreshSocialStatus();
+  });
+
+  document.getElementById('btn-close-settings')?.addEventListener('click', () => {
+    document.getElementById('modal-settings')?.classList.add('hidden');
   });
 
   // --- Initialization & Resume Logic ---
@@ -346,30 +416,31 @@ document.addEventListener("DOMContentLoaded", () => {
     currentPendingJob = { source, isYoutube, isExistingUpload, isStandaloneTool };
     renderCaptionStudioGrid();
 
-    sectionUpload.classList.add('hidden');
-    sectionProcessing.classList.add('hidden');
-    sectionClips.classList.add('hidden');
-    sectionHistory.classList.add('hidden');
-    sectionUploadCenter.classList.add('hidden');
+    const modal = document.getElementById('modal-caption-studio');
+    if (!modal) return;
     
-    const studio = document.getElementById('section-caption-studio');
-    document.getElementById('caption-studio-main').classList.remove('hidden');
-    document.getElementById('standalone-caption-loading').classList.add('hidden');
-    document.getElementById('standalone-caption-result').classList.add('hidden');
+    document.getElementById('caption-studio-main')?.classList.remove('hidden');
+    document.getElementById('standalone-caption-loading')?.classList.add('hidden');
+    document.getElementById('standalone-caption-result')?.classList.add('hidden');
 
     if (isStandaloneTool) {
-      document.getElementById('caption-studio-title').innerHTML = `Add Viral Captions: <span>Choose Style</span>`;
-      document.getElementById('caption-studio-subtitle').textContent = `Select the exact visual animation style to burn onto your uploaded clip!`;
-      document.getElementById('btn-proceed-text').textContent = `✨ Burn Captions Onto Video`;
+      document.getElementById('caption-studio-title').innerHTML = `Add Viral Captions: <span style="color:var(--brand-purple);">Choose Style</span>`;
+      document.getElementById('caption-studio-subtitle').textContent = `Select the animation style to burn onto your uploaded clip!`;
+      const btnText = document.getElementById('btn-proceed-modal-text') || document.getElementById('btn-proceed-text');
+      if (btnText) btnText.textContent = `✨ Burn Captions Onto Video`;
     } else {
-      document.getElementById('caption-studio-title').innerHTML = `Step 2: Choose Your <span>Caption Style</span>`;
-      document.getElementById('caption-studio-subtitle').textContent = `Select a viral typography & animation preset below. See live visual previews of how your video captions will look!`;
-      document.getElementById('btn-proceed-text').textContent = `✨ Start Generating Clips`;
+      document.getElementById('caption-studio-title').innerHTML = `Step 2: Choose Your <span style="color:var(--brand-purple);">Caption Style</span>`;
+      document.getElementById('caption-studio-subtitle').textContent = `Select a viral typography & animation preset below.`;
+      const btnText = document.getElementById('btn-proceed-modal-text') || document.getElementById('btn-proceed-text');
+      if (btnText) btnText.textContent = `✨ Start Generating Clips`;
     }
 
-    studio.classList.remove('hidden');
-    gsap.fromTo(studio, { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.4, ease: 'power2.out' });
+    modal.classList.remove('hidden');
   }
+
+  document.getElementById('btn-caption-studio-close')?.addEventListener('click', () => {
+    document.getElementById('modal-caption-studio')?.classList.add('hidden');
+  });
 
   const btnAddCaptionsTool = document.getElementById('btn-add-captions-tool');
   const standaloneCaptionFile = document.getElementById('standalone-caption-file');
@@ -384,17 +455,15 @@ document.addEventListener("DOMContentLoaded", () => {
   const btnStudioProceed = document.getElementById('btn-caption-studio-proceed');
   if (btnStudioBack) {
     btnStudioBack.addEventListener('click', () => {
-      document.getElementById('section-caption-studio').classList.add('hidden');
-      sectionUpload.classList.remove('hidden');
-      gsap.fromTo(sectionUpload, { opacity: 0 }, { opacity: 1, duration: 0.3 });
+      document.getElementById('modal-caption-studio')?.classList.add('hidden');
     });
   }
   if (btnStudioProceed) {
     btnStudioProceed.addEventListener('click', async () => {
       if (!currentPendingJob) return;
       if (currentPendingJob.isStandaloneTool) {
-        document.getElementById('caption-studio-main').classList.add('hidden');
-        document.getElementById('standalone-caption-loading').classList.remove('hidden');
+        document.getElementById('caption-studio-main')?.classList.add('hidden');
+        document.getElementById('standalone-caption-loading')?.classList.remove('hidden');
 
         const formData = new FormData();
         formData.append('file', currentPendingJob.source);
@@ -407,23 +476,24 @@ document.addEventListener("DOMContentLoaded", () => {
           });
           const data = await res.json();
           if (!data.success) {
-            alert("Error adding captions: " + (data.error || "Unknown error"));
-            document.getElementById('standalone-caption-loading').classList.add('hidden');
-            document.getElementById('caption-studio-main').classList.remove('hidden');
+            Toast.show("Error adding captions: " + (data.error || "Unknown error"), "error");
+            document.getElementById('standalone-caption-loading')?.classList.add('hidden');
+            document.getElementById('caption-studio-main')?.classList.remove('hidden');
             return;
           }
-          document.getElementById('standalone-caption-loading').classList.add('hidden');
-          document.getElementById('standalone-caption-result').classList.remove('hidden');
+          document.getElementById('standalone-caption-loading')?.classList.add('hidden');
+          document.getElementById('standalone-caption-result')?.classList.remove('hidden');
           const player = document.getElementById('standalone-caption-video-player');
-          player.src = data.video_url;
-          document.getElementById('btn-download-captioned').href = data.video_url;
+          if (player) player.src = data.video_url;
+          const dl = document.getElementById('btn-download-captioned');
+          if (dl) dl.href = data.video_url;
         } catch (e) {
-          alert("Network or system error: " + e.message);
-          document.getElementById('standalone-caption-loading').classList.add('hidden');
-          document.getElementById('caption-studio-main').classList.remove('hidden');
+          Toast.show("Network or system error: " + e.message, "error");
+          document.getElementById('standalone-caption-loading')?.classList.add('hidden');
+          document.getElementById('caption-studio-main')?.classList.remove('hidden');
         }
       } else {
-        document.getElementById('section-caption-studio').classList.add('hidden');
+        document.getElementById('modal-caption-studio')?.classList.add('hidden');
         startProcessing(currentPendingJob.source, currentPendingJob.isYoutube, currentPendingJob.isExistingUpload);
       }
     });
@@ -633,9 +703,10 @@ document.addEventListener("DOMContentLoaded", () => {
       if (!response.ok) throw new Error(data.error || 'Instagram login failed');
       await refreshSocialStatus();
     } catch (error) {
-      if (igStatus) igStatus.textContent = error.message;
+      Toast.show("Instagram connection error: " + error.message, "error");
     } finally {
       button.disabled = false;
+      button.innerHTML = '<i class="ri-instagram-line"></i> Connect Instagram';
     }
   });
 
@@ -644,15 +715,15 @@ document.addEventListener("DOMContentLoaded", () => {
     button.disabled = true;
     button.innerHTML = '<i class="ri-loader-4-line spin"></i> Login in browser...';
     try {
-        const response = await fetch('/api/social/youtube/connect-playwright', { method: 'POST' });
+      const response = await fetch('/api/social/youtube/connect-playwright', { method: 'POST' });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'YouTube login failed');
       await refreshSocialStatus();
     } catch (error) {
-      const ytStatus = document.getElementById('yt-status-text');
-      if (ytStatus) ytStatus.textContent = error.message;
+      Toast.show("YouTube connection error: " + error.message, "error");
     } finally {
       button.disabled = false;
+      button.innerHTML = '<i class="ri-youtube-line"></i> Connect YouTube';
     }
   });
 
@@ -697,63 +768,77 @@ document.addEventListener("DOMContentLoaded", () => {
   const btnAskCaption = document.getElementById('btn-ask-caption');
   const btnAskUpload = document.getElementById('btn-ask-upload');
   const askCaptionFile = document.getElementById('ask-caption-file');
+  const btnCloseAskCaption = document.getElementById('btn-close-ask-caption');
   
-  btnAskCaption.addEventListener('click', () => {
-    modalAskCaption.classList.remove('hidden');
-    gsap.fromTo(modalAskCaption.querySelector('.modal'), { scale: 0.98, opacity: 0, y: 10 }, { scale: 1, opacity: 1, y: 0, duration: 0.2, ease: "power2.out" });
-  });
+  if (btnAskCaption && modalAskCaption) {
+    btnAskCaption.addEventListener('click', () => {
+      modalAskCaption.classList.remove('hidden');
+    });
+  }
+  if (btnCloseAskCaption && modalAskCaption) {
+    btnCloseAskCaption.addEventListener('click', () => {
+      modalAskCaption.classList.add('hidden');
+    });
+  }
   
-  btnAskUpload.addEventListener('click', () => askCaptionFile.click());
+  if (btnAskUpload && askCaptionFile) {
+    btnAskUpload.addEventListener('click', () => askCaptionFile.click());
+  }
   
-  askCaptionFile.addEventListener('change', async (e) => {
-    if(!e.target.files.length) return;
-    const file = e.target.files[0];
-    
-    document.getElementById('ask-caption-loading').classList.remove('hidden');
-    document.getElementById('ask-caption-result').classList.add('hidden');
-    btnAskUpload.style.display = 'none';
-    
-    const formData = new FormData();
-    formData.append('file', file);
-    
-    try {
-      const res = await fetch('/api/tools/generate-caption', {
-        method: 'POST',
-        body: formData
-      });
-      const data = await res.json();
+  if (askCaptionFile) {
+    askCaptionFile.addEventListener('change', async (e) => {
+      if(!e.target.files.length) return;
+      const file = e.target.files[0];
       
-      document.getElementById('ask-caption-loading').classList.add('hidden');
-      document.getElementById('ask-caption-result').classList.remove('hidden');
-      btnAskUpload.style.display = 'block';
+      document.getElementById('ask-caption-loading')?.classList.remove('hidden');
+      document.getElementById('ask-caption-result')?.classList.add('hidden');
+      if (btnAskUpload) btnAskUpload.style.display = 'none';
       
-      const copyText = `Title: ${data.title}\n\nCaption:\n${data.caption}`;
-      document.getElementById('ask-caption-text').textContent = copyText;
+      const formData = new FormData();
+      formData.append('file', file);
       
-      // Save to localStorage history
-      let capHist = JSON.parse(localStorage.getItem('captionHistory') || '[]');
-      capHist.unshift({
-        title: data.title,
-        caption: data.caption,
-        date: new Date().toLocaleDateString() + ' ' + new Date().toLocaleTimeString()
-      });
-      localStorage.setItem('captionHistory', JSON.stringify(capHist.slice(0, 50))); // Keep last 50
-    } catch(err) {
-      console.error(err);
-      Toast.show("Failed to generate captions.", "error");
-      document.getElementById('ask-caption-loading').classList.add('hidden');
-      btnAskUpload.style.display = 'block';
-    }
-  });
+      try {
+        const res = await fetch('/api/tools/generate-caption', {
+          method: 'POST',
+          body: formData
+        });
+        const data = await res.json();
+        
+        document.getElementById('ask-caption-loading')?.classList.add('hidden');
+        document.getElementById('ask-caption-result')?.classList.remove('hidden');
+        if (btnAskUpload) btnAskUpload.style.display = 'block';
+        
+        const copyText = `Title: ${data.title}\n\nCaption:\n${data.caption}`;
+        const txtArea = document.getElementById('ask-caption-text');
+        if (txtArea) txtArea.value = copyText;
+        
+        // Save to localStorage history
+        let capHist = JSON.parse(localStorage.getItem('captionHistory') || '[]');
+        capHist.unshift({
+          title: data.title,
+          caption: data.caption,
+          date: new Date().toLocaleDateString() + ' ' + new Date().toLocaleTimeString()
+        });
+        localStorage.setItem('captionHistory', JSON.stringify(capHist.slice(0, 50)));
+      } catch(err) {
+        console.error(err);
+        Toast.show("Failed to generate captions: " + err.message, "error");
+        document.getElementById('ask-caption-loading')?.classList.add('hidden');
+        if (btnAskUpload) btnAskUpload.style.display = 'block';
+      }
+    });
+  }
   
-  document.getElementById('btn-ask-copy').addEventListener('click', async (e) => {
-    const text = document.getElementById('ask-caption-text').textContent;
+  document.getElementById('btn-ask-copy')?.addEventListener('click', async (e) => {
+    const text = document.getElementById('ask-caption-text')?.value || document.getElementById('ask-caption-text')?.textContent || '';
     try {
       await navigator.clipboard.writeText(text);
       const btn = e.target.closest('button');
-      const orig = btn.innerHTML;
-      btn.innerHTML = '<i class="ri-check-line"></i> Copied!';
-      setTimeout(() => btn.innerHTML = orig, 2000);
+      if (btn) {
+        const orig = btn.innerHTML;
+        btn.innerHTML = '<i class="ri-check-line"></i> Copied!';
+        setTimeout(() => btn.innerHTML = orig, 2000);
+      }
     } catch(err) {}
   });
 
@@ -762,83 +847,95 @@ document.addEventListener("DOMContentLoaded", () => {
   const btnAskProduct = document.getElementById('btn-ask-product');
   const btnAskProductUpload = document.getElementById('btn-ask-product-upload');
   const askProductFile = document.getElementById('ask-product-file');
+  const btnCloseAskProduct = document.getElementById('btn-close-ask-product');
   
-  btnAskProduct.addEventListener('click', () => {
-    modalAskProduct.classList.remove('hidden');
-    gsap.fromTo(modalAskProduct.querySelector('.modal'), { scale: 0.98, opacity: 0, y: 10 }, { scale: 1, opacity: 1, y: 0, duration: 0.2, ease: "power2.out" });
-  });
+  if (btnAskProduct && modalAskProduct) {
+    btnAskProduct.addEventListener('click', () => {
+      modalAskProduct.classList.remove('hidden');
+    });
+  }
+  if (btnCloseAskProduct && modalAskProduct) {
+    btnCloseAskProduct.addEventListener('click', () => {
+      modalAskProduct.classList.add('hidden');
+    });
+  }
   
-  btnAskProductUpload.addEventListener('click', () => askProductFile.click());
+  if (btnAskProductUpload && askProductFile) {
+    btnAskProductUpload.addEventListener('click', () => askProductFile.click());
+  }
   
-  askProductFile.addEventListener('change', async (e) => {
-    if(!e.target.files.length) return;
-    const file = e.target.files[0];
-    
-    document.getElementById('ask-product-loading').classList.remove('hidden');
-    document.getElementById('ask-product-result').classList.add('hidden');
-    btnAskProductUpload.style.display = 'none';
-    
-    const formData = new FormData();
-    formData.append('file', file);
-    
-    try {
-      const res = await fetch('/api/tools/generate-products', {
-        method: 'POST',
-        body: formData
-      });
-      const data = await res.json();
+  if (askProductFile) {
+    askProductFile.addEventListener('change', async (e) => {
+      if(!e.target.files.length) return;
+      const file = e.target.files[0];
       
-      document.getElementById('ask-product-loading').classList.add('hidden');
-      document.getElementById('ask-product-result').classList.remove('hidden');
-      btnAskProductUpload.style.display = 'block';
+      document.getElementById('ask-product-loading')?.classList.remove('hidden');
+      document.getElementById('ask-product-result')?.classList.add('hidden');
+      if (btnAskProductUpload) btnAskProductUpload.style.display = 'none';
       
-      const listContainer = document.getElementById('ask-product-list');
-      listContainer.innerHTML = '';
+      const formData = new FormData();
+      formData.append('file', file);
       
-      if (data.products && data.products.length > 0) {
-        data.products.forEach(prod => {
-          const amzSearch = `https://www.amazon.com/s?k=${encodeURIComponent(prod.search_query)}`;
-          listContainer.innerHTML += `
-            <div style="background: rgba(255,255,255,0.03); padding: 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.08);">
-              <div style="font-weight: bold; color: var(--text-main); margin-bottom: 4px;">${prod.product_name}</div>
-              <div style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 10px;">${prod.reason}</div>
-              <a href="${amzSearch}" target="_blank" class="btn-outline btn-sm" style="display: inline-block; color: #ff9900; border-color: rgba(255,153,0,0.3); text-decoration: none;">
-                <i class="ri-amazon-fill"></i> Search on Amazon
-              </a>
-            </div>
-          `;
+      try {
+        const res = await fetch('/api/tools/generate-products', {
+          method: 'POST',
+          body: formData
         });
-      } else {
-        listContainer.innerHTML = `<div class="text-muted">No specific products found for this clip.</div>`;
+        const data = await res.json();
+        
+        document.getElementById('ask-product-loading')?.classList.add('hidden');
+        document.getElementById('ask-product-result')?.classList.remove('hidden');
+        if (btnAskProductUpload) btnAskProductUpload.style.display = 'block';
+        
+        const listContainer = document.getElementById('ask-product-list');
+        if (listContainer) {
+          listContainer.innerHTML = '';
+          if (data.products && data.products.length > 0) {
+            data.products.forEach(prod => {
+              const amzSearch = `https://www.amazon.com/s?k=${encodeURIComponent(prod.search_query || prod.product_name)}`;
+              listContainer.innerHTML += `
+                <div style="background: var(--bg-app); padding: 12px; border-radius: 6px; border: 1px solid var(--border-light);">
+                  <div style="font-weight: 700; color: var(--text-main); margin-bottom: 4px;">${escapeHtml(prod.product_name)}</div>
+                  <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 8px;">${escapeHtml(prod.reason || '')}</div>
+                  <a href="${amzSearch}" target="_blank" class="btn-outline-dashed" style="display: inline-flex; align-items:center; gap:4px; color: #f59e0b; padding: 4px 10px; font-size: 11px; text-decoration: none;">
+                    <i class="ri-amazon-fill"></i> Search on Amazon
+                  </a>
+                </div>
+              `;
+            });
+          } else {
+            listContainer.innerHTML = `<div class="text-muted" style="padding:10px;">No specific products found for this clip.</div>`;
+          }
+        }
+      } catch(err) {
+        console.error(err);
+        Toast.show("Failed to generate product suggestions: " + err.message, "error");
+        document.getElementById('ask-product-loading')?.classList.add('hidden');
+        if (btnAskProductUpload) btnAskProductUpload.style.display = 'block';
       }
-      
-    } catch(err) {
-      console.error(err);
-      Toast.show("Failed to generate product suggestions.", "error");
-      document.getElementById('ask-product-loading').classList.add('hidden');
-      btnAskProductUpload.style.display = 'block';
-    }
-  });
+    });
+  }
+
+  // Upload Center Drawer / Modal
+  const modalUploadCenter = document.getElementById('modal-upload-center');
+  const btnUploadCenter = document.getElementById('btn-upload-center');
+  const btnCloseUploadCenter = document.getElementById('btn-close-upload-center');
+  if (btnUploadCenter && modalUploadCenter) {
+    btnUploadCenter.addEventListener('click', () => {
+      modalUploadCenter.classList.remove('hidden');
+      if (typeof loadUploadCenter === 'function') loadUploadCenter();
+    });
+  }
+  if (btnCloseUploadCenter && modalUploadCenter) {
+    btnCloseUploadCenter.addEventListener('click', () => {
+      modalUploadCenter.classList.add('hidden');
+    });
+  }
 
   document.querySelectorAll('.close-modal').forEach(btn => {
     btn.addEventListener('click', () => {
-      document.documentElement.classList.remove('modal-open');
-      document.body.classList.remove('modal-open');
-      gsap.to(".modal", { 
-        scale: 0.9, opacity: 0, duration: 0.2, 
-        onComplete: () => {
-          modalSettings.classList.add('hidden');
-          modalAskCaption.classList.add('hidden');
-          modalAskProduct.classList.add('hidden');
-        }
-      });
+      document.querySelectorAll('.modal-backdrop').forEach(m => m.classList.add('hidden'));
     });
-  });
-  btnCloseModal?.addEventListener('click', () => {
-    document.documentElement.classList.remove('modal-open');
-    document.body.classList.remove('modal-open');
-    gsap.to(".modal-backdrop", { opacity: 0, duration: 0.4 });
-    gsap.to(".modal", { scale: 0.98, opacity: 0, y: 10, duration: 0.2, ease: "power2.inOut", onComplete: () => modalSettings.classList.add('hidden') });
   });
 
   document.querySelectorAll('.modal-backdrop').forEach(backdrop => {
@@ -864,20 +961,22 @@ document.addEventListener("DOMContentLoaded", () => {
   const histContainer = document.getElementById('history-container');
   const capHistContainer = document.getElementById('caption-history-container');
 
-  tabClip.addEventListener('click', () => {
-    tabClip.classList.replace('btn-outline', 'btn-primary');
-    tabCaption.classList.replace('btn-primary', 'btn-outline');
-    histContainer.classList.remove('hidden');
-    capHistContainer.classList.add('hidden');
-  });
+  if (tabClip && tabCaption && histContainer && capHistContainer) {
+    tabClip.addEventListener('click', () => {
+      tabClip.classList.add('active');
+      tabCaption.classList.remove('active');
+      histContainer.classList.remove('hidden');
+      capHistContainer.classList.add('hidden');
+    });
 
-  tabCaption.addEventListener('click', () => {
-    tabCaption.classList.replace('btn-outline', 'btn-primary');
-    tabClip.classList.replace('btn-primary', 'btn-outline');
-    histContainer.classList.add('hidden');
-    capHistContainer.classList.remove('hidden');
-    renderCaptionHistory();
-  });
+    tabCaption.addEventListener('click', () => {
+      tabCaption.classList.add('active');
+      tabClip.classList.remove('active');
+      histContainer.classList.add('hidden');
+      capHistContainer.classList.remove('hidden');
+      renderCaptionHistory();
+    });
+  }
 
   function renderCaptionHistory() {
     capHistContainer.innerHTML = '';
@@ -1218,9 +1317,10 @@ document.addEventListener("DOMContentLoaded", () => {
   function showHumanReviewUI(jobId, metadata) {
     document.getElementById('section-progress').classList.add('hidden');
     const reviewSection = document.getElementById('section-human-review');
-    reviewSection.classList.remove('hidden');
+    if (reviewSection) reviewSection.classList.remove('hidden');
     
     const container = document.getElementById('review-cards-container');
+    if (!container) return;
     container.innerHTML = '';
     
     metadata.forEach((clip, idx) => {
@@ -1229,28 +1329,31 @@ document.addEventListener("DOMContentLoaded", () => {
       const card = document.createElement('div');
       card.className = 'review-card';
       
-      let html = `<div class="rc-header"><span>Clip ${idx + 1}: ${clip.title}</span><div class="rc-actions"><select class="rc-select"><option>Keep</option><option>Discard</option></select></div></div>`;
+      let html = `<div class="rc-header"><span>Clip ${idx + 1}: ${escapeHtml(clip.title)}</span><div class="rc-actions"><select class="rc-select"><option>Keep</option><option>Discard</option></select></div></div>`;
       
+      const hookText = typeof clip.editorial_data.hook === 'object' ? (clip.editorial_data.hook?.text || '') : (clip.editorial_data.hook || '');
+      const takeawayText = typeof clip.editorial_data.takeaway === 'object' ? (clip.editorial_data.takeaway?.text || '') : (clip.editorial_data.takeaway || '');
+
       if (clip.editorial_data.hook) {
         html += `<div style="margin-bottom:12px;">
-          <label style="display:block; margin-bottom:5px; font-weight:600; color:var(--text-purple); font-size:12px;">AI Hook</label>
-          <textarea class="review-hook rc-text" data-idx="${idx}" style="width:100%; height:60px; background:var(--bg-app); border:1px solid var(--border-light); padding:8px; border-radius:4px; font-family:inherit;">${clip.editorial_data.hook.text}</textarea>
+          <label style="display:block; margin-bottom:5px; font-weight:600; color:var(--brand-purple); font-size:12px;">AI Hook</label>
+          <textarea class="review-hook rc-text" data-idx="${idx}" style="width:100%; height:60px; background:var(--bg-app); border:1px solid var(--border-light); padding:8px; border-radius:4px; font-family:inherit;">${escapeHtml(hookText)}</textarea>
         </div>`;
       }
       
       if (clip.editorial_data.commentary_segments && clip.editorial_data.commentary_segments.length > 0) {
         html += `<div style="margin-bottom:12px;">
-          <label style="display:block; margin-bottom:5px; font-weight:600; color:var(--text-purple); font-size:12px;">AI Commentary</label>`;
+          <label style="display:block; margin-bottom:5px; font-weight:600; color:var(--brand-purple); font-size:12px;">AI Commentary</label>`;
         clip.editorial_data.commentary_segments.forEach((seg, sIdx) => {
-          html += `<textarea class="review-commentary rc-text" data-idx="${idx}" data-sidx="${sIdx}" style="width:100%; height:60px; margin-bottom:8px; background:var(--bg-app); border:1px solid var(--border-light); padding:8px; border-radius:4px; font-family:inherit;">${seg.text}</textarea>`;
+          html += `<textarea class="review-commentary rc-text" data-idx="${idx}" data-sidx="${sIdx}" style="width:100%; height:60px; margin-bottom:8px; background:var(--bg-app); border:1px solid var(--border-light); padding:8px; border-radius:4px; font-family:inherit;">${escapeHtml(seg.text || '')}</textarea>`;
         });
         html += `</div>`;
       }
       
       if (clip.editorial_data.takeaway) {
         html += `<div style="margin-bottom:12px;">
-          <label style="display:block; margin-bottom:5px; font-weight:600; color:var(--text-purple); font-size:12px;">AI Takeaway</label>
-          <textarea class="review-takeaway rc-text" data-idx="${idx}" style="width:100%; height:60px; background:var(--bg-app); border:1px solid var(--border-light); padding:8px; border-radius:4px; font-family:inherit;">${clip.editorial_data.takeaway.text}</textarea>
+          <label style="display:block; margin-bottom:5px; font-weight:600; color:var(--brand-purple); font-size:12px;">AI Takeaway</label>
+          <textarea class="review-takeaway rc-text" data-idx="${idx}" style="width:100%; height:60px; background:var(--bg-app); border:1px solid var(--border-light); padding:8px; border-radius:4px; font-family:inherit;">${escapeHtml(takeawayText)}</textarea>
         </div>`;
       }
       
@@ -1258,48 +1361,57 @@ document.addEventListener("DOMContentLoaded", () => {
       container.appendChild(card);
     });
     
-    document.getElementById('btn-approve-review').onclick = async () => {
-      // Gather updated data
-      document.querySelectorAll('.review-hook').forEach(ta => {
-        const idx = ta.getAttribute('data-idx');
-        metadata[idx].editorial_data.hook.text = ta.value;
-      });
-      document.querySelectorAll('.review-commentary').forEach(ta => {
-        const idx = ta.getAttribute('data-idx');
-        const sIdx = ta.getAttribute('data-sidx');
-        metadata[idx].editorial_data.commentary_segments[sIdx].text = ta.value;
-      });
-      document.querySelectorAll('.review-takeaway').forEach(ta => {
-        const idx = ta.getAttribute('data-idx');
-        metadata[idx].editorial_data.takeaway.text = ta.value;
-      });
-      
-      document.getElementById('btn-approve-review').disabled = true;
-      document.getElementById('btn-approve-review').innerHTML = '<i class="ri-loader-4-line spin"></i> Submitting...';
-      
-      try {
-        const res = await fetch(`/api/submit-review/${jobId}`, {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify(metadata)
+    const approveBtn = document.getElementById('btn-approve-review');
+    if (approveBtn) {
+      approveBtn.onclick = async () => {
+        // Gather updated data
+        document.querySelectorAll('.review-hook').forEach(ta => {
+          const idx = parseInt(ta.getAttribute('data-idx'));
+          if (typeof metadata[idx].editorial_data.hook === 'object') {
+            metadata[idx].editorial_data.hook.text = ta.value;
+          } else {
+            metadata[idx].editorial_data.hook = ta.value;
+          }
         });
-        const data = await res.json();
-        if (data.status === 'ok') {
-          reviewSection.classList.add('hidden');
-          document.getElementById('section-progress').classList.remove('hidden');
-          updateProgress('step-render', "Rendering Clips (Phase 2)", 80);
-          connectPipelineWS(jobId);
-        } else {
-          alert("Error: " + data.error);
-          document.getElementById('btn-approve-review').disabled = false;
-          document.getElementById('btn-approve-review').innerHTML = '<i class="ri-check-line"></i> Approve & Render Videos';
+        document.querySelectorAll('.review-commentary').forEach(ta => {
+          const idx = parseInt(ta.getAttribute('data-idx'));
+          const sIdx = parseInt(ta.getAttribute('data-sidx'));
+          metadata[idx].editorial_data.commentary_segments[sIdx].text = ta.value;
+        });
+        document.querySelectorAll('.review-takeaway').forEach(ta => {
+          const idx = parseInt(ta.getAttribute('data-idx'));
+          if (typeof metadata[idx].editorial_data.takeaway === 'object') {
+            metadata[idx].editorial_data.takeaway.text = ta.value;
+          } else {
+            metadata[idx].editorial_data.takeaway = ta.value;
+          }
+        });
+        
+        approveBtn.disabled = true;
+        approveBtn.innerHTML = '<i class="ri-loader-4-line spin"></i> Submitting...';
+        
+        try {
+          const res = await fetch(`/api/submit-review/${jobId}`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(metadata)
+          });
+          const data = await res.json();
+          if (data.status === 'ok') {
+            updateProgress('step-render', "Rendering Clips (Phase 2)", 80);
+            connectPipelineWS(jobId);
+          } else {
+            Toast.show("Error: " + (data.error || "Failed to submit review"), "error");
+            approveBtn.disabled = false;
+            approveBtn.innerHTML = '<i class="ri-magic-line"></i> <span id="btn-proceed-text">Generate Clip</span>';
+          }
+        } catch (e) {
+          Toast.show("Failed to submit review: " + e.message, "error");
+          approveBtn.disabled = false;
+          approveBtn.innerHTML = '<i class="ri-magic-line"></i> <span id="btn-proceed-text">Generate Clip</span>';
         }
-      } catch (e) {
-        alert("Failed to submit review: " + e.message);
-        document.getElementById('btn-approve-review').disabled = false;
-        document.getElementById('btn-approve-review').innerHTML = '<i class="ri-check-line"></i> Approve & Render Videos';
-      }
-    };
+      };
+    }
   }
 
   async function fetchClips(jobId) {
@@ -1309,19 +1421,20 @@ document.addEventListener("DOMContentLoaded", () => {
       
       localStorage.removeItem('currentJobId');
       
-      const tl = gsap.timeline();
-      tl.to(sectionProcessing, { 
-        y: -10, opacity: 0, duration: 0.3, ease: "power2.inOut",
-        onComplete: () => {
-          sectionProcessing.classList.add('hidden');
-          sectionClips.classList.remove('hidden');
-          gsap.fromTo(sectionClips, { y: 10, opacity: 0 }, { y: 0, opacity: 1, duration: 0.4, ease: "power2.out" });
-          renderClips(data.clips || []);
-          if (currentPublishingMode() === 'auto') {
-            setTimeout(() => triggerMassPublish('#clips-container'), 1000);
-          }
+      const clips = data.clips || [];
+      renderClips(clips);
+      
+      if (clips.length > 0) {
+        Toast.show(`🎉 All done! Generated ${clips.length} viral clips.`, "success");
+        // Also populate main player if first clip is available
+        const mainPlayer = document.getElementById('main-player');
+        if (mainPlayer && clips[0] && clips[0].url) {
+          mainPlayer.src = clips[0].url;
+          mainPlayer.classList.remove('hidden');
+          document.getElementById('dropzone')?.classList.add('hidden');
+          document.getElementById('player-title').textContent = clips[0].title || "Generated Clip";
         }
-      });
+      }
     } catch(e) { console.error(e); }
   }
 
@@ -1890,7 +2003,9 @@ document.addEventListener("DOMContentLoaded", () => {
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
               job_id: jobId, clip_filename: filename, title: title, caption: caption,
-              platforms: platforms, allow_duplicate: true, product_recommendations: products
+              platforms: platforms, allow_duplicate: true, product_recommendations: products,
+              amazon_store_tag: amazonStoreTag, enable_comment_affiliate: enableCommentAffiliate,
+              enable_native_shopping: enableNativeShopping
             })
           });
           data = await retryRes.json();

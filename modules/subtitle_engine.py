@@ -155,11 +155,18 @@ def generate_ass_subtitles(
     if str(parent) not in ("", "."):
         parent.mkdir(parents=True, exist_ok=True)
 
-    # Filter words that fall within this clip's time window
-    clip_words = [
-        w for w in words
-        if w["start"] >= clip_start_s and w["end"] <= clip_end_s
-    ]
+    # Filter and clamp words that fall within or intersect this clip's time window
+    clip_words = []
+    for w in words:
+        if w["end"] > clip_start_s and w["start"] < clip_end_s:
+            w_start = max(clip_start_s, w["start"])
+            w_end = min(clip_end_s, w["end"])
+            if w_end > w_start:
+                clip_words.append({
+                    "word": w["word"],
+                    "start": w_start,
+                    "end": w_end
+                })
 
     if not clip_words:
         logger.warning(
@@ -246,6 +253,15 @@ def _group_words_kinetic(words: List[Dict]) -> List[Dict]:
     return groups
 
 
+def _sanitize_word(text: str) -> str:
+    """Sanitize transcript words to prevent ASS control tag corruption and screen overflow."""
+    if not text:
+        return ""
+    clean = str(text).replace("{", "(").replace("}", ")").replace("\\", "/")
+    if len(clean) > 16:
+        clean = clean[:14] + ".."
+    return clean
+
 def _write_ass(
     output_path: str,
     groups: List[Dict],
@@ -279,8 +295,9 @@ def _write_ass(
         total_end = groups[-1]["end"]
         start_ts = _seconds_to_ass_time(0.0)
         end_ts   = _seconds_to_ass_time(total_end)
-        clean_title = clip_title.strip().upper()
-        lines.append(f"Dialogue: 0,{start_ts},{end_ts},TitleStyle,,0,0,0,,{{\\fad(200,200)}}{clean_title}")
+        clean_title = _sanitize_word(clip_title.strip()).upper()
+        fade_ms = min(200, max(50, int(total_end * 500)))
+        lines.append(f"Dialogue: 0,{start_ts},{end_ts},TitleStyle,,0,0,0,,{{\\fad({fade_ms},{fade_ms})}}{clean_title}")
 
     for group in groups:
         group_start = group["start"]
@@ -290,7 +307,7 @@ def _write_ass(
         if not group_words:
             continue
             
-        W_texts = [w["word"].upper() for w in group_words]
+        W_texts = [_sanitize_word(w.get("word", "")).upper() for w in group_words]
 
         # ─── Style: smooth_wave (Continuous Karaoke sweep) ───
         if style_name == "smooth_wave":

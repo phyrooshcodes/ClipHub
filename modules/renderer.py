@@ -55,10 +55,12 @@ def render_clip(
     fps = crop_coords.get("fps", 30.0)
     use_dynamic = len(dynamic_crop_x) > 0
 
-    rel_sub = os.path.relpath(subtitle_path).replace("\\", "/")
-    if platform.system() == "Windows":
-        rel_sub = re.sub(r'^([A-Za-z]):', r'\1\\:', rel_sub)
-    safe_sub_path = rel_sub.replace("'", "'\\''")
+    safe_sub_path = None
+    if subtitle_path and os.path.exists(subtitle_path):
+        rel_sub = os.path.relpath(subtitle_path).replace("\\", "/")
+        if platform.system() == "Windows":
+            rel_sub = re.sub(r'^([A-Za-z]):', r'\1\\:', rel_sub)
+        safe_sub_path = rel_sub.replace("'", "'\\''")
 
     command = ["ffmpeg", "-y", "-ss", f"{start_s:.3f}", "-t", f"{duration_s:.3f}", "-i", input_video]
     input_idx = 1
@@ -101,9 +103,18 @@ def render_clip(
         
     # Music Input
     music_idx = -1
-    if music_choice:
-        music_start = float(music_choice["start_s"])
-        command += ["-stream_loop", "-1", "-ss", f"{music_start:.3f}", "-i", music_choice["path"]]
+    music_dict = None
+    if isinstance(music_choice, dict) and music_choice.get("path"):
+        music_dict = music_choice
+    elif isinstance(music_choice, str) and music_choice.lower() not in ("none", "", "off"):
+        from modules.bg_music import get_music_track
+        m_path = get_music_track(music_choice)
+        if m_path:
+            music_dict = {"path": m_path, "start_s": 0.0}
+
+    if music_dict:
+        music_start = float(music_dict.get("start_s", 0.0))
+        command += ["-stream_loop", "-1", "-ss", f"{music_start:.3f}", "-i", music_dict["path"]]
         music_idx = input_idx
         input_idx += 1
 
@@ -133,7 +144,10 @@ def render_clip(
         v_head = "v_dim"
 
     # Scale and Subtitles
-    filter_complex.append(f"[{v_head}]scale=1080:1920,ass='{safe_sub_path}'[v_final]")
+    if safe_sub_path:
+        filter_complex.append(f"[{v_head}]scale=1080:1920,ass='{safe_sub_path}'[v_final]")
+    else:
+        filter_complex.append(f"[{v_head}]scale=1080:1920[v_final]")
     
     # ─── Audio Chain ───
     a_head = f"{silent_audio_idx}:a" if not has_audio else "0:a"
@@ -181,10 +195,15 @@ def render_clip(
     use_nvenc = check_nvenc_available() if encoder == "auto" else (encoder == "h264_nvenc")
     enc_args = ["-c:v", "h264_nvenc", "-preset", NVENC_PRESET, "-cq", NVENC_CQ, "-r", "60"] if use_nvenc else ["-c:v", "libx264", "-preset", "fast", "-crf", "23", "-r", "60"]
 
+    # If a_head is an input stream specifier (e.g. "0:a", "1:a"), map directly without brackets.
+    # If a_head is a filtergraph label (e.g. "voice_mix", "final_audio"), enclose in brackets.
+    is_direct_stream = (a_head == "0:a" or a_head == f"{silent_audio_idx}:a")
+    mapped_audio = a_head if is_direct_stream else f"[{a_head}]"
+
     command += [
         "-filter_complex", filter_str,
         "-map", "[v_final]",
-        "-map", f"[{a_head}]" if "[" not in a_head else a_head,
+        "-map", mapped_audio,
     ] + enc_args + [
         "-c:a", "aac", "-b:a", AUDIO_BITRATE, "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-shortest", output_path
     ]
@@ -197,5 +216,11 @@ def render_clip(
             logger.warning("[Renderer] ⚠️ NVENC hardware encoder failed. Falling back to CPU encoder...")
             return render_clip(input_video, output_path, start_ms, end_ms, crop_coords, subtitle_path, music_choice, clip_index, "libx264", editorial_data, commentary_voice, intro_duration, ai_audio_events)
         raise e
+    finally:
+        if use_dynamic and 'sendcmd_path' in locals() and os.path.exists(sendcmd_path):
+            try:
+                os.remove(sendcmd_path)
+            except Exception:
+                pass
     logger.info(f"[Renderer] ✅ Clip {clip_index + 1} rendered → {output_path}")
     return output_path

@@ -83,13 +83,17 @@ async def _bg_social_post(upload_id: str, job_id: str, clip_filename: str, title
             worker = get_youtube_worker()
             worker.enqueue(upload_id, str(video_path), title, caption, [], None, product_recommendations, amazon_store_tag, enable_comment_affiliate, enable_native_shopping, lambda p, m: update_progress("youtube", p, m))
             
-            # Poll for completion
-            while True:
+            # Poll for completion with bounded 10-minute timeout
+            start_poll = time.time()
+            res = {}
+            while time.time() - start_poll < 600:
                 res = worker.results.get(upload_id, {})
                 st = res.get("status")
                 if st in ["scheduled", "completed", "failed"]:
                     break
                 await asyncio.sleep(1)
+            else:
+                res = {"status": "failed", "error": "YouTube upload polling timed out after 10 minutes."}
             
             if res.get("success"):
                 results["youtube"] = {"success": True, "url": res.get("url")}
@@ -156,7 +160,7 @@ async def api_tools_generate_caption(file: UploadFile = File(...)):
             if not Path(python_exe).exists():
                 python_exe = sys.executable
         cmd = [python_exe, str(BASE_DIR / "tools_generate_caption.py"), tmp_path]
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        result = await asyncio.to_thread(subprocess.run, cmd, capture_output=True, text=True, check=True)
         return json.loads(result.stdout.strip())
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
@@ -170,13 +174,13 @@ async def api_tools_generate_products(file: UploadFile = File(...)):
         tmp.write(await file.read())
         tmp_path = tmp.name
     try:
-        python_exe = sys.executable
-        if BASE_DIR.name == "ClipHub":
+        python_exe = str(BASE_DIR / "venv" / "Scripts" / "python.exe")
+        if not Path(python_exe).exists():
             python_exe = str(BASE_DIR / "venv" / "bin" / "python")
             if not Path(python_exe).exists():
                 python_exe = sys.executable
         cmd = [python_exe, str(BASE_DIR / "tools_generate_products.py"), tmp_path]
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        result = await asyncio.to_thread(subprocess.run, cmd, capture_output=True, text=True, check=True)
         return json.loads(result.stdout.strip())
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
@@ -196,13 +200,13 @@ async def api_tools_add_captions(file: UploadFile = File(...), style: str = Form
     out_path = out_dir / out_filename
     
     try:
-        python_exe = str(BASE_DIR / "venv" / "bin" / "python")
+        python_exe = str(BASE_DIR / "venv" / "Scripts" / "python.exe")
         if not Path(python_exe).exists():
-            python_exe = str(BASE_DIR / "venv" / "Scripts" / "python.exe")
+            python_exe = str(BASE_DIR / "venv" / "bin" / "python")
             if not Path(python_exe).exists():
                 python_exe = sys.executable
         cmd = [python_exe, str(BASE_DIR / "tools_add_captions.py"), tmp_path, style, str(out_path)]
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        result = await asyncio.to_thread(subprocess.run, cmd, capture_output=True, text=True, check=True)
         data = json.loads(result.stdout.strip())
         if "error" in data and not data.get("success"):
             return JSONResponse(data, status_code=400)
@@ -261,10 +265,20 @@ async def disconnect_ig():
 @router.post("/api/social/youtube/connect-playwright")
 async def connect_yt_playwright():
     from modules.publisher_yt import connect_youtube_playwright
+    from modules.youtube_worker import get_youtube_worker
+    worker = get_youtube_worker()
+    was_running = worker.running
+    if was_running:
+        worker.suspend()
+        await asyncio.sleep(1.0)
     try:
         await asyncio.to_thread(connect_youtube_playwright)
         return {"success": True}
-    except Exception as e: return JSONResponse({"error": str(e)}, status_code=400)
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    finally:
+        if was_running:
+            worker.resume()
 
 @router.get("/api/social/youtube/auth-url")
 async def youtube_auth_url():

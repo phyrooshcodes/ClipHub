@@ -136,43 +136,47 @@ def _size_max_tokens(requested_clip_count: int) -> int:
 
 # ─── Client Initialization ──────────────────────────────────
 _client: OpenAI | None = None
+_client_key: str = ""
 
 def _get_client() -> OpenAI:
-    global _client
-    if _client is None:
-        key = os.environ.get("NVIDIA_API_KEY", NVIDIA_API_KEY)
-        if not key:
-            raise ValueError(
-                "\n[ERROR] NVIDIA_API_KEY is not set!\n"
-                "Please create a file named '.env' in your project root containing:\n"
-                "NVIDIA_API_KEY=nvapi-YOUR_API_KEY_HERE\n"
-                "Or set it as an environment variable."
-            )
+    global _client, _client_key
+    key = os.environ.get("NVIDIA_API_KEY", "").strip()
+    if not key:
+        from dotenv import load_dotenv
+        load_dotenv(override=True)
+        key = os.environ.get("NVIDIA_API_KEY", "").strip()
+    if not key:
+        raise ValueError(
+            "\n[ERROR] NVIDIA_API_KEY is not set!\n"
+            "Please configure your NVIDIA API Key in Settings or in your .env file."
+        )
+    if _client is None or _client_key != key:
         _client = OpenAI(
             base_url=NVIDIA_BASE_URL,
             api_key=key,
             max_retries=3
         )
+        _client_key = key
     return _client
 
-def _call_with_retry(client: OpenAI, model: str, messages: list, max_tokens: int, retries: int = 3):
+def _call_with_retry(client: OpenAI, model: str, messages: list, max_tokens: int, retries: int = 4):
     import time
-    from openai import APIConnectionError, APITimeoutError
+    from openai import APIConnectionError, APITimeoutError, RateLimitError, InternalServerError, APIStatusError
     for attempt in range(retries):
         try:
             return client.chat.completions.create(
                 model=model,
                 messages=messages,
                 temperature=0.2,
-                max_tokens=max_tokens,
+                max_tokens=min(max_tokens, 4096),
                 top_p=0.85,
-                timeout=600.0
+                timeout=120.0
             )
-        except (APIConnectionError, APITimeoutError) as e:
+        except (APIConnectionError, APITimeoutError, RateLimitError, InternalServerError, APIStatusError) as e:
             if attempt == retries - 1:
                 raise
-            sleep_s = 2 ** attempt
-            logger.warning(f"[HookDetector] Retry {attempt+1}/{retries} in {sleep_s}s: {e}")
+            sleep_s = (2 ** attempt) * 1.5
+            logger.warning(f"[HookDetector] Retry {attempt+1}/{retries} in {sleep_s:.1f}s after error: {e}")
             time.sleep(sleep_s)
 
 
@@ -315,12 +319,13 @@ def _validate_and_clamp_clips(
             logger.warning(f"[HookDetector] Discarding clip with invalid range: {clip.get('title', 'Untitled')} ({start/1000:.1f}s -> {end/1000:.1f}s)")
             continue
 
-        # Discard clips that are too short (under 20s) or too long (over 90s) after clamping/snapping
+        # Discard clips that are too short (under 12s or total duration) or too long (over 120s) after clamping/snapping
         duration = end - start
-        if duration < 20000:
+        min_allowed = min(12000, max_ms)
+        if duration < min_allowed:
             logger.warning(f"[HookDetector] Discarding clip that is too short ({duration/1000:.1f}s): {clip.get('title', 'Untitled')}")
             continue
-        if duration > 90000:
+        if duration > 120000:
             logger.warning(f"[HookDetector] Discarding clip that is too long ({duration/1000:.1f}s): {clip.get('title', 'Untitled')}")
             continue
             
@@ -565,23 +570,51 @@ def _deduplicate_clips(clips: List[Dict], max_clips: int) -> List[Dict]:
 
 def _parse_json_response(raw: str) -> List[Dict]:
     """
-    Robustly parse a JSON array from the LLM response.
-    Handles cases where the model wraps JSON in markdown fences.
+    Robustly parse a JSON list from the LLM response.
+    Handles direct arrays [...], or object-wrapped structures like {"clips": [...]},
+    or markdown fences.
     """
-    # Strip markdown code fences if present
     cleaned = re.sub(r"```(?:json)?", "", raw).strip()
     cleaned = cleaned.strip("`").strip()
 
-    start_idx = cleaned.find("[")
-    if start_idx == -1:
-        raise ValueError("No JSON array found in LLM response.")
-
+    # Try direct parse first
     try:
-        clips, _ = json.JSONDecoder().raw_decode(cleaned, start_idx)
-    except json.JSONDecodeError as e:
-        raise RuntimeError(f"[HookDetector] JSON parse error: {e}") from e
+        parsed = json.loads(cleaned)
+        if isinstance(parsed, list):
+            return parsed
+        if isinstance(parsed, dict):
+            for key in ("clips", "moments", "viral_clips", "results", "data"):
+                if key in parsed and isinstance(parsed[key], list):
+                    return parsed[key]
+            for v in parsed.values():
+                if isinstance(v, list):
+                    return v
+    except Exception:
+        pass
 
-    if not isinstance(clips, list):
-        raise RuntimeError("[HookDetector] Expected a JSON array but got something else.")
+    # Try finding [ or {
+    start_arr = cleaned.find("[")
+    start_obj = cleaned.find("{")
+    
+    if start_arr != -1 and (start_obj == -1 or start_arr < start_obj):
+        try:
+            clips, _ = json.JSONDecoder().raw_decode(cleaned, start_arr)
+            if isinstance(clips, list):
+                return clips
+        except Exception:
+            pass
 
-    return clips
+    if start_obj != -1:
+        try:
+            obj, _ = json.JSONDecoder().raw_decode(cleaned, start_obj)
+            if isinstance(obj, dict):
+                for key in ("clips", "moments", "viral_clips", "results", "data"):
+                    if key in obj and isinstance(obj[key], list):
+                        return obj[key]
+                for v in obj.values():
+                    if isinstance(v, list):
+                        return v
+        except Exception:
+            pass
+
+    raise ValueError(f"No valid JSON array or object found in LLM response: {raw[:120]}...")

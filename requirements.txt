@@ -17,3 +17,6 @@ instagrapi
 google-api-python-client
 google-auth-oauthlib
 google-auth-httplib2
+pywebview>=5.1
+kokoro-onnx
+soundfile

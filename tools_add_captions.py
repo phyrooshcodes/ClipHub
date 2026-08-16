@@ -18,7 +18,7 @@ def extract_audio(video_path, audio_path):
     ]
     subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
 
-def apply_captions(input_video, style_name, output_video):
+def apply_captions(input_video, style_name, output_video, model_size="base"):
     with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp_wav:
         audio_path = tmp_wav.name
     with tempfile.NamedTemporaryFile(delete=False, suffix=".ass") as tmp_ass:
@@ -28,7 +28,7 @@ def apply_captions(input_video, style_name, output_video):
         extract_audio(input_video, audio_path)
         
         from modules.transcriber import transcribe_audio
-        words = transcribe_audio(audio_path, model_size="base")
+        words = transcribe_audio(audio_path, model_size=model_size)
         if not words:
             return {"error": "No speech detected in this video to caption."}
 
@@ -46,15 +46,13 @@ def apply_captions(input_video, style_name, output_video):
             preset_name="default"
         )
 
-        import re
-        rel_sub = os.path.relpath(ass_path, start=os.getcwd()).replace("\\", "/")
-        safe_sub_path = re.sub(r"([:\\'])", r"\\\1", rel_sub)
+        safe_ass = str(Path(ass_path).resolve()).replace("\\", "/").replace(":", "\\:")
 
-        # Attempt GPU acceleration or fallback to libx264
+        # Render with ASS subtitle filter and AAC audio encoding
         cmd = [
             "ffmpeg", "-y", "-i", str(input_video),
-            "-vf", f"ass='{safe_sub_path}'",
-            "-c:a", "copy", "-c:v", "libx264", "-preset", "fast", "-crf", "21",
+            "-vf", f"ass={safe_ass}",
+            "-c:a", "aac", "-b:a", "192k", "-c:v", "libx264", "-preset", "fast", "-crf", "21",
             str(output_video)
         ]
         res = subprocess.run(cmd, capture_output=True, text=True)
@@ -65,21 +63,24 @@ def apply_captions(input_video, style_name, output_video):
 
     finally:
         if os.path.exists(audio_path):
-            os.remove(audio_path)
+            try: os.remove(audio_path)
+            except Exception: pass
         if os.path.exists(ass_path):
-            os.remove(ass_path)
+            try: os.remove(ass_path)
+            except Exception: pass
 
 if __name__ == "__main__":
     if len(sys.argv) < 4:
-        print(json.dumps({"error": "Usage: tools_add_captions.py <input_video> <style_name> <output_video>"}))
+        print(json.dumps({"error": "Usage: tools_add_captions.py <input_video> <style_name> <output_video> [model_size]"}))
         sys.exit(1)
         
     in_video = sys.argv[1]
     style = sys.argv[2]
     out_video = sys.argv[3]
+    model_size = sys.argv[4] if len(sys.argv) > 4 else "base"
     
     try:
-        res = apply_captions(in_video, style, out_video)
+        res = apply_captions(in_video, style, out_video, model_size=model_size)
         print(json.dumps(res))
     except Exception as e:
         print(json.dumps({"error": str(e)}))

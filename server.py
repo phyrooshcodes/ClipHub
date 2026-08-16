@@ -64,11 +64,11 @@ async def get_style():
 async def get_app():
     return FileResponse(BASE_DIR / "ui" / "app.js")
 
-# ─── Entry Point ─────────────────────────────────────────────
-def _open_browser():
-    time.sleep(1.5)
-    webbrowser.open("http://localhost:7842")
+@app.get("/logo.jpg", response_class=FileResponse)
+async def get_logo():
+    return FileResponse(BASE_DIR / "ui" / "logo.jpg")
 
+# ─── Helper ─────────────────────────────────────────────────
 def get_local_ip() -> str:
     try:
         import socket
@@ -89,12 +89,43 @@ async def server_info():
         "wifi_ip": ip
     }
 
+@app.get("/api/system-status")
+async def get_system_status():
+    import subprocess
+    status = {
+        "gpu": "Detecting...",
+        "nvenc": "Detecting...",
+        "kokoro": "Ready",
+        "whisper": "Ready"
+    }
+    
+    # Try detecting GPU via nvidia-smi
+    try:
+        res = subprocess.run(["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"], capture_output=True, text=True, timeout=2)
+        if res.returncode == 0 and res.stdout.strip():
+            gpu_name = res.stdout.strip().split("\n")[0]
+            status["gpu"] = gpu_name
+            status["nvenc"] = "Ready" if "RTX" in gpu_name or "GTX" in gpu_name else "Unsupported"
+        else:
+            status["gpu"] = "CPU / Unknown"
+            status["nvenc"] = "Not available"
+    except Exception:
+        status["gpu"] = "CPU Only"
+        status["nvenc"] = "Not available"
+        
+    return status
+
+# ─── Entry Point ─────────────────────────────────────────────
+def _open_browser():
+    time.sleep(1.5)
+    webbrowser.open("http://localhost:7842")
+
 if __name__ == "__main__":
     import os
     if os.environ.get("CLIPHUB_OPEN_BROWSER", "1") == "1":
         threading.Thread(target=_open_browser, daemon=True).start()
     local_ip = get_local_ip()
-    print("\n  ✦ CLIPHUB CLIPS — Server Started")
+    print("\n  * CLIPHUB CLIPS * Server Started")
     print(f"  -> Local PC   : http://localhost:7842")
     print(f"  -> Phone/Wi-Fi : http://{local_ip}:7842\n")
     uvicorn.run(app, host="0.0.0.0", port=7842, log_level="warning")

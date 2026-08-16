@@ -219,13 +219,55 @@
 
       </div> <!-- /dashboard-grid -->
       
-      <!-- OTHER VIEWS (hidden by default, used for Clip Gallery, History) -->
-      <div class="view-hidden" id="section-clips">
-        <!-- Rendered clips will go here -->
+      <!-- OTHER VIEWS / MODALS -->
+      <!-- Clip Gallery View / Modal -->
+      <div id="modal-gallery" class="modal-backdrop hidden">
+        <div class="modal-card modal-card-lg">
+          <div class="modal-header">
+            <div style="display:flex; align-items:center; gap:10px;">
+              <i class="ri-film-line" style="font-size:1.2rem; color:var(--brand-purple);"></i>
+              <h3>Clip Gallery</h3>
+            </div>
+            <button class="close-modal" id="btn-back-from-clips"><i class="ri-close-line"></i></button>
+          </div>
+          <div class="modal-body">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+              <p style="color:var(--text-muted); margin:0;">All generated vertical clips ready for download or publishing.</p>
+              <button class="btn-primary-gradient" id="btn-publish-all" style="padding:6px 16px; font-size:13px;"><i class="ri-send-plane-fill"></i> Publish All</button>
+            </div>
+            <div id="clips-container" class="clips-grid">
+              <!-- Clips rendered dynamically -->
+            </div>
+          </div>
+        </div>
       </div>
-      <div class="view-hidden" id="section-history">
-        <!-- History logs will go here -->
+      <div id="section-clips" class="hidden"></div>
+
+      <!-- History View / Modal -->
+      <div id="modal-history" class="modal-backdrop hidden">
+        <div class="modal-card modal-card-lg">
+          <div class="modal-header">
+            <div style="display:flex; align-items:center; gap:10px;">
+              <i class="ri-history-line" style="font-size:1.2rem; color:var(--brand-purple);"></i>
+              <h3>Processing History & Logs</h3>
+            </div>
+            <button class="close-modal" id="btn-close-history"><i class="ri-close-line"></i></button>
+          </div>
+          <div class="modal-body">
+            <div class="panel-tabs" style="margin-bottom:15px;">
+              <button class="tab active" id="tab-clip-history">Clip Jobs</button>
+              <button class="tab" id="tab-caption-history">Captions</button>
+            </div>
+            <div id="history-container">
+              <!-- History cards rendered dynamically -->
+            </div>
+            <div id="caption-history-container" class="hidden">
+              <!-- Caption history cards rendered dynamically -->
+            </div>
+          </div>
+        </div>
       </div>
+      <div id="section-history" class="hidden"></div>
 
     <!-- FOOTER STATUS BAR -->
     <footer class="status-bar">
@@ -243,94 +285,288 @@
     </footer>
     </main>
     
-    <!-- MODALS (Settings, YouTube Import, etc.) -->
+    <!-- MODALS -->
+    <!-- Settings Modal -->
     <div id="modal-settings" class="modal-backdrop hidden">
       <div class="modal-card">
         <div class="modal-header">
-          <h3>Settings</h3>
-          <button class="close-modal"><i class="ri-close-line"></i></button>
+          <div style="display:flex; align-items:center; gap:10px;">
+            <i class="ri-settings-4-line" style="font-size:1.2rem; color:var(--brand-purple);"></i>
+            <h3>Settings</h3>
+          </div>
+          <button class="close-modal" id="btn-close-settings"><i class="ri-close-line"></i></button>
         </div>
-        <div class="modal-body" style="padding: 20px; display: flex; flex-direction: column; gap: 10px;">
-           <label><input type="checkbox" id="setting-auto-approve"> Auto Approve</label>
-           <label><input type="checkbox" id="setting-auto-publish"> Auto Publish</label>
-           <label><input type="checkbox" id="setting-add-captions"> Add Captions</label>
-           <label>Model: <select id="config-model"><option value="small">Small</option></select></label>
-           <label>Caption Style: <select id="config-caption-style"><option value="kinetic_slide">Kinetic Slide</option></select></label>
-           <label>Commentary Mode: <select id="config-commentary-mode"><option value="hook_commentary">Hook Commentary</option></select></label>
-           <label>Commentary Voice: <select id="config-commentary-voice"><option value="af_sarah">AF Sarah</option></select></label>
-           <label>Nvidia API Key: <input type="password" id="nvidia-key"></label>
-           <button id="btn-save-nvidia-key" class="btn-primary">Save Key</button>
-           <span id="nvidia-key-status"></span>
+        <div class="modal-body" style="padding: 20px; display: flex; flex-direction: column; gap: 14px;">
+           <label style="display:flex; align-items:center; gap:8px; font-weight:500;"><input type="checkbox" id="setting-auto-approve"> Auto-Approve Editorial Review</label>
+           <label style="display:flex; align-items:center; gap:8px; font-weight:500;"><input type="checkbox" id="setting-auto-publish"> Auto-Publish Completed Clips</label>
+           <label style="display:flex; align-items:center; gap:8px; font-weight:500;"><input type="checkbox" id="setting-add-captions" checked> Burn Kinetic Subtitles</label>
            
-           <hr>
-           <button id="btn-connect-ig">Connect IG</button>
-           <button id="btn-connect-yt">Connect YT</button>
-           <button id="btn-disconnect-yt">Disconnect YT</button>
-           <button id="btn-switch-yt">Switch YT</button>
+           <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+             <label style="display:flex; flex-direction:column; gap:4px; font-size:12px; color:var(--text-muted);">
+               ASR Model
+               <select id="config-model" style="padding:8px; border:1px solid var(--border-light); border-radius:4px; background:var(--bg-app); font-family:inherit;">
+                 <option value="base">Base (Fastest)</option>
+                 <option value="small" selected>Small (Balanced)</option>
+                 <option value="medium">Medium (Accurate)</option>
+               </select>
+             </label>
+             <label style="display:flex; flex-direction:column; gap:4px; font-size:12px; color:var(--text-muted);">
+               Caption Style
+               <select id="config-caption-style" style="padding:8px; border:1px solid var(--border-light); border-radius:4px; background:var(--bg-app); font-family:inherit;">
+                 <option value="kinetic_slide">Kinetic Slide</option>
+                 <option value="tiktok_pop">TikTok Pop</option>
+                 <option value="cyberpunk_neon">Cyberpunk Neon</option>
+                 <option value="emerald_money">Emerald Money</option>
+                 <option value="fire_ember">Fire Ember</option>
+               </select>
+             </label>
+             <label style="display:flex; flex-direction:column; gap:4px; font-size:12px; color:var(--text-muted);">
+               Commentary Mode
+               <select id="config-commentary-mode" style="padding:8px; border:1px solid var(--border-light); border-radius:4px; background:var(--bg-app); font-family:inherit;">
+                 <option value="off">Off (Original Audio Only)</option>
+                 <option value="hook_only">Hook Only (Intro Pitch)</option>
+                 <option value="hook_commentary" selected>Hook & Commentary (Full Story)</option>
+               </select>
+             </label>
+             <label style="display:flex; flex-direction:column; gap:4px; font-size:12px; color:var(--text-muted);">
+               TTS Voice (Kokoro)
+               <select id="config-commentary-voice" style="padding:8px; border:1px solid var(--border-light); border-radius:4px; background:var(--bg-app); font-family:inherit;">
+                 <option value="af_sarah" selected>Sarah (Female — Energetic)</option>
+                 <option value="af_bella">Bella (Female — Warm)</option>
+                 <option value="am_adam">Adam (Male — Deep Narrator)</option>
+                 <option value="am_michael">Michael (Male — Conversational)</option>
+               </select>
+             </label>
+           </div>
+           
+           <div style="display:flex; flex-direction:column; gap:6px;">
+             <label style="font-size:12px; color:var(--text-muted);">NVIDIA NIM API Key</label>
+             <div style="display:flex; gap:8px;">
+               <input type="password" id="nvidia-key" placeholder="nvapi-..." style="flex:1; padding:8px 12px; border:1px solid var(--border-light); border-radius:4px; font-family:var(--font-mono);">
+               <button id="btn-save-nvidia-key" class="btn-primary-gradient" style="padding:8px 16px; font-size:13px;">Save Key</button>
+             </div>
+             <span id="nvidia-key-status" style="font-size:12px;"></span>
+           </div>
+           
+           <hr style="border:none; border-top:1px solid var(--border-light); margin:4px 0;">
+            <div style="display:flex; flex-direction:column; gap:8px; margin-top:8px;">
+              <span style="font-weight:600; font-size:13px;">Publishing Mode</span>
+              <div style="display:flex; gap:16px; align-items:center;">
+                <label style="display:flex; align-items:center; gap:6px;"><input type="radio" name="publishing-mode" value="manual" checked> Manual Review</label>
+                <label style="display:flex; align-items:center; gap:6px;"><input type="radio" name="publishing-mode" value="auto"> Auto-Publish</label>
+                <span id="publishing-mode-status" style="font-size:12px; color:var(--brand-purple); font-weight:600;">Manual Publish Enabled</span>
+              </div>
+            </div>
+
+            <div style="display:flex; flex-direction:column; gap:8px; margin-top:8px;">
+              <span style="font-weight:600; font-size:13px;">Amazon Affiliate & Shopping</span>
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                <input type="text" id="amazon-store-tag" placeholder="Amazon Store Tag (e.g. tag-20)" style="padding:8px 12px; border:1px solid var(--border-light); border-radius:4px; font-family:inherit;">
+                <div style="display:flex; flex-direction:column; gap:4px;">
+                  <label style="display:flex; align-items:center; gap:6px; font-size:12px;"><input type="checkbox" id="opt-yt-comment" checked> Post Affiliate in Pinned Comment</label>
+                  <label style="display:flex; align-items:center; gap:6px; font-size:12px;"><input type="checkbox" id="opt-yt-shopping"> Tag Products via YouTube Shopping</label>
+                </div>
+              </div>
+            </div>
+            
+            <hr style="border:none; border-top:1px solid var(--border-light); margin:4px 0;">
+            
+            <div style="display:flex; flex-direction:column; gap:8px;">
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <span style="font-weight:600; font-size:13px;">Social Publishing Connections</span>
+                <span id="yt-channel-title" style="font-size:12px; color:var(--brand-purple); font-weight:600;">YouTube Studio</span>
+              </div>
+              <div style="display:flex; gap:16px; margin-bottom:4px;">
+                <label style="display:flex; align-items:center; gap:6px; font-size:12px;"><input type="checkbox" id="chk-platform-instagram" checked> Enable Instagram</label>
+                <label style="display:flex; align-items:center; gap:6px; font-size:12px;"><input type="checkbox" id="chk-platform-youtube" checked> Enable YouTube</label>
+                <input type="checkbox" id="opt-instagram" class="hidden" checked>
+                <input type="checkbox" id="opt-youtube" class="hidden" checked>
+              </div>
+              <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                <button id="btn-connect-ig" class="btn-outline-dashed" style="padding:8px 14px; font-size:12px;"><i class="ri-instagram-line"></i> Connect Instagram</button>
+                <button id="btn-connect-yt" class="btn-outline-dashed" style="padding:8px 14px; font-size:12px;"><i class="ri-youtube-line"></i> Connect YouTube</button>
+                <button id="btn-disconnect-yt" class="btn-outline-dashed hidden" style="padding:8px 14px; font-size:12px;">Disconnect YT</button>
+                <button id="btn-switch-yt" class="btn-outline-dashed hidden" style="padding:8px 14px; font-size:12px;">Switch Channel</button>
+              </div>
+              <div style="display:flex; gap:16px; font-size:12px; color:var(--text-muted); margin-top:4px;">
+                <span id="ig-status-text">IG: Not connected</span>
+                <span id="yt-status-text">YT: Not connected</span>
+              </div>
+              <div id="wifi-server-info" style="font-size:12px; color:var(--text-muted); margin-top:4px;"></div>
+            </div>
+         </div>
+       </div>
+     </div>
+
+    <!-- Hidden tool inputs -->
+    <input type="file" id="standalone-caption-file" accept="video/*" class="hidden">
+    <span id="proc-filename" class="hidden"></span>
+
+    <!-- Ask Caption Modal -->
+    <div id="modal-ask-caption" class="modal-backdrop hidden">
+      <div class="modal-card modal-card-lg">
+        <div class="modal-header">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <i class="ri-chat-voice-line" style="font-size:1.2rem; color:var(--brand-purple);"></i>
+            <h3>Generate Viral Title & Caption</h3>
+          </div>
+          <button class="close-modal" id="btn-close-ask-caption"><i class="ri-close-line"></i></button>
+        </div>
+        <div class="modal-body" style="padding:20px; display:flex; flex-direction:column; gap:14px;">
+          <input type="file" id="ask-caption-file" accept="video/*,audio/*" class="hidden">
+          <button id="btn-ask-upload" class="btn-outline-dashed" style="padding:16px; text-align:center; display:flex; flex-direction:column; align-items:center; gap:6px; cursor:pointer;">
+            <i class="ri-file-upload-line" style="font-size:24px; color:var(--brand-purple);"></i>
+            <span style="font-weight:600;">Choose Video / Audio Clip</span>
+            <small style="color:var(--text-muted);">Extracts speech transcript and generates viral hooks</small>
+          </button>
+          <div id="ask-caption-loading" class="hidden" style="text-align:center; padding:20px;">
+            <i class="ri-loader-4-line spin" style="font-size:2rem; color:var(--brand-purple);"></i>
+            <p style="margin-top:8px; font-weight:600;">Transcribing & Generating Viral Captions...</p>
+          </div>
+          <div id="ask-caption-result" class="hidden" style="display:flex; flex-direction:column; gap:10px;">
+            <textarea id="ask-caption-text" rows="8" style="width:100%; padding:10px; border:1px solid var(--border-light); border-radius:4px; font-family:inherit;"></textarea>
+            <button id="btn-ask-copy" class="btn-primary-gradient" style="padding:8px 16px; align-self:flex-end;"><i class="ri-file-copy-line"></i> Copy to Clipboard</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Ask Product Modal -->
+    <div id="modal-ask-product" class="modal-backdrop hidden">
+      <div class="modal-card modal-card-lg">
+        <div class="modal-header">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <i class="ri-shopping-bag-3-line" style="font-size:1.2rem; color:var(--brand-purple);"></i>
+            <h3>Monetization: Amazon Affiliate Recommendations</h3>
+          </div>
+          <button class="close-modal" id="btn-close-ask-product"><i class="ri-close-line"></i></button>
+        </div>
+        <div class="modal-body" style="padding:20px; display:flex; flex-direction:column; gap:14px;">
+          <input type="file" id="ask-product-file" accept="video/*,audio/*" class="hidden">
+          <button id="btn-ask-product-upload" class="btn-outline-dashed" style="padding:16px; text-align:center; display:flex; flex-direction:column; align-items:center; gap:6px; cursor:pointer;">
+            <i class="ri-file-upload-line" style="font-size:24px; color:var(--brand-purple);"></i>
+            <span style="font-weight:600;">Choose Video / Audio Clip</span>
+            <small style="color:var(--text-muted);">Analyzes context and matches contextual affiliate keywords</small>
+          </button>
+          <div id="ask-product-loading" class="hidden" style="text-align:center; padding:20px;">
+            <i class="ri-loader-4-line spin" style="font-size:2rem; color:var(--brand-purple);"></i>
+            <p style="margin-top:8px; font-weight:600;">Analyzing transcript for product matches...</p>
+          </div>
+          <div id="ask-product-result" class="hidden" style="display:flex; flex-direction:column; gap:10px;">
+            <div id="ask-product-list" style="display:flex; flex-direction:column; gap:8px;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Upload Center Modal / Drawer -->
+    <div id="modal-upload-center" class="modal-backdrop hidden">
+      <div class="modal-card modal-card-xl">
+        <div class="modal-header">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <i class="ri-cloud-line" style="font-size:1.2rem; color:var(--brand-purple);"></i>
+            <div>
+              <h3>Social Upload Queue & Distribution Center</h3>
+              <p id="upload-center-subtitle" style="font-size:12px; color:var(--text-muted);">Manage scheduled Instagram Reels and YouTube Shorts</p>
+            </div>
+          </div>
+          <button class="close-modal" id="btn-close-upload-center"><i class="ri-close-line"></i></button>
+        </div>
+        <div class="modal-body" style="padding:20px; max-height:70vh; overflow-y:auto; display:flex; flex-direction:column; gap:14px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; padding:12px; background:var(--bg-app); border-radius:4px;">
+            <span id="upload-status-text" style="font-weight:600;">Queue Idle</span>
+            <div style="display:flex; gap:8px;">
+              <button id="btn-queue-pause" class="btn-outline-dashed" style="padding:6px 12px; font-size:12px;">Pause Queue</button>
+              <button id="btn-clear-failed" class="btn-outline-dashed" style="padding:6px 12px; font-size:12px;">Clear Failed</button>
+              <button id="btn-remove-completed" class="btn-outline-dashed" style="padding:6px 12px; font-size:12px;">Clear Completed</button>
+            </div>
+          </div>
+          <div id="upload-overview" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:10px;"></div>
+          <div id="uploading-list" style="display:flex; flex-direction:column; gap:8px;"></div>
+          <div id="queue-list" style="display:flex; flex-direction:column; gap:8px;"></div>
+          <div id="manual-list" style="display:flex; flex-direction:column; gap:8px;"></div>
+          <div id="failed-list" style="display:flex; flex-direction:column; gap:8px;"></div>
+          <div id="completed-list" style="display:flex; flex-direction:column; gap:8px;"></div>
+        </div>
+      </div>
+    </div>
+    <div id="section-upload-center" class="hidden"></div>
+
+    <!-- Caption Studio Style Picker Modal -->
+    <div id="modal-caption-studio" class="modal-backdrop hidden">
+      <div class="modal-card modal-card-xl">
+        <div class="modal-header">
+          <div>
+            <h3 id="caption-studio-title">Step 2: Choose Your <span style="color:var(--brand-purple);">Caption Style</span></h3>
+            <p id="caption-studio-subtitle" style="font-size:12px; color:var(--text-muted); margin-top:2px;">Select a viral typography preset below.</p>
+          </div>
+          <button class="close-modal" id="btn-caption-studio-close"><i class="ri-close-line"></i></button>
+        </div>
+        <div class="modal-body" style="padding:20px; max-height:70vh; overflow-y:auto;">
+          <div id="caption-studio-main">
+            <div id="caption-styles-grid" class="caption-grid" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(240px, 1fr)); gap:16px;">
+              <!-- 16 Kinetic style cards dynamically rendered -->
+            </div>
+          </div>
+          <div id="standalone-caption-loading" class="hidden" style="text-align:center; padding:40px;">
+            <i class="ri-loader-4-line spin" style="font-size:2rem; color:var(--brand-purple);"></i>
+            <p style="margin-top:12px; font-weight:600;">Burning captions onto video...</p>
+          </div>
+          <div id="standalone-caption-result" class="hidden" style="text-align:center; padding:20px;">
+            <video id="standalone-caption-video-player" controls style="max-width:320px; border-radius:8px; margin-bottom:15px;"></video>
+            <div>
+              <a id="btn-download-captioned" class="btn-primary-gradient" download style="display:inline-block; padding:10px 20px; text-decoration:none;">Download Captioned Video</a>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer" style="padding:16px 20px; border-top:1px solid var(--border-light); display:flex; justify-content:space-between; align-items:center;">
+          <button id="btn-caption-studio-back" class="btn-outline-dashed" style="padding:8px 16px;">Back</button>
+          <button id="btn-caption-studio-proceed" class="btn-primary-gradient" style="padding:10px 24px;"><i class="ri-magic-line"></i> <span id="btn-proceed-modal-text">✨ Start Generating Clips</span></button>
         </div>
       </div>
     </div>
     
-    <!-- MISSING DOM ELEMENTS STUB TO PREVENT CRASHES -->
-    <div id="legacy-dom-stubs" class="hidden" style="display: none;">
-      <!-- Caption Studio -->
-      <div id="section-caption-studio">
-        <h2 id="caption-studio-title"></h2>
-        <p id="caption-studio-subtitle"></p>
-        <div id="caption-studio-main"></div>
-        <div id="standalone-caption-loading"></div>
-        <div id="standalone-caption-result"></div>
-        <button id="btn-proceed-text"></button>
-        <button id="btn-caption-studio-back"></button>
-        <button id="btn-caption-studio-proceed"></button>
-        <video id="standalone-caption-video-player"></video>
-        <a id="btn-download-captioned"></a>
-        <button id="btn-caption-studio-done"></button>
-        <button id="btn-add-captions-tool"></button>
-        <input type="file" id="standalone-caption-file">
+    <!-- Social Publish Modal -->
+    <div id="modal-publish" class="modal-backdrop hidden">
+      <div class="modal-card">
+        <div class="modal-header">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <i class="ri-send-plane-fill" style="font-size:1.2rem; color:var(--brand-purple);"></i>
+            <h3 id="publish-modal-title">Publish Clip to Social Media</h3>
+          </div>
+          <button class="close-modal" id="btn-close-publish-modal"><i class="ri-close-line"></i></button>
+        </div>
+        <div class="modal-body" style="padding:20px; display:flex; flex-direction:column; gap:12px;">
+          <div id="publish-selection-view">
+            <div id="publish-modal-body">
+              <label style="font-size:12px; color:var(--text-muted);">Title</label>
+              <input type="text" id="publish-input-title" style="width:100%; padding:8px 12px; border:1px solid var(--border-light); border-radius:4px; font-family:inherit;">
+              <label style="font-size:12px; color:var(--text-muted); margin-top:8px;">Caption / Description</label>
+              <textarea id="publish-input-caption" rows="4" style="width:100%; padding:8px 12px; border:1px solid var(--border-light); border-radius:4px; font-family:inherit;"></textarea>
+              
+              <div style="display:flex; gap:16px; margin-top:10px;">
+                <label style="display:flex; align-items:center; gap:6px; font-weight:600;"><input type="checkbox" id="pub-platform-yt" checked> YouTube Shorts</label>
+                <label style="display:flex; align-items:center; gap:6px; font-weight:600;"><input type="checkbox" id="pub-platform-ig" checked> Instagram Reels</label>
+              </div>
+            </div>
+          </div>
+          <div id="publish-progress-view" class="hidden">
+            <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+              <span id="publish-progress-status" style="font-weight:600; font-size:13px;">Publishing...</span>
+              <span id="publish-progress-percent" style="font-weight:600; color:var(--brand-purple);">0%</span>
+            </div>
+            <div style="height:6px; background:var(--bg-app); border-radius:3px; overflow:hidden; margin-bottom:12px;">
+              <div id="publish-progress-fill" style="width:0%; height:100%; background:var(--brand-purple); transition:width 0.3s ease;"></div>
+            </div>
+            <div id="publish-console-output" style="font-family:var(--font-mono); font-size:11px; max-height:140px; overflow-y:auto; padding:8px; background:var(--bg-app); border-radius:4px; border:1px solid var(--border-light);"></div>
+          </div>
+          <div id="publish-log-area" style="font-family:var(--font-mono); font-size:11px; max-height:120px; overflow-y:auto; padding:8px; background:var(--bg-app); border-radius:4px; border:1px solid var(--border-light);"></div>
+        </div>
+        <div class="modal-footer" style="padding:14px 20px; border-top:1px solid var(--border-light); display:flex; justify-content:flex-end; gap:10px;">
+          <button id="btn-publish-done" class="btn-outline-dashed hidden" style="padding:8px 16px;">Done</button>
+          <button id="btn-confirm-publish" class="btn-primary-gradient" style="padding:8px 20px;"><i class="ri-upload-cloud-line"></i> Confirm & Upload</button>
+        </div>
       </div>
-      
-      <!-- Ask Caption -->
-      <div id="modal-ask-caption"></div>
-      <button id="btn-ask-caption"></button>
-      <button id="btn-ask-upload"></button>
-      <input type="file" id="ask-caption-file">
-      <div id="ask-caption-loading"></div>
-      <div id="ask-caption-result"></div>
-      <div id="ask-caption-text"></div>
-      <button id="btn-ask-copy"></button>
-      
-      <!-- Ask Product -->
-      <div id="modal-ask-product"></div>
-      <button id="btn-ask-product"></button>
-      <button id="btn-ask-product-upload"></button>
-      <input type="file" id="ask-product-file">
-      <div id="ask-product-loading"></div>
-      <div id="ask-product-result"></div>
-      <div id="ask-product-list"></div>
-      
-      <!-- History / Clips / Queue -->
-      <button id="tab-clip-history"></button>
-      <button id="tab-caption-history"></button>
-      <div id="history-container"></div>
-      <div id="caption-history-container"></div>
-      <div id="review-cards-container"></div>
-      
-      <button id="btn-queue-pause"></button>
-      <button id="btn-clear-failed"></button>
-      <button id="btn-remove-completed"></button>
-      
-      <button id="btn-back-from-clips"></button>
-      <div id="clips-container"></div>
-      <button id="btn-publish-all"></button>
-      <button id="btn-confirm-publish"></button>
-      <button id="btn-publish-done"></button>
-      <button id="btn-close-publish-modal"></button>
-      <button id="btn-mass-post-history"></button>
-      <div id="modal-publish"></div>
-      
-      <div id="step-download"></div>
-      <span id="proc-filename"></span>
     </div>
     
   </div>

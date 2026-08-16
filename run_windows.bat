@@ -194,17 +194,34 @@ echo:
 echo  +==============================================================+
 echo  ^|                 SELECT USER INTERFACE MODE                   ^|
 echo  +==============================================================+
-echo  ^| [1] Classic Web UI (FastAPI - Launches local browser)        ^|
-echo  ^| [2] Beta UI (Tauri + React Modern Desktop UI)                 ^|
-echo  ^| [3] Mobile ^& Wi-Fi Mode (Terminal Only - Phone/Tablet)         ^|
+echo  ^| [1] Native Desktop App (Recommended, PyWebView)              ^|
+echo  ^| [2] Beta UI (Tauri + React Modern Desktop UI)                ^|
+echo  ^| [3] Mobile ^& Wi-Fi Mode (Terminal Only - Phone/Tablet)        ^|
+echo  ^| [4] Classic Web UI (FastAPI - Launches local browser)        ^|
 echo  +==============================================================+
 echo:
 set /p UI_CHOICE="Enter your choice (1, 2, or 3) [1]: "
 if "%UI_CHOICE%"=="" set UI_CHOICE=1
 
 :PROCESS_CHOICE
+if "%UI_CHOICE%"=="1" goto LAUNCH_NATIVE_DESKTOP
 if "%UI_CHOICE%"=="2" goto LAUNCH_BETA
 if "%UI_CHOICE%"=="3" goto LAUNCH_MOBILE_SERVER
+if "%UI_CHOICE%"=="4" goto LAUNCH_CLASSIC
+
+:LAUNCH_NATIVE_DESKTOP
+echo:
+echo  +==============================================================+
+echo  ^|                 CLIPHUB NATIVE DESKTOP                       ^|
+echo  ^|                 Starting Desktop Interface...                ^|
+echo  +==============================================================+
+echo:
+
+:: Free port 7842 if a previous server instance is still running
+for /f "tokens=5" %%a in ('netstat -aon 2^>nul ^| findstr :7842 ^| findstr LISTENING') do taskkill /f /pid %%a >nul 2>&1
+
+python desktop.py
+goto END_LAUNCH
 
 :LAUNCH_CLASSIC
 echo:
