@@ -67,7 +67,8 @@ class InstagramUploadResult:
 
 
 def _headless() -> bool:
-    return os.getenv("CLIPHUB_INSTAGRAM_HEADLESS", "1").strip().lower() not in {"0", "false", "no"}
+    val = os.getenv("CLIPHUB_INSTAGRAM_HEADLESS") or os.getenv("OBSCURA_INSTAGRAM_HEADLESS", "1")
+    return val.strip().lower() not in {"0", "false", "no"}
 
 
 def validate_reel_video(video_path: str) -> float:

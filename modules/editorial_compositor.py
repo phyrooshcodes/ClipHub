@@ -72,7 +72,7 @@ def align_editorial_timeline(
     hook_val = editorial_data.get("hook")
     hook_text = hook_val.get("text", "") if isinstance(hook_val, dict) else (hook_val or "")
     if isinstance(hook_text, str) and hook_text.strip():
-        process_segment(hook_text.strip(), current_time, "hook")
+        current_time = process_segment(hook_text.strip(), current_time, "hook")
 
     # 2. Commentary Segments
     # Find insertion points based on source words
@@ -81,8 +81,6 @@ def align_editorial_timeline(
         if not insert_text:
             continue
             
-        # simple heuristic: find the word matching the last word of insert_text
-        # inside the source_words.
         insert_words = insert_text.split()
         if not insert_words:
             continue
@@ -97,33 +95,24 @@ def align_editorial_timeline(
                 break
                 
         if insert_time >= 0:
-            process_segment(seg.get("text", ""), insert_time, "commentary")
+            # Ensure non-overlap with earlier AI events
+            insert_time = max(insert_time, current_time + 0.1)
+            if insert_time < clip_duration:
+                current_time = process_segment(seg.get("text", ""), insert_time, "commentary")
             
-    # 3. Takeaway (Aligned to end of clip)
+    # 3. Takeaway (Aligned near end of clip, with safety margin)
     takeaway_val = editorial_data.get("takeaway")
     takeaway_text = takeaway_val.get("text", "") if isinstance(takeaway_val, dict) else (takeaway_val or "")
     if isinstance(takeaway_text, str) and takeaway_text.strip():
         text = takeaway_text.strip()
-        safe_text = "".join(c if c.isalnum() else "_" for c in text[:20])
-        duration = generate_tts_sync(text, voice_id, audio_path)
-        
-        if duration > 0:
-            insert_time = max(0.0, clip_duration - duration)
-            tts_words = transcribe_audio(audio_path, model_size="tiny", language="en")
-            
-            for w in tts_words:
-                w["start"] += insert_time + clip_start_s
-                w["end"] += insert_time + clip_start_s
-                w["is_ai"] = True
-                ai_words.append(w)
-                
-            ai_audio_events.append({
-                "start_s": insert_time,
-                "end_s": insert_time + duration,
-                "audio_path": audio_path,
-                "type": "takeaway",
-                "text": text
-            })
+        # Estimate ~0.3s per word for provisional alignment
+        est_words = len(text.split())
+        est_dur = max(1.5, est_words * 0.35)
+        ideal_start = max(0.0, clip_duration - est_dur - 0.5)
+        # Ensure we don't start before previous AI event finishes
+        actual_start = max(ideal_start, current_time + 0.2)
+        if actual_start < clip_duration:
+            process_segment(text, actual_start, "takeaway")
 
     # Filter source words that overlap with AI events
     filtered_source_words = []
@@ -133,9 +122,8 @@ def align_editorial_timeline(
         
         overlap = False
         for ev in ai_audio_events:
-            # If word midpoint is within AI event
-            midpoint = (w_start_rel + w_end_rel) / 2
-            if ev["start_s"] <= midpoint <= ev["end_s"]:
+            # If word overlaps any part of an AI speech event
+            if max(w_start_rel, ev["start_s"]) < min(w_end_rel, ev["end_s"]):
                 overlap = True
                 break
         

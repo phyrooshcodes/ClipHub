@@ -135,16 +135,33 @@ async def get_system_status():
     return status
 
 # ─── Entry Point ─────────────────────────────────────────────
-def _open_browser():
+def _open_browser(port: int = 7842):
     time.sleep(1.5)
-    webbrowser.open("http://localhost:7842")
+    webbrowser.open(f"http://localhost:{port}")
 
 if __name__ == "__main__":
-    import os
+    import argparse
+    parser = argparse.ArgumentParser(description="ClipHub Desktop Server")
+    parser.add_argument("--host", default=os.environ.get("CLIPHUB_HOST", "127.0.0.1"), help="Host IP to bind (default: 127.0.0.1 for desktop security)")
+    parser.add_argument("--port", type=int, default=int(os.environ.get("CLIPHUB_PORT", "7842")), help="Port to bind (default: 7842)")
+    cli_args = parser.parse_args()
+
+    host = cli_args.host
+    port = cli_args.port
+
     if os.environ.get("CLIPHUB_OPEN_BROWSER", "1") == "1":
-        threading.Thread(target=_open_browser, daemon=True).start()
+        threading.Thread(target=_open_browser, args=(port,), daemon=True).start()
+
     local_ip = get_local_ip()
-    print("\n  * CLIPHUB CLIPS * Server Started")
-    print(f"  -> Local PC   : http://localhost:7842")
-    print(f"  -> Phone/Wi-Fi : http://{local_ip}:7842\n")
-    uvicorn.run(app, host="0.0.0.0", port=7842, log_level="warning")
+    print("\n" + "=" * 55)
+    print("  ✦  CLIPHUB STUDIO SERVER STARTED")
+    print("=" * 55)
+    print(f"  • Local Interface : http://localhost:{port}")
+    if host == "0.0.0.0":
+        print(f"  • LAN Access      : http://{local_ip}:{port} (LAN Mode Active)")
+    else:
+        print(f"  • Security Mode   : Desktop Only (Loopback 127.0.0.1)")
+        print(f"  • LAN Sharing     : Pass --host 0.0.0.0 to enable")
+    print("=" * 55 + "\n")
+
+    uvicorn.run(app, host=host, port=port, log_level="warning")

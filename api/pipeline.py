@@ -233,16 +233,49 @@ async def _run_process(job_id: str, cmd: list, start_time: float):
     finally:
         registry.mark_done(job_id)
 
+from pydantic import BaseModel, Field
+from typing import Literal, Optional
+
+class JobConfigModel(BaseModel):
+    model: Literal["tiny", "base", "small"] = "small"
+    max_clips: int = Field(default=10, ge=1, le=30)
+    caption_style: str = "kinetic_slide"
+    font_preset: Literal["default", "hormozi", "beast", "minimal"] = "default"
+    font_name: str = ""
+    font_size: int = Field(default=48, ge=12, le=140)
+    primary_color: str = "#FFFFFF"
+    outline_color: str = "#000000"
+    no_title: bool = False
+    commentary_mode: Literal["off", "hook_only", "hook_commentary", "full_editorial"] = "hook_commentary"
+    commentary_voice: str = "af_sarah"
+    language: Optional[str] = None
+    auto_publish: bool = False
+    phase: Literal["1", "2", "all"] = "1"
+    force_restart: bool = False
+
+MAX_UPLOAD_SIZE = 2 * 1024 * 1024 * 1024  # 2 GB safety quota
+
 @router.post("/upload")
 async def upload_video(file: UploadFile = File(...)):
     job_id = str(uuid.uuid4())[:8]
     suffix = Path(file.filename).suffix or ".mp4"
+    if suffix.lower() not in (".mp4", ".mov", ".mkv", ".webm", ".avi"):
+        return JSONResponse({"error": "Unsupported video format. MP4, MOV, MKV, WebM allowed."}, status_code=400)
+
     save_path = UPLOAD_DIR / f"job_{job_id}{suffix}"
+    bytes_written = 0
     with open(save_path, "wb") as f:
         while True:
             chunk = await file.read(4 * 1024 * 1024)
             if not chunk: break
+            bytes_written += len(chunk)
+            if bytes_written > MAX_UPLOAD_SIZE:
+                f.close()
+                if save_path.exists():
+                    save_path.unlink(missing_ok=True)
+                return JSONResponse({"error": "Upload exceeds 2 GB limit."}, status_code=413)
             f.write(chunk)
+            
     registry.register(job_id, str(save_path), file.filename)
     return {"job_id": job_id, "filename": file.filename}
 
@@ -264,8 +297,8 @@ async def start_from_upload(filename: str):
     return {"job_id": job_id, "filename": filename}
 
 @router.post("/config/{job_id}")
-async def set_job_config(job_id: str, request: Request):
-    registry.set_config(job_id, await request.json())
+async def set_job_config(job_id: str, config: JobConfigModel):
+    registry.set_config(job_id, config.model_dump())
     return {"status": "ok"}
 
 @router.post("/api/cancel/{job_id}")
@@ -332,11 +365,18 @@ async def run_pipeline_ws(websocket: WebSocket, job_id: str):
     config = registry.get_config(job_id)
     force_restart = config.get("force_restart", False)
     
-    if force_restart or not registry.get_events(job_id):
-        if force_restart:
-            registry._events[job_id] = []
+    should_launch = False
+    with registry._lock:
+        if force_restart or not job.started:
+            job.started = True
             job.done = False
-        
+            if force_restart:
+                registry._events[job_id] = []
+                config.pop("force_restart", None)
+                registry.set_config(job_id, config)
+            should_launch = True
+
+    if should_launch:
         meta_event = get_video_metadata(job.path)
         registry.add_event(job_id, meta_event)
         registry.add_event(job_id, {"type": "start", "filename": job.filename})

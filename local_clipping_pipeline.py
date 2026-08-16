@@ -288,8 +288,26 @@ def preflight_checks(input_video: str) -> None:
     logger.info("─── Pre-flight Passed ──────────────────────────────\n")
 
 
+def _prune_stale_temp_files(temp_root: str = "temp", max_age_days: int = 7) -> None:
+    """Evicts intermediate artifacts and temporary processing directories older than max_age_days."""
+    if not os.path.exists(temp_root):
+        return
+    now = time.time()
+    cutoff = now - (max_age_days * 86400)
+    for entry in os.scandir(temp_root):
+        try:
+            if entry.name.startswith("processing_") and entry.is_dir():
+                if entry.stat().st_mtime < cutoff:
+                    shutil.rmtree(entry.path, ignore_errors=True)
+            elif entry.is_file() and entry.stat().st_mtime < cutoff:
+                os.remove(entry.path)
+        except Exception:
+            pass
+
+
 def run_pipeline(args: argparse.Namespace) -> None:
     """Main pipeline execution."""
+    _prune_stale_temp_files()
 
     input_video = os.path.abspath(args.input)
     output_dir  = os.path.abspath(args.output_dir)
@@ -318,15 +336,22 @@ def run_pipeline(args: argparse.Namespace) -> None:
         audio_path = os.path.join(temp_dir, "audio.wav")
         video_duration = get_video_duration(input_video)
 
-    # Define cache keys and paths
+    # Define deterministic content & version-based cache keys
     import hashlib
+    PIPELINE_VERSION = "2.2.0"
+    HOOK_DETECTOR_VERSION = "2.1.0"
     file_stat = os.stat(input_video)
-    hash_str = f"{input_video}_{file_stat.st_size}_{args.language}"
-    cache_key = hashlib.md5(hash_str.encode()).hexdigest()[:8]
-    words_cache_path = os.path.join(temp_dir, f"words_{cache_key}.json")
+    
+    # Transcript cache: tied to file path, size, modification time, whisper model, language, and pipeline version
+    transcript_hash_str = f"{os.path.abspath(input_video)}_{file_stat.st_size}_{file_stat.st_mtime}_{args.model}_{args.language}_{PIPELINE_VERSION}"
+    words_cache_key = hashlib.sha256(transcript_hash_str.encode()).hexdigest()[:12]
+    words_cache_path = os.path.join(temp_dir, f"words_{words_cache_key}.json")
     
     metadata_file = os.path.join(output_dir, "clips_metadata.json")
-    hooks_cache_path = os.path.join(temp_dir, f"hooks_{cache_key}_{args.max_clips}.json")
+    # Hook cache: tied to transcript key, max_clips, commentary mode, and detector version
+    hook_hash_str = f"{words_cache_key}_{args.max_clips}_{getattr(args, 'commentary_mode', 'off')}_{HOOK_DETECTOR_VERSION}"
+    hook_cache_key = hashlib.sha256(hook_hash_str.encode()).hexdigest()[:12]
+    hooks_cache_path = os.path.join(temp_dir, f"hooks_{hook_cache_key}.json")
     
     if args.phase in ("1", "all"):
         # ─── STAGE 2: ASR Transcription (Whisper) ─────────────────

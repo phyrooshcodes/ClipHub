@@ -45,13 +45,17 @@ log "                      O B S C U R A   C L I P S"
 log "=============================================================="
 echo
 
-# Keep application state with this installation. This avoids a failed launch
-# when the desktop session cannot write to ~/.local/state (a common issue with
-# file-manager and sandbox launches).
-export XDG_STATE_HOME="$DIR/.state"
-mkdir -p "$XDG_STATE_HOME" || {
-    err "Cannot create application state directory: $XDG_STATE_HOME"
-    exit 1
+# Respect user's private OS state directory if set, or default to ~/.local/state
+if [ -z "${XDG_STATE_HOME:-}" ]; then
+    export XDG_STATE_HOME="$HOME/.local/state"
+fi
+mkdir -p "$XDG_STATE_HOME/cliphub" 2>/dev/null || {
+    # Fallback to local .state only if home directory is not writable
+    export XDG_STATE_HOME="$DIR/.state"
+    mkdir -p "$XDG_STATE_HOME" || {
+        err "Cannot create application state directory: $XDG_STATE_HOME"
+        exit 1
+    }
 }
 
 if ! command -v python3 >/dev/null 2>&1; then

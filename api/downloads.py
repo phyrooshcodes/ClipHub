@@ -45,20 +45,6 @@ def _clean_old_downloads():
         for k in list(active_downloads.keys())[:20]:
             active_downloads.pop(k, None)
 
-def _get_cookies_args():
-    home = Path.home()
-    if (home / ".mozilla" / "firefox").exists() or (home / "Library" / "Application Support" / "Firefox").exists():
-        return ["--cookies-from-browser", "firefox"]
-    if (home / ".config" / "google-chrome").exists() or (home / "Library" / "Application Support" / "Google" / "Chrome").exists() or (home / "AppData" / "Local" / "Google" / "Chrome" / "User Data").exists():
-        return ["--cookies-from-browser", "chrome"]
-    if (home / ".config" / "chromium").exists() or (home / "AppData" / "Local" / "Chromium" / "User Data").exists():
-        return ["--cookies-from-browser", "chromium"]
-    if (home / ".config" / "BraveSoftware" / "Brave-Browser").exists() or (home / "AppData" / "Local" / "BraveSoftware" / "Brave-Browser" / "User Data").exists():
-        return ["--cookies-from-browser", "brave"]
-    if (home / ".config" / "microsoft-edge").exists() or (home / "AppData" / "Local" / "Microsoft" / "Edge" / "User Data").exists():
-        return ["--cookies-from-browser", "edge"]
-    return ["--cookies-from-browser", "firefox"]
-
 async def _run_ytdl(job: DownloadJob, python_exe: str, save_path: str):
     env = os.environ.copy()
     local_bin = str(BASE_DIR / "bin")
@@ -71,20 +57,16 @@ async def _run_ytdl(job: DownloadJob, python_exe: str, save_path: str):
     env["PYTHONIOENCODING"] = "utf-8"
     env["PYTHONUTF8"] = "1"
 
-    async def execute_cmd(use_cookies: bool) -> bool:
+    async def execute_cmd() -> bool:
         cmd = [
             python_exe, "-m", "yt_dlp",
-        ]
-        if use_cookies:
-            cmd.extend(_get_cookies_args())
-        cmd.extend([
             "--remote-components", "ejs:github",
             "--js-runtimes", "node",
             "--format", "bestvideo[height<=1080]+bestaudio/best[height<=1080]/best",
             "--merge-output-format", "mp4",
             "--output", save_path,
             "--newline", "--no-playlist", "--no-part", "--", job.url
-        ])
+        ]
 
         job.events.append({"type": "ytdl_start", "url": job.url})
         try:
@@ -117,13 +99,7 @@ async def _run_ytdl(job: DownloadJob, python_exe: str, save_path: str):
             return False
 
     try:
-        # First attempt: Try standard download (fast, no browser cookie database locks)
-        success = await execute_cmd(use_cookies=False)
-        if not success and not Path(save_path).exists():
-            # Second attempt: Try with cookies if standard download failed (for age-restricted/private videos)
-            job.events.append({"type": "ytdl_log", "raw": "Standard download unfulfilled. Retrying with browser cookies..."})
-            success = await execute_cmd(use_cookies=True)
-
+        success = await execute_cmd()
         if success and Path(save_path).exists():
             registry.register(job.job_id, save_path, f"job_{job.job_id}.mp4")
             job.events.append({
@@ -132,7 +108,7 @@ async def _run_ytdl(job: DownloadJob, python_exe: str, save_path: str):
                 "size_mb": round(Path(save_path).stat().st_size / 1024 / 1024, 1),
             })
         else:
-            job.events.append({"type": "error", "message": "Download failed."})
+            job.events.append({"type": "error", "message": "Public download failed or URL is invalid."})
     except Exception as e:
         job.events.append({"type": "error", "message": str(e)})
     finally:
