@@ -307,7 +307,7 @@ MAX_UPLOAD_SIZE = 2 * 1024 * 1024 * 1024  # 2 GB safety quota
 
 @router.post("/upload")
 async def upload_video(file: UploadFile = File(...)):
-    job_id = str(uuid.uuid4())[:8]
+    job_id = uuid.uuid4().hex[:16]
     suffix = Path(file.filename).suffix or ".mp4"
     if suffix.lower() not in (".mp4", ".mov", ".mkv", ".webm", ".avi"):
         return JSONResponse({"error": "Unsupported video format. MP4, MOV, MKV, WebM allowed."}, status_code=400)
@@ -336,7 +336,7 @@ async def start_from_upload(filename: str):
     save_path = (UPLOAD_DIR / filename).resolve()
     orig_name = filename
     if not save_path.is_relative_to(UPLOAD_DIR.resolve()) or not save_path.exists():
-        m = re.match(r"job_([a-f0-9]{8})", filename)
+        m = re.match(r"job_([a-f0-9]{8,32})", filename)
         if m:
             jid = m.group(1)
             for ext in (".mp4", ".mov", ".mkv", ".webm", ".avi"):
@@ -352,12 +352,15 @@ async def start_from_upload(filename: str):
     if not save_path.is_relative_to(UPLOAD_DIR.resolve()) or not save_path.is_file():
         return JSONResponse({"error": f"File not found: {filename}"}, status_code=404)
         
-    job_id = str(uuid.uuid4())[:8]
+    job_id = uuid.uuid4().hex[:16]
     registry.register(job_id, str(save_path), orig_name)
     return {"job_id": job_id, "filename": orig_name}
 
 @router.post("/config/{job_id}")
 async def set_job_config(job_id: str, config: JobConfigModel):
+    job = registry.get(job_id)
+    if not job:
+        return JSONResponse({"error": "Job not found"}, status_code=404)
     registry.set_config(job_id, config.model_dump())
     return {"status": "ok"}
 
@@ -398,6 +401,19 @@ async def submit_review(job_id: str, request: Request):
 
         if getattr(job, "state", "") == "phase_1_running":
             return JSONResponse({"error": "Job is still processing Phase 1 analysis. Review cannot be submitted until Phase 1 is complete."}, status_code=409)
+
+        # Bounds check against probed video duration if available
+        meta = get_video_metadata(job.path)
+        duration_val = meta.get("duration")
+        if duration_val and duration_val != "—":
+            try:
+                max_ms = int(float(duration_val) * 1000)
+                for c in validated_clips:
+                    if c["start_ms"] >= max_ms:
+                        return JSONResponse({"error": f"Clip start timestamp ({c['start_ms']}ms) exceeds video duration ({max_ms}ms)"}, status_code=400)
+                    c["end_ms"] = min(c["end_ms"], max_ms)
+            except Exception:
+                pass
             
         job_dir = OUTPUT_DIR / job_id
         if not job_dir.exists():

@@ -59,6 +59,26 @@ class YouTubePersistentWorker:
         """Whether the persistent worker thread owns or is opening a browser."""
         return self._thread is not None and self._thread.is_alive()
 
+    def _compute_fingerprint(self, video_path: str) -> str:
+        try:
+            p = Path(video_path)
+            if not p.exists():
+                return ""
+            hasher = hashlib.sha256()
+            stat = p.stat()
+            hasher.update(str(stat.st_size).encode())
+            with open(p, "rb") as f:
+                hasher.update(f.read(65536))
+                if stat.st_size > 131072:
+                    f.seek(stat.st_size // 2)
+                    hasher.update(f.read(65536))
+                if stat.st_size > 196608:
+                    f.seek(max(0, stat.st_size - 65536))
+                    hasher.update(f.read(65536))
+            return hasher.hexdigest()[:24]
+        except Exception:
+            return f"{Path(video_path).name}_{getattr(Path(video_path).stat(), 'st_size', 0)}"
+
     def _load_history(self) -> dict:
         if YT_HISTORY_FILE.exists():
             try:
@@ -72,10 +92,14 @@ class YouTubePersistentWorker:
         try:
             YT_HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
             hist = self._load_history()
-            p = Path(video_path)
-            size = p.stat().st_size if p.exists() else 0
-            key = f"{p.name}_{size}"
+            key = self._compute_fingerprint(video_path)
+            if not key:
+                return
             hist[key] = record
+            # Prune older entries if history exceeds 500 items
+            if len(hist) > 500:
+                sorted_items = sorted(hist.items(), key=lambda item: item[1].get("timestamp", 0))
+                hist = dict(sorted_items[-500:])
             temp_file = YT_HISTORY_FILE.with_suffix(".tmp")
             with open(temp_file, "w", encoding="utf-8") as f:
                 json.dump(hist, f, indent=2)
@@ -86,10 +110,9 @@ class YouTubePersistentWorker:
 
     def has_uploaded(self, video_path: str) -> Optional[dict]:
         try:
-            p = Path(video_path)
-            if not p.exists():
+            key = self._compute_fingerprint(video_path)
+            if not key:
                 return None
-            key = f"{p.name}_{p.stat().st_size}"
             hist = self._load_history()
             return hist.get(key)
         except Exception:
@@ -313,6 +336,13 @@ class YouTubePersistentWorker:
             current_stage = "transfer"
             self._notify(upload_id, 60, "Waiting for video file upload transfer to complete")
             wait_for_upload_completion(page, telemetry=telemetry, timeout=180_000)
+            
+            # Record that file bytes have reached YouTube to prevent duplicate uploads on verify timeout
+            self._save_history_entry(video_path, {
+                "status": "uploaded_draft",
+                "title": title,
+                "timestamp": time.time()
+            })
             
             if product_recommendations and enable_native_shopping:
                 current_stage = "affiliate_tagging"

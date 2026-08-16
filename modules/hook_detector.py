@@ -319,13 +319,13 @@ def _validate_and_clamp_clips(
             logger.warning(f"[HookDetector] Discarding clip with invalid range: {clip.get('title', 'Untitled')} ({start/1000:.1f}s -> {end/1000:.1f}s)")
             continue
 
-        # Discard clips that are too short (under 12s or total duration) or too long (over 120s) after clamping/snapping
+        # Discard clips that are too short (under 15s or total duration) or too long (over 95s) after sentence snapping
         duration = end - start
-        min_allowed = min(12000, max_ms)
+        min_allowed = min(15000, max_ms)
         if duration < min_allowed:
             logger.warning(f"[HookDetector] Discarding clip that is too short ({duration/1000:.1f}s): {clip.get('title', 'Untitled')}")
             continue
-        if duration > 120000:
+        if duration > 95000:
             logger.warning(f"[HookDetector] Discarding clip that is too long ({duration/1000:.1f}s): {clip.get('title', 'Untitled')}")
             continue
             

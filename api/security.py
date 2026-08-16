@@ -66,7 +66,7 @@ def websocket_is_authorized(websocket: WebSocket) -> bool:
             return False
 
     app_state = getattr(websocket.app, "state", None) if hasattr(websocket, "app") else None
-    if not lan_mode_enabled(app_state) or is_loopback(websocket.client.host if websocket.client else None):
+    if is_loopback(websocket.client.host if websocket.client else None):
         return True
 
     token = lan_token(app_state)

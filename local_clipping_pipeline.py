@@ -618,10 +618,14 @@ def run_pipeline(args: argparse.Namespace) -> None:
                     "allow_duplicate": False
                 }
                 server_base = os.environ.get("CLIPHUB_SERVER_URL", "http://127.0.0.1:7842").rstrip("/")
+                headers = {"Content-Type": "application/json"}
+                lan_tok = os.environ.get("CLIPHUB_LAN_TOKEN")
+                if lan_tok:
+                    headers["X-ClipHub-Token"] = lan_tok
                 req = urllib.request.Request(
                     f"{server_base}/api/social/post",
                     data=json.dumps(req_data).encode("utf-8"),
-                    headers={"Content-Type": "application/json"}
+                    headers=headers
                 )
                 with urllib.request.urlopen(req) as response:
                     res = json.loads(response.read().decode("utf-8"))

@@ -61,23 +61,23 @@ app.add_middleware(
     allow_headers=["Content-Type", "X-ClipHub-Token"],
 )
 
-from api.security import is_loopback, lan_mode_enabled, lan_token
+from api.security import is_loopback, lan_mode_enabled, lan_token, _extract_token
 
 @app.middleware("http")
 async def require_lan_token(request, call_next):
-    """Protect every HTTP route when the server is intentionally LAN-visible."""
+    """Protect every HTTP route whenever accessed from a non-loopback network interface."""
     client_host = request.client.host if request.client else None
-    if lan_mode_enabled() and not is_loopback(client_host):
-        supplied = (
-            request.headers.get("X-ClipHub-Token")
-            or request.cookies.get("cliphub_lan_token")
-            or request.query_params.get("token")
+    if not is_loopback(client_host):
+        supplied = _extract_token(
+            dict(request.headers),
+            dict(request.cookies),
+            dict(request.query_params)
         )
         if supplied != lan_token():
             from fastapi.responses import JSONResponse
             return JSONResponse({"error": "LAN authorization required."}, status_code=401)
     response = await call_next(request)
-    if lan_mode_enabled() and request.query_params.get("token") == lan_token():
+    if request.query_params.get("token") == lan_token():
         response.set_cookie("cliphub_lan_token", lan_token(), httponly=True, samesite="strict")
     return response
 

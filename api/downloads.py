@@ -18,11 +18,7 @@ BASE_DIR = Path(__file__).parent.parent
 UPLOAD_DIR = BASE_DIR / "temp" / "uploads"
 OUTPUT_DIR = BASE_DIR / "output"
 
-@router.post("/prepare-download")
-async def prepare_download():
-    _clean_old_downloads()
-    job_id = str(uuid.uuid4())[:8]
-    return {"job_id": job_id}
+MAX_CONCURRENT_DOWNLOADS = 5
 
 class DownloadJob:
     def __init__(self, job_id, url):
@@ -46,6 +42,17 @@ def _clean_old_downloads():
             done_keys = [k for k, job in active_downloads.items() if job.done]
             for k in done_keys[:20]:
                 active_downloads.pop(k, None)
+
+@router.post("/prepare-download")
+async def prepare_download():
+    _clean_old_downloads()
+    with _downloads_lock:
+        active_count = sum(1 for j in active_downloads.values() if not j.done and j.task is not None)
+        if active_count >= MAX_CONCURRENT_DOWNLOADS:
+            return JSONResponse({"error": "Maximum concurrent downloads limit reached (5). Please wait for active downloads to finish."}, status_code=429)
+        job_id = uuid.uuid4().hex[:16]
+        active_downloads[job_id] = DownloadJob(job_id, "")
+    return {"job_id": job_id}
 
 async def _run_ytdl(job: DownloadJob, python_exe: str, save_path: str):
     env = os.environ.copy()
@@ -131,12 +138,22 @@ async def download_url_ws(websocket: WebSocket, job_id: str, url: str = ""):
 
     save_path = str(UPLOAD_DIR / f"job_{job_id}.mp4")
     
-    if job_id not in active_downloads:
-        job = DownloadJob(job_id, url)
-        active_downloads[job_id] = job
-        job.task = asyncio.create_task(_run_ytdl(job, python_exe, save_path))
-    else:
-        job = active_downloads[job_id]
+    with _downloads_lock:
+        if job_id not in active_downloads:
+            active_count = sum(1 for j in active_downloads.values() if not j.done and j.task is not None)
+            if active_count >= MAX_CONCURRENT_DOWNLOADS:
+                await websocket.send_json({"type": "error", "message": "Maximum concurrent downloads limit reached (5)."})
+                await websocket.close()
+                return
+            job = DownloadJob(job_id, url)
+            active_downloads[job_id] = job
+        else:
+            job = active_downloads[job_id]
+            if url and not job.url:
+                job.url = url
+
+        if job.task is None and not job.done and job.url:
+            job.task = asyncio.create_task(_run_ytdl(job, python_exe, save_path))
 
     try:
         last_index = 0
