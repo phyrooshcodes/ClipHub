@@ -455,8 +455,14 @@ def run_pipeline(args: argparse.Namespace) -> None:
     # Background music director setup
     music_director = None
     if args.music and args.music.lower() not in ("none", "off", ""):
+        music_dir = Path(__file__).parent / "Music"
         if args.music.lower() == "auto":
-            music_director = MusicDirector(Path(__file__).parent / "Music")
+            has_audio = any(p.suffix.lower() in (".mp3", ".wav", ".m4a", ".aac") for p in music_dir.rglob("*")) if music_dir.exists() else False
+            if not has_audio:
+                from modules.bg_music import get_music_track
+                get_music_track("ambient")
+                get_music_track("lofi")
+            music_director = MusicDirector(music_dir)
         else:
             from modules.bg_music import get_music_track
             track_path = get_music_track(args.music)

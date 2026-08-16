@@ -60,14 +60,13 @@ def _get_cookies_args():
     return ["--cookies-from-browser", "firefox"]
 
 async def _run_ytdl(job: DownloadJob, python_exe: str, save_path: str):
-    # Ensure local bin and C:\ffmpeg\bin are in PATH for subprocess
-    env = dict(os.environ)
+    env = os.environ.copy()
     local_bin = str(BASE_DIR / "bin")
     c_ffmpeg = r"C:\ffmpeg\bin"
     current_path = env.get("PATH", "")
     paths_to_add = [p for p in [local_bin, c_ffmpeg] if Path(p).exists() and p not in current_path]
     if paths_to_add:
-        env["PATH"] = ";".join(paths_to_add) + ";" + current_path
+        env["PATH"] = os.pathsep.join(paths_to_add) + os.pathsep + current_path
 
     env["PYTHONIOENCODING"] = "utf-8"
     env["PYTHONUTF8"] = "1"
