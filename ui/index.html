@@ -479,30 +479,90 @@
               </div>
             </div>
             
-            <hr style="border:none; border-top:1px solid var(--border-light); margin:4px 0;">
-            
-            <div style="display:flex; flex-direction:column; gap:8px;">
-              <div style="display:flex; justify-content:space-between; align-items:center;">
-                <span style="font-weight:600; font-size:13px;">Social Publishing Connections</span>
-                <span id="yt-channel-title" style="font-size:12px; color:var(--brand-purple); font-weight:600;">YouTube Studio</span>
+            <!-- Social Publishing Connections Section -->
+            <div class="settings-social-section">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                <span style="font-weight:600; font-size:13px; color:var(--text-main);"><i class="ri-share-forward-box-line" style="color:var(--brand-primary); margin-right:4px;"></i> Social Publishing Channels</span>
+                <span id="social-overview-pill" class="header-pill">2 Channels</span>
               </div>
-              <div style="display:flex; gap:16px; margin-bottom:4px;">
-                <label style="display:flex; align-items:center; gap:6px; font-size:12px;"><input type="checkbox" id="chk-platform-instagram" checked> Enable Instagram</label>
-                <label style="display:flex; align-items:center; gap:6px; font-size:12px;"><input type="checkbox" id="chk-platform-youtube" checked> Enable YouTube</label>
-                <input type="checkbox" id="opt-instagram" class="hidden" checked>
-                <input type="checkbox" id="opt-youtube" class="hidden" checked>
+              
+              <div class="social-channels-grid">
+                
+                <!-- YouTube Studio Channel Card -->
+                <div class="social-channel-card" id="card-channel-youtube">
+                  <div class="channel-card-header">
+                    <div class="channel-brand">
+                      <div class="channel-icon-box yt-icon-box">
+                        <i class="ri-youtube-fill"></i>
+                      </div>
+                      <div class="channel-meta">
+                        <span class="channel-title">YouTube Shorts</span>
+                        <span id="yt-channel-title" class="channel-subtitle">YouTube Studio</span>
+                      </div>
+                    </div>
+                    <label class="channel-toggle-label" title="Enable/Disable YouTube Auto-Publish">
+                      <input type="checkbox" id="chk-platform-youtube" checked>
+                      <span>Enable</span>
+                    </label>
+                  </div>
+                  
+                  <div class="channel-card-body">
+                    <div class="channel-status-pill" id="yt-status-badge">
+                      <span class="status-dot"></span>
+                      <span id="yt-status-text">Not connected</span>
+                    </div>
+                  </div>
+
+                  <div class="channel-card-actions">
+                    <button id="btn-connect-yt" class="btn-channel-action btn-yt-primary">
+                      <i class="ri-youtube-line"></i> <span>Connect YouTube</span>
+                    </button>
+                    <button id="btn-switch-yt" class="btn-channel-action btn-channel-secondary hidden">
+                      <i class="ri-user-switch-line"></i> <span>Switch Channel</span>
+                    </button>
+                    <button id="btn-disconnect-yt" class="btn-channel-action btn-channel-danger hidden" title="Disconnect YouTube">
+                      <i class="ri-logout-box-r-line"></i> <span>Disconnect</span>
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Instagram Reels Channel Card -->
+                <div class="social-channel-card" id="card-channel-instagram">
+                  <div class="channel-card-header">
+                    <div class="channel-brand">
+                      <div class="channel-icon-box ig-icon-box">
+                        <i class="ri-instagram-line"></i>
+                      </div>
+                      <div class="channel-meta">
+                        <span class="channel-title">Instagram Reels</span>
+                        <span class="channel-subtitle">Session Browser</span>
+                      </div>
+                    </div>
+                    <label class="channel-toggle-label" title="Enable/Disable Instagram Auto-Publish">
+                      <input type="checkbox" id="chk-platform-instagram" checked>
+                      <span>Enable</span>
+                    </label>
+                  </div>
+
+                  <div class="channel-card-body">
+                    <div class="channel-status-pill" id="ig-status-badge">
+                      <span class="status-dot"></span>
+                      <span id="ig-status-text">Not connected</span>
+                    </div>
+                  </div>
+
+                  <div class="channel-card-actions">
+                    <button id="btn-connect-ig" class="btn-channel-action btn-ig-primary">
+                      <i class="ri-instagram-line"></i> <span>Connect Instagram</span>
+                    </button>
+                  </div>
+                </div>
+
               </div>
-              <div style="display:flex; gap:10px; flex-wrap:wrap;">
-                <button id="btn-connect-ig" class="btn-outline-dashed" style="padding:8px 14px; font-size:12px;"><i class="ri-instagram-line"></i> Connect Instagram</button>
-                <button id="btn-connect-yt" class="btn-outline-dashed" style="padding:8px 14px; font-size:12px;"><i class="ri-youtube-line"></i> Connect YouTube</button>
-                <button id="btn-disconnect-yt" class="btn-outline-dashed hidden" style="padding:8px 14px; font-size:12px;">Disconnect YT</button>
-                <button id="btn-switch-yt" class="btn-outline-dashed hidden" style="padding:8px 14px; font-size:12px;">Switch Channel</button>
-              </div>
-              <div style="display:flex; gap:16px; font-size:12px; color:var(--text-muted); margin-top:4px;">
-                <span id="ig-status-text">IG: Not connected</span>
-                <span id="yt-status-text">YT: Not connected</span>
-              </div>
-              <div id="wifi-server-info" style="font-size:12px; color:var(--text-muted); margin-top:4px;"></div>
+
+              <input type="checkbox" id="opt-instagram" class="hidden" checked>
+              <input type="checkbox" id="opt-youtube" class="hidden" checked>
+              <div id="wifi-server-info" style="font-size:12px; color:var(--text-muted); margin-top:6px;"></div>
             </div>
          </div>
        </div>

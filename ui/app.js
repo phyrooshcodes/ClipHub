@@ -749,9 +749,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
   async function refreshSocialStatus() {
     const igStatus = document.getElementById('ig-status-text');
+    const igBadge = document.getElementById('ig-status-badge');
     const igButton = document.getElementById('btn-connect-ig');
     const ytStatus = document.getElementById('yt-status-text');
+    const ytBadge = document.getElementById('yt-status-badge');
     const ytButton = document.getElementById('btn-connect-yt');
+    const overviewPill = document.getElementById('social-overview-pill');
+
     if (!igStatus && !ytStatus) return;
     try {
       const [response, historyResponse] = await Promise.all([
@@ -764,15 +768,20 @@ document.addEventListener("DOMContentLoaded", () => {
       const completed = history.filter(upload => upload.status === 'completed').length;
       const lastCompleted = history.find(upload => upload.status === 'completed');
 
+      let connectedCount = 0;
+
       if (igStatus) {
         if (data.instagram_connected) {
-          const queueText = ` · Queue: ${waiting} waiting, ${uploading} uploading, ${completed} completed`;
-          const lastText = lastCompleted ? ` · Last: ${lastCompleted.filename}` : '';
-          igStatus.textContent = `${data.instagram_username || 'Saved browser session'}${queueText}${lastText}`;
-          if (igButton) igButton.textContent = 'Reconnect';
+          connectedCount++;
+          const queueText = (waiting || uploading || completed) ? ` (Queue: ${waiting} pending, ${completed} published)` : '';
+          const userStr = data.instagram_username ? `@${data.instagram_username.replace('@', '')}` : 'Active Session';
+          igStatus.textContent = `Connected: ${userStr}${queueText}`;
+          if (igBadge) igBadge.classList.add('connected');
+          if (igButton) igButton.innerHTML = '<i class="ri-refresh-line"></i> <span>Reconnect Instagram</span>';
         } else {
           igStatus.textContent = 'Not connected';
-          if (igButton) igButton.textContent = 'Connect';
+          if (igBadge) igBadge.classList.remove('connected');
+          if (igButton) igButton.innerHTML = '<i class="ri-instagram-line"></i> <span>Connect Instagram</span>';
         }
       }
 
@@ -781,18 +790,28 @@ document.addEventListener("DOMContentLoaded", () => {
         const ytSwitch = document.getElementById('btn-switch-yt');
         const ytDisconnect = document.getElementById('btn-disconnect-yt');
         if (data.youtube_connected) {
+          connectedCount++;
           const channel = data.youtube_channel || {};
-          const channelName = channel.name || 'Saved Session';
+          const channelName = channel.name || 'Active Session';
           const handle = channel.handle ? ` (${channel.handle})` : '';
-          if (ytTitle) ytTitle.textContent = `YouTube · ${channelName}`;
-          ytStatus.textContent = `Active Channel: ${channelName}${handle}`;
-          if (ytButton) ytButton.textContent = 'Reconnect';
+          if (ytTitle) ytTitle.textContent = channelName;
+          ytStatus.textContent = `Connected: ${channelName}${handle}`;
+          if (ytBadge) ytBadge.classList.add('connected');
+          if (ytButton) ytButton.innerHTML = '<i class="ri-refresh-line"></i> <span>Reconnect YouTube</span>';
           if (ytSwitch) ytSwitch.classList.remove('hidden');
           if (ytDisconnect) ytDisconnect.classList.remove('hidden');
         } else {
           if (ytTitle) ytTitle.textContent = 'YouTube Studio';
           ytStatus.textContent = 'Not connected';
+          if (ytBadge) ytBadge.classList.remove('connected');
+          if (ytButton) ytButton.innerHTML = '<i class="ri-youtube-line"></i> <span>Connect YouTube</span>';
+          if (ytSwitch) ytSwitch.classList.add('hidden');
+          if (ytDisconnect) ytDisconnect.classList.add('hidden');
         }
+      }
+
+      if (overviewPill) {
+        overviewPill.textContent = `${connectedCount} / 2 Connected`;
       }
     } catch (_) {
       if (igStatus) igStatus.textContent = 'Status unavailable';
@@ -815,34 +834,34 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById('btn-connect-ig')?.addEventListener('click', async (event) => {
     const button = event.currentTarget;
     button.disabled = true;
-    button.innerHTML = '<i class="ri-loader-4-line spin"></i> Login in browser...';
+    button.innerHTML = '<i class="ri-loader-4-line spin"></i> <span>Connecting...</span>';
     try {
       const response = await fetch('/api/social/instagram/connect-playwright', { method: 'POST' });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Instagram login failed');
-      await refreshSocialStatus();
+      Toast.show("Instagram session saved successfully!", "success");
     } catch (error) {
       Toast.show("Instagram connection error: " + error.message, "error");
     } finally {
       button.disabled = false;
-      button.innerHTML = '<i class="ri-instagram-line"></i> Connect Instagram';
+      await refreshSocialStatus();
     }
   });
 
   document.getElementById('btn-connect-yt')?.addEventListener('click', async (event) => {
     const button = event.currentTarget;
     button.disabled = true;
-    button.innerHTML = '<i class="ri-loader-4-line spin"></i> Login in browser...';
+    button.innerHTML = '<i class="ri-loader-4-line spin"></i> <span>Connecting...</span>';
     try {
       const response = await fetch('/api/social/youtube/connect-playwright', { method: 'POST' });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'YouTube login failed');
-      await refreshSocialStatus();
+      Toast.show("YouTube Studio connected successfully!", "success");
     } catch (error) {
       Toast.show("YouTube connection error: " + error.message, "error");
     } finally {
       button.disabled = false;
-      button.innerHTML = '<i class="ri-youtube-line"></i> Connect YouTube';
+      await refreshSocialStatus();
     }
   });
 
@@ -850,33 +869,32 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!confirm('Disconnect YouTube? You will need to log in again to publish videos.')) return;
     const button = event.currentTarget;
     button.disabled = true;
-    button.innerHTML = '<i class="ri-loader-4-line spin"></i> Disconnecting...';
+    button.innerHTML = '<i class="ri-loader-4-line spin"></i> <span>Disconnecting...</span>';
     try {
       await fetch('/api/social/youtube/disconnect', { method: 'POST' });
-      await refreshSocialStatus();
+      Toast.show("YouTube disconnected", "info");
     } catch (error) {
       console.error('Disconnect failed:', error);
     } finally {
       button.disabled = false;
-      button.innerHTML = '<i class="ri-logout-box-r-line"></i> Disconnect';
+      await refreshSocialStatus();
     }
   });
 
   document.getElementById('btn-switch-yt')?.addEventListener('click', async (event) => {
     const button = event.currentTarget;
     button.disabled = true;
-    button.innerHTML = '<i class="ri-loader-4-line spin"></i> Opening Studio...';
+    button.innerHTML = '<i class="ri-loader-4-line spin"></i> <span>Opening Studio...</span>';
     try {
       const response = await fetch('/api/social/youtube/connect-playwright', { method: 'POST' });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'YouTube Studio launch failed');
-      await refreshSocialStatus();
     } catch (error) {
       const ytStatus = document.getElementById('yt-status-text');
       if (ytStatus) ytStatus.textContent = error.message;
     } finally {
       button.disabled = false;
-      button.innerHTML = '<i class="ri-user-switch-line"></i> Switch Channel';
+      await refreshSocialStatus();
     }
   });
 
