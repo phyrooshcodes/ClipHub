@@ -3,7 +3,7 @@
 # local_clipping_pipeline.py — ClipHub Orchestrator
 # ============================================================
 # Zero-Strain Local-Hybrid AI Video Clipper
-# Built for: Asus TUF A15 (Ryzen 7 + RTX 3050 4GB)
+# Architecture: GPU NVENC + Thread-Pool CPU + Cloud Inference
 #
 # Pipeline:
 #   Input MP4

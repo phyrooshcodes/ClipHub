@@ -1,6 +1,6 @@
 # ============================================================
 # audio_demux.py — Module 1: Audio Extraction
-# Hardware Target: CPU Thread Pool (Ryzen 7)
+# Hardware Target: CPU Thread Pool
 # Purpose: Rip the audio track from the input video to a
 #          16kHz mono WAV file — the ideal format for Whisper.
 # ============================================================

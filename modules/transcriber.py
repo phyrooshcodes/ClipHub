@@ -1,6 +1,6 @@
 # ============================================================
 # transcriber.py — Module 2: ASR Transcription
-# Hardware Target: CPU (Ryzen 7) — faster-whisper INT8
+# Hardware Target: CPU / GPU — faster-whisper INT8
 # Purpose: Transcribe audio to text with word-level timestamps.
 #          Uses CTranslate2 INT8 quantization (<200MB RAM,
 #          0MB VRAM).

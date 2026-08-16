@@ -6,9 +6,8 @@ cls
 
 echo:
 echo  +==============================================================+
-echo  ^|         *  O B S C U R A   C L I P S  *                    ^|
-echo  ^|   Zero-Strain Local-Hybrid AI Video Clipper                  ^|
-echo  ^|   Ryzen 7 + RTX GPU Acceleration  ^|  Llama 3.3 70B          ^|
+echo  ^|            *  C L I P H U B   S T U D I O  *                 ^|
+echo  ^|        AI Viral Video Generation & Publishing Suite          ^|
 echo  +==============================================================+
 echo:
 
