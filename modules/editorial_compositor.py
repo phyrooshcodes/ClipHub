@@ -36,8 +36,9 @@ def align_editorial_timeline(
 
     # Helper to process a TTS segment
     def process_segment(text: str, start_time_rel: float, seg_type: str) -> float:
+        nonlocal current_time
         if not text:
-            return start_time_rel
+            return current_time
             
         safe_text = "".join(c if c.isalnum() else "_" for c in text[:20])
         audio_path = os.path.join(temp_dir, f"{seg_type}_{clip['start_ms']}_{safe_text}.wav")
@@ -45,11 +46,18 @@ def align_editorial_timeline(
         # Generate TTS synchronously without event loop conflicts
         duration = generate_tts_sync(text, voice_id, audio_path)
         if duration <= 0:
-            return start_time_rel
+            return current_time
             
-        # Hard-clamp start_time_rel so TTS event never overflows clip boundary
-        if start_time_rel + duration > clip_duration:
-            start_time_rel = max(0.0, clip_duration - duration)
+        # Ensure start time is strictly after previous AI audio segment
+        target_start = max(start_time_rel, current_time + (0.1 if current_time > 0 else 0.0))
+        
+        # If segment overflows clip duration, attempt to place earlier if room exists
+        if target_start + duration > clip_duration:
+            if clip_duration - duration >= current_time + 0.1:
+                target_start = max(current_time + 0.1, clip_duration - duration)
+            else:
+                # Does not fit in remaining clip timeline without clipping speech
+                return current_time
 
         # Transcribe to get word timings
         # model="tiny" is fast and sufficient for pristine TTS audio
@@ -57,19 +65,20 @@ def align_editorial_timeline(
         
         # Shift words to relative clip timeline
         for w in tts_words:
-            w["start"] += start_time_rel + clip_start_s
-            w["end"] += start_time_rel + clip_start_s
+            w["start"] += target_start + clip_start_s
+            w["end"] += target_start + clip_start_s
             w["is_ai"] = True  # flag for styling later if needed
             ai_words.append(w)
             
         ai_audio_events.append({
-            "start_s": start_time_rel,
-            "end_s": start_time_rel + duration,
+            "start_s": target_start,
+            "end_s": target_start + duration,
             "audio_path": audio_path,
             "type": seg_type,
             "text": text
         })
-        return start_time_rel + duration
+        current_time = target_start + duration
+        return current_time
 
     # 1. Hook (Starts at 0.0)
     current_time = 0.0

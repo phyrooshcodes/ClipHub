@@ -233,7 +233,7 @@ async def _run_process(job_id: str, cmd: list, start_time: float):
     finally:
         registry.mark_done(job_id)
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from typing import Literal, Optional, List, Dict, Any
 
 class JobConfigModel(BaseModel):
@@ -262,6 +262,12 @@ class ClipReviewItem(BaseModel):
     editorial_data: Optional[Dict[str, Any]] = None
     filename: Optional[str] = None
     ai_audio_events: Optional[List[Dict[str, Any]]] = None
+
+    @model_validator(mode="after")
+    def validate_range(self):
+        if self.end_ms <= self.start_ms:
+            raise ValueError(f"end_ms ({self.end_ms}) must be strictly greater than start_ms ({self.start_ms})")
+        return self
 
 MAX_UPLOAD_SIZE = 2 * 1024 * 1024 * 1024  # 2 GB safety quota
 
@@ -295,10 +301,13 @@ async def start_from_upload(filename: str):
     if not save_path.is_relative_to(UPLOAD_DIR.resolve()) or not save_path.exists():
         m = re.match(r"job_([a-f0-9]{8})", filename)
         if m:
-            clean_path = UPLOAD_DIR / f"job_{m.group(1)}.mp4"
-            if clean_path.exists():
-                save_path = clean_path
-                filename = clean_path.name
+            jid = m.group(1)
+            for ext in (".mp4", ".mov", ".mkv", ".webm", ".avi"):
+                candidate = UPLOAD_DIR / f"job_{jid}{ext}"
+                if candidate.exists():
+                    save_path = candidate
+                    filename = candidate.name
+                    break
     if not save_path.exists():
         return JSONResponse({"error": f"File not found: {filename}"}, status_code=404)
         
@@ -372,18 +381,7 @@ async def run_pipeline_ws(websocket: WebSocket, job_id: str):
         return
 
     config = registry.get_config(job_id)
-    force_restart = config.get("force_restart", False)
-    
-    should_launch = False
-    with registry._lock:
-        if force_restart or not job.started:
-            job.started = True
-            job.done = False
-            if force_restart:
-                registry._events[job_id] = []
-                config.pop("force_restart", None)
-                registry.set_config(job_id, config)
-            should_launch = True
+    should_launch = registry.claim_execution(job_id)
 
     if should_launch:
         meta_event = await asyncio.to_thread(get_video_metadata, job.path)
@@ -430,7 +428,7 @@ async def run_pipeline_ws(websocket: WebSocket, job_id: str):
             config["phase"] = "1"
             registry.set_config(job_id, config)
 
-        asyncio.create_task(_run_process(job_id, cmd, job.start_time))
+        asyncio.create_task(_run_process(job_id, cmd, getattr(job, "execution_start_time", job.start_time)))
 
     try:
         last_index = 0

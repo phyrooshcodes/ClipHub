@@ -47,10 +47,15 @@ async def lifespan(app: FastAPI):
 # ─── FastAPI App ────────────────────────────────────────────
 app = FastAPI(title="ClipHub", lifespan=lifespan)
 
+from fastapi.staticfiles import StaticFiles
+
 # ─── Include Routers ────────────────────────────────────────
 app.include_router(pipeline_router)
 app.include_router(social_router)
 app.include_router(downloads_router)
+
+# ─── Static Output Mounting (supports video streaming & Range headers) ──
+app.mount("/output", StaticFiles(directory=str(OUTPUT_DIR)), name="output")
 
 # ─── Static UI Routes ───────────────────────────────────────
 @app.get("/", response_class=HTMLResponse)

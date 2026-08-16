@@ -472,6 +472,17 @@ def run_pipeline(args: argparse.Namespace) -> None:
     use_nvenc = check_nvenc_available()
     rendered_clips = []
 
+    # Clean old .mp4 clips in output_dir from previous runs to prevent gallery pollution
+    if os.path.exists(output_dir):
+        valid_prefixes = {f"clip_{i+1:02d}_" for i in range(len(clips))}
+        for existing in os.listdir(output_dir):
+            if existing.endswith(".mp4") and existing.startswith("clip_"):
+                if not any(existing.startswith(vp) for vp in valid_prefixes):
+                    try:
+                        os.remove(os.path.join(output_dir, existing))
+                    except Exception:
+                        pass
+
     for idx, clip in enumerate(clips):
         clip_num  = idx + 1
         start_ms  = clip["start_ms"]

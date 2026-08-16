@@ -71,8 +71,8 @@ class YouTubePersistentWorker:
             except:
                 pass
 
-    def suspend(self, timeout: float = 10.0):
-        """Signal the worker thread to release the browser lock with bounded timeout."""
+    def suspend(self, timeout: float = 10.0) -> bool:
+        """Signal the worker thread to release the browser lock with bounded timeout. Returns True if released."""
         logger.info("[YouTube Worker] Suspending persistent browser for manual login...")
         self._pause_event.clear()
         self._suspend_requested = True
@@ -80,6 +80,7 @@ class YouTubePersistentWorker:
         # Wait until the worker thread actually closes the context or timeout occurs
         while self._context is not None and (time.time() - start) < timeout:
             time.sleep(0.1)
+        return self._context is None
 
     def resume(self):
         """Resume queue processing and restart the browser."""

@@ -10,12 +10,16 @@ import logging
 logger = logging.getLogger(__name__)
 JOURNAL_PATH = Path(__file__).parent.parent / "temp" / ".jobs_journal.json"
 
+import subprocess
+import sys
+
 @dataclass
 class Job:
     job_id: str
     path: str
     filename: str
     start_time: float = field(default_factory=time.time)
+    execution_start_time: float = field(default_factory=time.time)
     process: object = None
     done: bool = False
     started: bool = False
@@ -70,6 +74,7 @@ class JobRegistry:
                             path=jdata["path"],
                             filename=jdata["filename"],
                             start_time=jdata.get("start_time", now),
+                            execution_start_time=jdata.get("start_time", now),
                             done=was_done,
                             started=was_done
                         )
@@ -118,15 +123,44 @@ class JobRegistry:
                 self._jobs[job_id].done = True
                 self._save_journal()
 
-    def restart_job(self, job_id: str, phase: str = "2") -> bool:
-        """Atomically resets and prepares a job for next phase without exposing internal maps."""
+    def claim_execution(self, job_id: str) -> bool:
+        """Atomically claims execution authority for a job, preventing duplicate subprocess launches."""
         with self._lock:
             job = self._jobs.get(job_id)
             if not job:
                 return False
+            config = self._configs.get(job_id, {})
+            force_restart = config.pop("force_restart", False)
+            if force_restart or not job.started:
+                job.started = True
+                job.done = False
+                job.execution_start_time = time.time()
+                if force_restart:
+                    self._events[job_id] = []
+                self._save_journal()
+                return True
+            return False
+
+    def restart_job(self, job_id: str, phase: str = "2") -> bool:
+        """Safely terminates active child subprocess if running, and atomically prepares job for next phase."""
+        with self._lock:
+            job = self._jobs.get(job_id)
+            if not job:
+                return False
+            # Safely terminate any active child process
+            if job.process and getattr(job.process, "returncode", None) is None:
+                try:
+                    if sys.platform == "win32":
+                        subprocess.run(["taskkill", "/F", "/T", "/PID", str(job.process.pid)], capture_output=True)
+                    else:
+                        job.process.terminate()
+                except Exception:
+                    pass
+                job.process = None
             self._events[job_id] = []
             job.done = False
             job.started = False
+            job.execution_start_time = time.time()
             config = self._configs.get(job_id, {})
             config["force_restart"] = True
             config["phase"] = phase

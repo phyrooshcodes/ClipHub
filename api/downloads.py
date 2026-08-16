@@ -33,17 +33,21 @@ class DownloadJob:
         self.task = None
         self.created_at = time.time()
 
+import threading
+
 active_downloads: Dict[str, DownloadJob] = {}
+_downloads_lock = threading.Lock()
 
 def _clean_old_downloads():
     now = time.time()
-    # Remove jobs older than 1 hour or evict oldest when size > 40
-    stale_keys = [k for k, job in active_downloads.items() if (now - getattr(job, "created_at", now)) > 3600 and job.done]
-    for k in stale_keys:
-        active_downloads.pop(k, None)
-    if len(active_downloads) > 40:
-        for k in list(active_downloads.keys())[:20]:
+    with _downloads_lock:
+        stale_keys = [k for k, job in active_downloads.items() if job.done and (now - getattr(job, "created_at", now)) > 3600]
+        for k in stale_keys:
             active_downloads.pop(k, None)
+        if len(active_downloads) > 40:
+            done_keys = [k for k, job in active_downloads.items() if job.done]
+            for k in done_keys[:20]:
+                active_downloads.pop(k, None)
 
 async def _run_ytdl(job: DownloadJob, python_exe: str, save_path: str):
     env = os.environ.copy()
@@ -160,8 +164,10 @@ async def download_url_ws(websocket: WebSocket, job_id: str, url: str = ""):
 async def list_uploads():
     uploads = []
     if UPLOAD_DIR.exists():
-        for f in UPLOAD_DIR.glob("job_*.mp4"):
-            m = re.match(r"job_([a-f0-9]{8})\.mp4", f.name)
+        for f in UPLOAD_DIR.iterdir():
+            if not f.is_file():
+                continue
+            m = re.match(r"job_([a-f0-9]{8})(\.[a-zA-Z0-9]+)$", f.name)
             if m:
                 jid = m.group(1)
                 stat = f.stat()

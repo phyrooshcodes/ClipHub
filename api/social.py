@@ -45,12 +45,14 @@ class InstagramConnectSessionRequest(BaseModel):
     username: str
     session_id: str
 
+from typing import Literal
+
 class SocialPostRequest(BaseModel):
     job_id: str
     clip_filename: str
     title: str
     caption: str
-    platforms: List[str]
+    platforms: List[Literal["instagram", "youtube"]]
     allow_duplicate: bool = False
     product_recommendations: List[dict] = []
     amazon_store_tag: str = ""
@@ -63,10 +65,22 @@ class InstagramQueueActionRequest(BaseModel):
 social_uploads = {}
 upload_lock = asyncio.Lock()
 
+def _clean_stale_social_uploads(max_age_sec: int = 86400):
+    now = time.time()
+    stale = [k for k, v in social_uploads.items() if (now - v.get("created_at", now)) > max_age_sec]
+    for k in stale:
+        social_uploads.pop(k, None)
+
 async def _bg_social_post(upload_id: str, job_id: str, clip_filename: str, title: str, caption: str, platforms: List[str], product_recommendations: List[dict] = None, amazon_store_tag: str = "", enable_comment_affiliate: bool = True, enable_native_shopping: bool = False):
+    _clean_stale_social_uploads()
     if product_recommendations is None:
         product_recommendations = []
-    social_uploads[upload_id] = {"status": "uploading", "results": {}}
+    social_uploads[upload_id] = {
+        "status": "uploading",
+        "results": {},
+        "platform_progress": {p: 0 for p in platforms},
+        "created_at": time.time()
+    }
     video_path = (OUTPUT_DIR / job_id / clip_filename).resolve()
     if not video_path.is_relative_to(OUTPUT_DIR.resolve()) or not video_path.exists():
         social_uploads[upload_id] = {"status": "failed", "error": "Video file not found or invalid."}
@@ -84,8 +98,10 @@ async def _bg_social_post(upload_id: str, job_id: str, clip_filename: str, title
     
     def update_progress(platform: str, pct: int, msg: str):
         if upload_id in social_uploads:
+            social_uploads[upload_id]["platform_progress"][platform] = pct
+            avg_pct = int(sum(social_uploads[upload_id]["platform_progress"].values()) / max(1, len(platforms)))
             social_uploads[upload_id]["message"] = f"[{platform.upper()}] {msg}"
-            social_uploads[upload_id]["progress"] = pct
+            social_uploads[upload_id]["progress"] = avg_pct
     
     async with upload_lock:
         if "instagram" in platforms:
@@ -127,17 +143,16 @@ async def _bg_social_post(upload_id: str, job_id: str, clip_filename: str, title
             
     status = "failed" if has_errors and len(results) == len(platforms) else "completed"
     if has_errors and status == "completed": status = "partial"
-    social_uploads[upload_id] = {"status": status, "results": results}
+    social_uploads[upload_id]["status"] = status
+    social_uploads[upload_id]["results"] = results
 
 @router.get("/api/check-nvidia-key")
 async def check_nvidia_key():
     from dotenv import load_dotenv
     load_dotenv(BASE_DIR / ".env", override=True)
     key = os.environ.get("NVIDIA_API_KEY", "")
-    is_set = len(key) > 0
-    masked_key = ""
-    if is_set: masked_key = key[:6] + "..." + key[-4:] if len(key) > 10 else "..."
-    return {"is_set": is_set, "masked_key": masked_key}
+    is_set = len(key) > 0 and key.startswith("nvapi-")
+    return {"is_set": is_set}
 
 @router.post("/api/save-nvidia-key")
 async def save_nvidia_key(payload: dict):
@@ -304,8 +319,10 @@ async def connect_yt_playwright():
     worker = get_youtube_worker()
     was_running = worker.running
     if was_running:
-        await asyncio.to_thread(worker.suspend)
-        await asyncio.sleep(1.0)
+        suspended = await asyncio.to_thread(worker.suspend, 10.0)
+        if not suspended:
+            return JSONResponse({"error": "YouTube browser worker could not be suspended in time. Please retry."}, status_code=503)
+        await asyncio.sleep(0.5)
     try:
         await asyncio.to_thread(connect_youtube_playwright)
         return {"success": True}
