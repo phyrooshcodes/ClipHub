@@ -43,32 +43,25 @@
             <small>AI Clipping Workspace</small>
           </div>
         </button>
-        <button class="nav-item" id="btn-back-home">
-          <i class="ri-upload-cloud-2-line"></i> 
+        <button class="nav-item" id="btn-nav-recent">
+          <i class="ri-folder-video-line"></i> 
           <div class="nav-text">
-            <span>Upload Center</span>
-            <small>Upload & Manage Videos</small>
-          </div>
-        </button>
-        <button class="nav-item" id="btn-nav-review">
-          <i class="ri-user-voice-line"></i> 
-          <div class="nav-text">
-            <span>Human Review</span>
-            <small>Review & Edit Clips</small>
+            <span>Recent Uploads</span>
+            <small>Select Previous Videos</small>
           </div>
         </button>
         <button class="nav-item" id="btn-nav-gallery">
           <i class="ri-film-line"></i> 
           <div class="nav-text">
             <span>Clip Gallery</span>
-            <small>Generated Clips</small>
+            <small>Exported Viral Clips</small>
           </div>
         </button>
         <button class="nav-item" id="btn-history">
           <i class="ri-history-line"></i> 
           <div class="nav-text">
-            <span>History</span>
-            <small>Logs & Past Jobs</small>
+            <span>Job History</span>
+            <small>Logs & Past Runs</small>
           </div>
         </button>
       </nav>
@@ -130,8 +123,9 @@
                 </div>
                 <div class="dropzone-title" id="dz-title">Drop your video here</div>
                 <div class="dropzone-sub" id="dz-sub">Supports MP4, MOV, MKV, WebM up to 2GB</div>
-                <div class="dz-actions">
+                <div class="dz-actions" style="display:flex; align-items:center; gap:8px;">
                   <button class="btn-browse"><i class="ri-folder-open-line"></i> Browse Files</button>
+                  <button class="btn-outline-dashed" id="btn-open-recent-uploads" type="button" style="padding:7px 14px; font-size:12.5px;"><i class="ri-history-line"></i> Recent Videos</button>
                   <button class="btn-remove hidden" id="btn-remove-file"><i class="ri-delete-bin-line"></i> Remove File</button>
                 </div>
                 
@@ -702,7 +696,31 @@
         </div>
       </div>
     </div>
-    <div id="section-upload-center" class="hidden"></div>
+    <!-- Recent Uploads & Media Library Modal -->
+    <div id="modal-recent-uploads" class="modal-backdrop hidden">
+      <div class="modal-card modal-card-xl">
+        <div class="modal-header">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <i class="ri-folder-video-line" style="font-size:1.3rem; color:var(--brand-primary);"></i>
+            <div>
+              <h3>Recent Videos & Uploads</h3>
+              <p style="font-size:12px; color:var(--text-muted); margin-top:2px;">Select any previously uploaded file or downloaded YouTube video to start clipping</p>
+            </div>
+          </div>
+          <button class="close-modal" id="btn-close-recent-uploads"><i class="ri-close-line"></i></button>
+        </div>
+        <div class="modal-body" style="padding:20px; max-height:70vh; overflow-y:auto;">
+          <div id="recent-uploads-empty" class="empty-script hidden" style="padding:40px 20px;">
+            <div class="empty-icon"><i class="ri-video-upload-line"></i></div>
+            <h4>No Uploaded Videos Found</h4>
+            <p>Upload a video or download a YouTube URL to populate your media library.</p>
+          </div>
+          <div id="recent-uploads-grid" class="clips-grid" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(260px, 1fr)); gap:14px;">
+            <!-- Uploaded video cards rendered dynamically by JS -->
+          </div>
+        </div>
+      </div>
+    </div>
 
     <!-- Caption Studio Style Picker Modal -->
     <div id="modal-caption-studio" class="modal-backdrop hidden">

@@ -329,6 +329,45 @@ async def upload_video(file: UploadFile = File(...)):
     registry.register(job_id, str(save_path), file.filename)
     return {"job_id": job_id, "filename": file.filename}
 
+@router.get("/api/uploads")
+@router.get("/uploads")
+async def list_recent_uploads():
+    """Lists all recent uploaded or downloaded source videos from UPLOAD_DIR."""
+    uploads = []
+    if UPLOAD_DIR.exists():
+        video_extensions = {".mp4", ".mov", ".mkv", ".webm", ".avi"}
+        files = [f for f in UPLOAD_DIR.iterdir() if f.is_file() and f.suffix.lower() in video_extensions]
+        files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
+        for f in files[:50]:
+            stat = f.stat()
+            size_mb = round(stat.st_size / (1024 * 1024), 2)
+            mtime = stat.st_mtime
+            orig_name = f.name
+            m = re.match(r"job_([a-f0-9]{8,32})", f.name)
+            if m:
+                jid = m.group(1)
+                orig_job = registry.get(jid)
+                if orig_job and orig_job.filename:
+                    orig_name = orig_job.filename
+            uploads.append({
+                "filename": f.name,
+                "original_name": orig_name,
+                "size_mb": size_mb,
+                "timestamp": mtime,
+                "formatted_date": time.strftime("%b %d, %Y · %H:%M", time.localtime(mtime))
+            })
+    return {"success": True, "uploads": uploads}
+
+@router.delete("/api/uploads/{filename}")
+async def delete_upload(filename: str):
+    if Path(filename).name != filename:
+        return JSONResponse({"error": "Invalid filename."}, status_code=400)
+    target = (UPLOAD_DIR / filename).resolve()
+    if target.exists() and target.is_relative_to(UPLOAD_DIR.resolve()) and target.is_file():
+        target.unlink(missing_ok=True)
+        return {"success": True, "message": f"Deleted {filename}"}
+    return JSONResponse({"error": "File not found"}, status_code=404)
+
 @router.post("/api/start-from-upload/{filename}")
 async def start_from_upload(filename: str):
     if Path(filename).name != filename:

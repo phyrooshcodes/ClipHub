@@ -321,22 +321,23 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById('btn-nav-studio')?.classList.add('active');
     document.getElementById('modal-gallery')?.classList.add('hidden');
     document.getElementById('modal-history')?.classList.add('hidden');
+    document.getElementById('modal-recent-uploads')?.classList.add('hidden');
   });
 
-  document.getElementById('btn-back-home')?.addEventListener('click', (e) => {
+  document.getElementById('btn-nav-recent')?.addEventListener('click', (e) => {
     e.preventDefault();
-    document.querySelectorAll('.sidebar-nav .nav-item').forEach(el => el.classList.remove('active'));
-    document.getElementById('btn-nav-studio')?.classList.add('active');
-    document.getElementById('modal-gallery')?.classList.add('hidden');
-    document.getElementById('modal-history')?.classList.add('hidden');
-    document.getElementById('dropzone')?.scrollIntoView({ behavior: 'smooth' });
+    document.getElementById('modal-recent-uploads')?.classList.remove('hidden');
+    fetchRecentUploads();
   });
 
-  document.getElementById('btn-nav-review')?.addEventListener('click', (e) => {
+  document.getElementById('btn-open-recent-uploads')?.addEventListener('click', (e) => {
     e.preventDefault();
-    document.querySelectorAll('.sidebar-nav .nav-item').forEach(el => el.classList.remove('active'));
-    document.getElementById('btn-nav-review')?.classList.add('active');
-    document.getElementById('section-human-review')?.scrollIntoView({ behavior: 'smooth' });
+    document.getElementById('modal-recent-uploads')?.classList.remove('hidden');
+    fetchRecentUploads();
+  });
+
+  document.getElementById('btn-close-recent-uploads')?.addEventListener('click', () => {
+    document.getElementById('modal-recent-uploads')?.classList.add('hidden');
   });
 
   document.getElementById('btn-nav-gallery')?.addEventListener('click', (e) => {
@@ -385,65 +386,68 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById('modal-settings')?.classList.add('hidden');
   });
 
-  // --- Initialization & Resume Logic ---
-  const savedJobId = (() => {
-    const jid = localStorage.getItem('currentJobId');
-    const ts = Number(localStorage.getItem('currentJobId_ts') || 0);
-    const hasYtUrl = !!localStorage.getItem('ytUrl');
+  async function fetchRecentUploads() {
+    const grid = document.getElementById('recent-uploads-grid');
+    const empty = document.getElementById('recent-uploads-empty');
+    if (!grid) return;
+    grid.innerHTML = '<div style="grid-column: 1/-1; text-align:center; padding:30px; color:var(--text-muted);"><i class="ri-loader-4-line spin" style="font-size:24px;"></i><p style="margin-top:8px;">Scanning media library...</p></div>';
     
-    if (jid && (hasYtUrl || Date.now() - ts < 24 * 3600 * 1000)) return jid;
-    
-    localStorage.removeItem('currentJobId');
-    localStorage.removeItem('currentJobId_ts');
-    localStorage.removeItem('ytUrl');
-    return null;
-  })();
-  const savedYtUrl = localStorage.getItem('ytUrl');
-  if (savedJobId) {
-    currentJobId = savedJobId;
-    sectionUpload.classList.add('hidden');
-    sectionProcessing.classList.remove('hidden');
-    if (typeof gsap !== 'undefined') {
-      try { gsap.to(sectionProcessing, { y: 0, opacity: 1, duration: 0.6, ease: "power3.out" }); } catch(e){}
-    }
-    
-    if (savedYtUrl) {
-      connectYoutubeWS(savedJobId, savedYtUrl);
-    } else {
-      connectPipelineWS(savedJobId);
-    }
-  } else {
-    // If no active job, load recent uploads for quick selection
-    loadRecentUploads();
-  }
-
-  async function loadRecentUploads() {
     try {
-      const res = await fetch('/uploads');
+      const res = await fetch('/api/uploads');
       const data = await res.json();
-      if(data.uploads && data.uploads.length > 0) {
-        document.getElementById('recent-uploads-section').style.display = 'block';
-        const list = document.getElementById('recent-uploads-list');
-        list.innerHTML = '';
-        data.uploads.forEach(u => {
-          const card = document.createElement('div');
-          card.style.cssText = `
-            min-width: 150px; background: rgba(255,255,255,0.05); padding: 12px;
-            border-radius: var(--radius-sm); border: 1px solid var(--border-color);
-            cursor: pointer; transition: all 0.2s ease;
-          `;
-          card.innerHTML = `
-            <i class="ri-video-line" style="font-size: 2rem; color: var(--accent-cyan); margin-bottom: 8px; display: block;"></i>
-            <p style="margin:0; font-size: 0.8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(u.filename)}">${escapeHtml(u.filename)}</p>
-            <span style="font-size: 0.7rem; color: var(--text-muted);">${u.size_mb} MB</span>
-          `;
-          card.onmouseover = () => { card.style.background = 'rgba(255,255,255,0.1)'; card.style.borderColor = 'var(--accent-primary)'; };
-          card.onmouseout = () => { card.style.background = 'rgba(255,255,255,0.05)'; card.style.borderColor = 'var(--border-color)'; };
-          card.onclick = () => openCaptionStudio(u.filename, false, true, false);
-          list.appendChild(card);
-        });
+      grid.innerHTML = '';
+      if (!data.uploads || data.uploads.length === 0) {
+        if (empty) empty.classList.remove('hidden');
+        return;
       }
-    } catch(e) {}
+      if (empty) empty.classList.add('hidden');
+
+      data.uploads.forEach(u => {
+        const card = document.createElement('div');
+        card.className = 'review-card';
+        card.style.cssText = 'display:flex; flex-direction:column; justify-content:space-between; gap:12px; padding:16px;';
+        
+        card.innerHTML = `
+          <div>
+            <div style="display:flex; align-items:flex-start; gap:10px; margin-bottom:8px;">
+              <div style="width:36px; height:36px; border-radius:var(--radius-sm); background:var(--brand-primary-light); color:var(--brand-primary); display:flex; align-items:center; justify-content:center; font-size:18px; flex-shrink:0;">
+                <i class="ri-video-fill"></i>
+              </div>
+              <div style="overflow:hidden; flex:1;">
+                <h4 style="font-size:13px; font-weight:700; color:var(--text-main); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${escapeHtml(u.original_name)}">${escapeHtml(u.original_name)}</h4>
+                <div style="font-size:11px; color:var(--text-muted); font-family:var(--font-mono); margin-top:2px;">${u.size_mb} MB · ${u.formatted_date || ''}</div>
+              </div>
+            </div>
+          </div>
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; border-top:1px solid var(--border-light); padding-top:10px;">
+            <button class="btn-channel-danger btn-delete-upload" style="padding:6px 10px; font-size:11px;" title="Delete file from disk"><i class="ri-delete-bin-line"></i></button>
+            <button class="btn-primary-gradient btn-select-upload" style="padding:6px 16px; font-size:12px; font-weight:600; flex:1;"><i class="ri-sparkling-fill"></i> Select & Clip →</button>
+          </div>
+        `;
+
+        card.querySelector('.btn-select-upload')?.addEventListener('click', () => {
+          document.getElementById('modal-recent-uploads')?.classList.add('hidden');
+          openCaptionStudio(u.filename, false, true, false);
+        });
+
+        card.querySelector('.btn-delete-upload')?.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          if (!confirm(`Delete "${u.original_name}" from disk?`)) return;
+          try {
+            await fetch(`/api/uploads/${encodeURIComponent(u.filename)}`, { method: 'DELETE' });
+            Toast.show(`Deleted ${u.original_name}`, 'info');
+            fetchRecentUploads();
+          } catch(err) {
+            Toast.show('Failed to delete file', 'error');
+          }
+        });
+
+        grid.appendChild(card);
+      });
+    } catch(err) {
+      console.error('Failed to load recent uploads:', err);
+      grid.innerHTML = '<div style="grid-column: 1/-1; text-align:center; padding:30px; color:var(--rose-text);">Failed to load media library.</div>';
+    }
   }
 
   // Settings Modal & Caption Studio Architecture
