@@ -5,6 +5,15 @@
   <title>ClipHub Studio</title>
   <link rel="icon" type="image/png" href="favicon.png">
   <link rel="shortcut icon" href="favicon.ico">
+  <script>
+    (function() {
+      try {
+        var s = localStorage.getItem('cliphub_theme') || 'system';
+        var d = s === 'dark' || (s === 'system' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        document.documentElement.className = d ? 'dark-theme' : 'light-theme';
+      } catch(e) {}
+    })();
+  </script>
   <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
   <link rel="stylesheet" href="style.css">
@@ -81,10 +90,15 @@
           </div>
         </div>
 
-        <button class="nav-item-simple" id="btn-settings">
-          <i class="ri-settings-3-line"></i>
-          <span>Settings</span>
-        </button>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <button class="nav-item-simple" id="btn-settings" style="flex:1;">
+            <i class="ri-settings-3-line"></i>
+            <span>Settings</span>
+          </button>
+          <button class="nav-item-simple btn-theme-icon" id="btn-theme-toggle" title="Toggle Dark/Light Theme">
+            <i class="ri-moon-line"></i>
+          </button>
+        </div>
       </div>
     </aside>
 
@@ -334,10 +348,68 @@
           </div>
           <button class="close-modal" id="btn-close-settings"><i class="ri-close-line"></i></button>
         </div>
-        <div class="modal-body" style="padding: 20px; display: flex; flex-direction: column; gap: 14px;">
-           <label style="display:flex; align-items:center; gap:8px; font-weight:500;"><input type="checkbox" id="setting-auto-approve"> Auto-Approve Editorial Review</label>
-           <label style="display:flex; align-items:center; gap:8px; font-weight:500;"><input type="checkbox" id="setting-auto-publish"> Auto-Publish Completed Clips</label>
-           <label style="display:flex; align-items:center; gap:8px; font-weight:500;"><input type="checkbox" id="setting-add-captions" checked> Burn Kinetic Subtitles</label>
+        <div class="modal-body" style="padding: 20px; display: flex; flex-direction: column; gap: 16px;">
+          
+          <!-- Theme Appearance Section -->
+          <div class="settings-theme-group">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+              <span style="font-weight:600; font-size:13px; color:var(--text-main);"><i class="ri-palette-line" style="color:var(--brand-primary); margin-right:4px;"></i> Workspace Appearance</span>
+              <span id="theme-status-pill" class="header-pill">System</span>
+            </div>
+            <div class="theme-picker-grid">
+              <label class="theme-card" id="theme-card-light">
+                <input type="radio" name="app-theme" value="light" class="hidden">
+                <div class="theme-card-preview light-mockup">
+                  <div class="mockup-sidebar"></div>
+                  <div class="mockup-content">
+                    <div class="mockup-line" style="width:70%;"></div>
+                    <div class="mockup-box"></div>
+                  </div>
+                </div>
+                <div class="theme-card-label">
+                  <i class="ri-sun-line"></i>
+                  <span>Light</span>
+                </div>
+              </label>
+
+              <label class="theme-card" id="theme-card-dark">
+                <input type="radio" name="app-theme" value="dark" class="hidden">
+                <div class="theme-card-preview dark-mockup">
+                  <div class="mockup-sidebar"></div>
+                  <div class="mockup-content">
+                    <div class="mockup-line" style="width:70%;"></div>
+                    <div class="mockup-box"></div>
+                  </div>
+                </div>
+                <div class="theme-card-label">
+                  <i class="ri-moon-line"></i>
+                  <span>Dark</span>
+                </div>
+              </label>
+
+              <label class="theme-card" id="theme-card-system">
+                <input type="radio" name="app-theme" value="system" class="hidden" checked>
+                <div class="theme-card-preview system-mockup">
+                  <div class="mockup-half-light"></div>
+                  <div class="mockup-half-dark"></div>
+                </div>
+                <div class="theme-card-label">
+                  <i class="ri-computer-line"></i>
+                  <span>System</span>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <hr style="border:none; border-top:1px solid var(--border-light); margin:0;">
+
+          <!-- Automation & Engine Settings -->
+          <div style="display:flex; flex-direction:column; gap:8px;">
+            <span style="font-weight:600; font-size:13px; color:var(--text-main);">Pipeline Workflow</span>
+            <label style="display:flex; align-items:center; gap:8px; font-weight:500;"><input type="checkbox" id="setting-auto-approve"> Auto-Approve Editorial Review</label>
+            <label style="display:flex; align-items:center; gap:8px; font-weight:500;"><input type="checkbox" id="setting-auto-publish"> Auto-Publish Completed Clips</label>
+            <label style="display:flex; align-items:center; gap:8px; font-weight:500;"><input type="checkbox" id="setting-add-captions" checked> Burn Kinetic Subtitles</label>
+          </div>
            
            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
              <label style="display:flex; flex-direction:column; gap:4px; font-size:12px; color:var(--text-muted);">

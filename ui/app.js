@@ -20,11 +20,90 @@ const Toast = {
   }
 };
 
+// Theme Manager (Light, Dark, System Sync)
+const ThemeManager = {
+  storageKey: 'cliphub_theme',
+
+  init() {
+    const saved = localStorage.getItem(this.storageKey) || 'system';
+    this.apply(saved, false);
+
+    if (window.matchMedia) {
+      window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+        if (this.getTheme() === 'system') {
+          this.apply('system', false);
+        }
+      });
+    }
+
+    document.querySelectorAll('input[name="app-theme"]').forEach((radio) => {
+      radio.addEventListener('change', (e) => {
+        this.apply(e.target.value, true);
+        Toast.show(`Theme updated to ${e.target.value}`, 'info', 2000);
+      });
+    });
+
+    document.getElementById('btn-theme-toggle')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const currentDark = document.documentElement.classList.contains('dark-theme');
+      const nextTheme = currentDark ? 'light' : 'dark';
+      this.apply(nextTheme, true);
+      Toast.show(`Switched to ${nextTheme} theme`, 'info', 2000);
+    });
+  },
+
+  getTheme() {
+    return localStorage.getItem(this.storageKey) || 'system';
+  },
+
+  apply(theme, persist = true) {
+    if (persist) {
+      localStorage.setItem(this.storageKey, theme);
+    }
+    
+    const isDark = theme === 'dark' || (theme === 'system' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+
+    if (isDark) {
+      document.documentElement.classList.remove('light-theme');
+      document.documentElement.classList.add('dark-theme');
+      document.body.classList.remove('light-theme');
+      document.body.classList.add('dark-theme');
+    } else {
+      document.documentElement.classList.remove('dark-theme');
+      document.documentElement.classList.add('light-theme');
+      document.body.classList.remove('dark-theme');
+      document.body.classList.add('light-theme');
+    }
+
+    // Update settings radio buttons and active cards
+    const radio = document.querySelector(`input[name="app-theme"][value="${theme}"]`);
+    if (radio) radio.checked = true;
+    
+    document.querySelectorAll('.theme-card').forEach((card) => card.classList.remove('active'));
+    document.getElementById(`theme-card-${theme}`)?.classList.add('active');
+
+    // Update quick toggle icon
+    const toggleIcon = document.querySelector('#btn-theme-toggle i');
+    if (toggleIcon) {
+      toggleIcon.className = isDark ? 'ri-sun-line' : 'ri-moon-line';
+    }
+
+    // Update settings status pill
+    const statusPill = document.getElementById('theme-status-pill');
+    if (statusPill) {
+      if (theme === 'system') statusPill.textContent = `System (${isDark ? 'Dark' : 'Light'})`;
+      else statusPill.textContent = theme === 'dark' ? 'Dark Mode' : 'Light Mode';
+    }
+  }
+};
+
 // UI State Management & GSAP Animations
 document.addEventListener("DOMContentLoaded", () => {
   
-  // Initialize Toast
+  // Initialize Toast and Theme Manager
   Toast.init();
+  ThemeManager.init();
 
   async function refreshSystemBadges() {
     try {
