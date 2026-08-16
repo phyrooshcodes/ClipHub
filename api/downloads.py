@@ -5,6 +5,8 @@ import sys
 import time
 import uuid
 from pathlib import Path
+from typing import Dict, List
+import threading
 
 from fastapi import APIRouter, WebSocket, Query
 from fastapi.responses import JSONResponse, FileResponse
@@ -22,9 +24,6 @@ async def prepare_download():
     job_id = str(uuid.uuid4())[:8]
     return {"job_id": job_id}
 
-import asyncio
-from typing import Dict, List
-
 class DownloadJob:
     def __init__(self, job_id, url):
         self.job_id = job_id
@@ -33,8 +32,6 @@ class DownloadJob:
         self.done = False
         self.task = None
         self.created_at = time.time()
-
-import threading
 
 active_downloads: Dict[str, DownloadJob] = {}
 _downloads_lock = threading.Lock()
@@ -154,8 +151,6 @@ async def download_url_ws(websocket: WebSocket, job_id: str, url: str = ""):
                 break
             else:
                 await asyncio.sleep(0.2)
-
-
     except Exception as e:
         try: await websocket.send_json({"type": "error", "message": str(e)})
         except: pass
@@ -168,35 +163,47 @@ async def download_url_ws(websocket: WebSocket, job_id: str, url: str = ""):
 async def list_uploads():
     uploads = []
     if UPLOAD_DIR.exists():
+        valid_exts = {".mp4", ".mov", ".mkv", ".webm", ".avi"}
         for f in UPLOAD_DIR.iterdir():
-            if not f.is_file():
+            if not f.is_file() or f.suffix.lower() not in valid_exts:
                 continue
+            stat = f.stat()
             m = re.match(r"job_([a-f0-9]{8})(\.[a-zA-Z0-9]+)$", f.name)
             if m:
                 jid = m.group(1)
-                stat = f.stat()
                 job = registry.get(jid)
-                if not job:
-                    job = registry.register(jid, str(f), f.name)
-                    job.start_time = stat.st_mtime
-                uploads.append({
-                    "job_id": jid,
-                    "filename": job.filename,
-                    "size_mb": round(stat.st_size / 1024 / 1024, 1),
-                    "created": stat.st_mtime
-                })
+                display_name = job.filename if job else f.name
+            else:
+                jid = f.stem
+                job = registry.get(jid)
+                display_name = job.filename if job else f.name
+                
+            uploads.append({
+                "job_id": jid,
+                "filename": display_name,
+                "file_path": f.name,
+                "size_mb": round(stat.st_size / 1024 / 1024, 1),
+                "created": stat.st_mtime
+            })
     return {"uploads": sorted(uploads, key=lambda x: x["created"], reverse=True)}
 
 @router.get("/output/{filename}")
 async def serve_output(filename: str):
     path = (OUTPUT_DIR / filename).resolve()
-    if not path.is_relative_to(OUTPUT_DIR.resolve()) or not path.exists():
+    if not path.is_relative_to(OUTPUT_DIR.resolve()) or not path.is_file():
+        return JSONResponse({"error": "not found"}, status_code=404)
+    return FileResponse(str(path), media_type="video/mp4")
+
+@router.get("/output/caption_studio/{filename}")
+async def serve_caption_studio_output(filename: str):
+    path = (OUTPUT_DIR / "caption_studio" / filename).resolve()
+    if not path.is_relative_to(OUTPUT_DIR.resolve()) or not path.is_file():
         return JSONResponse({"error": "not found"}, status_code=404)
     return FileResponse(str(path), media_type="video/mp4")
 
 @router.get("/output/{job_id}/{filename}")
 async def serve_job_output(job_id: str, filename: str):
     path = (OUTPUT_DIR / job_id / filename).resolve()
-    if not path.is_relative_to(OUTPUT_DIR.resolve()) or not path.exists():
+    if not path.is_relative_to(OUTPUT_DIR.resolve()) or not path.is_file():
         return JSONResponse({"error": "not found"}, status_code=404)
     return FileResponse(str(path), media_type="video/mp4")

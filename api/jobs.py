@@ -23,6 +23,7 @@ class Job:
     process: object = None
     done: bool = False
     started: bool = False
+    state: str = "created"  # created, phase_1_running, waiting_for_review, phase_2_running, completed, failed, cancelled
 
 class JobRegistry:
     """Thread-safe synchronized job registry with auto-TTL eviction and disk journal persistence."""
@@ -40,7 +41,16 @@ class JobRegistry:
             JOURNAL_PATH.parent.mkdir(parents=True, exist_ok=True)
             data = {
                 "jobs": {
-                    jid: {"job_id": j.job_id, "path": j.path, "filename": j.filename, "start_time": j.start_time, "done": j.done, "started": j.started}
+                    jid: {
+                        "job_id": j.job_id,
+                        "path": j.path,
+                        "filename": j.filename,
+                        "start_time": j.start_time,
+                        "execution_start_time": j.execution_start_time,
+                        "done": j.done,
+                        "started": j.started,
+                        "state": getattr(j, "state", "created")
+                    }
                     for jid, j in self._jobs.items()
                 },
                 "configs": self._configs,
@@ -66,17 +76,16 @@ class JobRegistry:
                 max_age_sec = self._MAX_AGE_HOURS * 3600
                 for jid, jdata in data.get("jobs", {}).items():
                     if now - jdata.get("start_time", 0) < max_age_sec:
-                        # Any job loaded from a previous server session has lost its subprocess.
-                        # Mark previous session jobs as done or recoverable to prevent permanent zombie hangs.
                         was_done = jdata.get("done", True)
                         self._jobs[jid] = Job(
                             job_id=jdata["job_id"],
                             path=jdata["path"],
                             filename=jdata["filename"],
                             start_time=jdata.get("start_time", now),
-                            execution_start_time=jdata.get("start_time", now),
+                            execution_start_time=jdata.get("execution_start_time", jdata.get("start_time", now)),
                             done=was_done,
-                            started=was_done
+                            started=was_done,
+                            state=jdata.get("state", "completed" if was_done else "created")
                         )
                 self._configs = data.get("configs", {})
                 self._events = data.get("events", {})
@@ -110,17 +119,27 @@ class JobRegistry:
                 self._events[job_id] = []
             self._events[job_id].append(event)
             # Persist major milestone events to journal
-            if event.get("type") in ("start", "done", "error", "phase", "review"):
+            if event.get("type") in ("start", "done", "error", "phase", "review", "phase_1_complete"):
                 self._save_journal()
 
     def get_events(self, job_id: str) -> List[dict]:
         with self._lock:
             return list(self._events.get(job_id, []))
 
+    def set_state(self, job_id: str, state: str):
+        with self._lock:
+            job = self._jobs.get(job_id)
+            if job:
+                job.state = state
+                if state in ("completed", "failed", "cancelled"):
+                    job.done = True
+                self._save_journal()
+
     def mark_done(self, job_id: str):
         with self._lock:
             if job_id in self._jobs:
                 self._jobs[job_id].done = True
+                self._jobs[job_id].state = "completed"
                 self._save_journal()
 
     def claim_execution(self, job_id: str) -> bool:
@@ -134,6 +153,8 @@ class JobRegistry:
             if force_restart or not job.started:
                 job.started = True
                 job.done = False
+                phase = config.get("phase", "1")
+                job.state = "phase_2_running" if phase == "2" else "phase_1_running"
                 job.execution_start_time = time.time()
                 if force_restart:
                     self._events[job_id] = []
@@ -149,17 +170,28 @@ class JobRegistry:
                 return False
             # Safely terminate any active child process
             if job.process and getattr(job.process, "returncode", None) is None:
+                pid = getattr(job.process, "pid", None)
                 try:
-                    if sys.platform == "win32":
-                        subprocess.run(["taskkill", "/F", "/T", "/PID", str(job.process.pid)], capture_output=True)
+                    if sys.platform == "win32" and pid:
+                        subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)], capture_output=True, timeout=5)
                     else:
                         job.process.terminate()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning(f"Error terminating child process {pid}: {e}")
+                
+                # Check if process actually terminated
+                if hasattr(job.process, "poll") and job.process.poll() is None:
+                    try:
+                        job.process.kill()
+                    except Exception:
+                        pass
+                
                 job.process = None
+                
             self._events[job_id] = []
             job.done = False
             job.started = False
+            job.state = "waiting_for_review" if phase == "2" else "created"
             job.execution_start_time = time.time()
             config = self._configs.get(job_id, {})
             config["force_restart"] = True

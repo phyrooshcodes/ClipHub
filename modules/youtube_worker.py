@@ -28,6 +28,8 @@ logger = logging.getLogger(__name__)
 
 class YouTubePersistentWorker:
     def __init__(self):
+        self._lock = threading.Lock()
+        self.state = "idle"
         self._queue = queue.Queue()
         self._thread = None
         self._playwright = None
@@ -50,8 +52,13 @@ class YouTubePersistentWorker:
         """Whether the persistent worker thread owns or is opening a browser."""
         return self._thread is not None and self._thread.is_alive()
 
+    def get_result(self, upload_id: str) -> dict:
+        with self._lock:
+            return dict(self.results.get(upload_id, {}))
+
     def enqueue(self, upload_id, video_path, title, description, tags, thumbnail_path, product_recommendations, amazon_store_tag, enable_comment_affiliate, enable_native_shopping, progress_cb):
-        self.results[upload_id] = {"status": "queued"}
+        with self._lock:
+            self.results[upload_id] = {"status": "queued"}
         self.progress_callbacks[upload_id] = progress_cb
         self._queue.put({
             "upload_id": upload_id,
@@ -79,17 +86,22 @@ class YouTubePersistentWorker:
     def suspend(self, timeout: float = 10.0) -> bool:
         """Signal the worker thread to release the browser lock with bounded timeout. Returns True if released."""
         logger.info("[YouTube Worker] Suspending persistent browser for manual login...")
+        self.state = "suspending"
         self._pause_event.clear()
         self._suspend_requested = True
         start = time.time()
         # Wait until the worker thread actually closes the context or timeout occurs
         while self._context is not None and (time.time() - start) < timeout:
             time.sleep(0.1)
-        return self._context is None
+        if self._context is None:
+            self.state = "suspended"
+            return True
+        return False
 
     def resume(self):
         """Resume queue processing and restart the browser."""
         logger.info("[YouTube Worker] Resuming operations...")
+        self.state = "resuming"
         self._suspend_requested = False
         self._pause_event.set()
 
@@ -201,12 +213,17 @@ class YouTubePersistentWorker:
             affiliate_comment_text = f"🛒 Featured in this clip: {prod.get('product_name', query)}\n👉 Check it out here on Amazon: {link}\n\n#ad"
             description = (description or "") + "\n\n" + affiliate_comment_text
 
-        self.results[upload_id]["status"] = "uploading"
+        with self._lock:
+            if upload_id in self.results:
+                self.results[upload_id]["status"] = "uploading"
+            else:
+                self.results[upload_id] = {"status": "uploading"}
         self._notify(upload_id, 10, "Starting YouTube upload in persistent browser")
         
         page = None
         console_lines = []
         current_stage = "init"
+        self.state = "uploading"
         
         try:
             # Create a NEW page for every job to avoid memory leak with event listeners
@@ -256,12 +273,13 @@ class YouTubePersistentWorker:
                 raise RuntimeError("Schedule verification timed out.")
                 
             self._notify(upload_id, 95, "Successfully scheduled YouTube video")
-            self.results[upload_id] = {
-                "status": "scheduled",
-                "success": True,
-                "url": video_url,
-                "scheduled_time": scheduled_display_time
-            }
+            with self._lock:
+                self.results[upload_id] = {
+                    "status": "scheduled",
+                    "success": True,
+                    "url": video_url,
+                    "scheduled_time": scheduled_display_time
+                }
 
             if affiliate_comment_text and video_url:
                 self._notify(upload_id, 98, "Posting and pinning affiliate comment...")
@@ -288,16 +306,19 @@ class YouTubePersistentWorker:
                 diag_dir = _save_diagnostics(self._context, page, f"failure-{current_stage}", console_lines)
                 detail += f" Diagnostics saved to {diag_dir}."
             logger.error(f"[YouTube Worker] {detail}")
-            self.results[upload_id] = {
-                "status": "failed",
-                "success": False,
-                "error": detail
-            }
+            with self._lock:
+                self.results[upload_id] = {
+                    "status": "failed",
+                    "success": False,
+                    "error": detail
+                }
         finally:
+            self.state = "idle"
             self.progress_callbacks.pop(upload_id, None)
-            if len(self.results) > 100:
-                for old_k in list(self.results.keys())[:-100]:
-                    self.results.pop(old_k, None)
+            with self._lock:
+                if len(self.results) > 100:
+                    for old_k in list(self.results.keys())[:-100]:
+                        self.results.pop(old_k, None)
             if page:
                 try:
                     page.close()

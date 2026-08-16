@@ -88,9 +88,6 @@ app.include_router(pipeline_router)
 app.include_router(social_router)
 app.include_router(downloads_router)
 
-# ─── Static Output Mounting (supports video streaming & Range headers) ──
-app.mount("/output", StaticFiles(directory=str(OUTPUT_DIR)), name="output")
-
 # ─── Static UI Routes ───────────────────────────────────────
 @app.get("/", response_class=HTMLResponse)
 async def index():
@@ -136,7 +133,7 @@ def get_local_ip() -> str:
 @app.get("/api/server-info")
 async def server_info():
     ip = get_local_ip()
-    host = os.environ.get("CLIPHUB_HOST", "127.0.0.1")
+    host = getattr(app.state, "host", None) or os.environ.get("CLIPHUB_HOST", "127.0.0.1")
     is_lan = host == "0.0.0.0"
     return {
         "local_url": "http://localhost:7842",
@@ -148,6 +145,7 @@ async def server_info():
 @app.get("/api/system-status")
 async def get_system_status():
     import subprocess
+    from modules.renderer import check_nvenc_available
     status = {
         "gpu": "Detecting...",
         "nvenc": "Detecting...",
@@ -161,14 +159,13 @@ async def get_system_status():
         if res.returncode == 0 and res.stdout.strip():
             gpu_name = res.stdout.strip().split("\n")[0]
             status["gpu"] = gpu_name
-            status["nvenc"] = "Ready" if "RTX" in gpu_name or "GTX" in gpu_name else "Unsupported"
         else:
             status["gpu"] = "CPU / Unknown"
-            status["nvenc"] = "Not available"
     except Exception:
         status["gpu"] = "CPU Only"
-        status["nvenc"] = "Not available"
         
+    has_nvenc = check_nvenc_available()
+    status["nvenc"] = "Ready" if has_nvenc else "Not available"
     return status
 
 # ─── Entry Point ─────────────────────────────────────────────
@@ -185,10 +182,11 @@ if __name__ == "__main__":
 
     host = cli_args.host
     port = cli_args.port
+    app.state.host = host
     if host == "0.0.0.0":
-        # Support direct CLI use as well as the Windows launcher.
         os.environ["CLIPHUB_HOST"] = host
-        os.environ.setdefault("CLIPHUB_LAN_TOKEN", secrets.token_urlsafe(24))
+        token = os.environ.setdefault("CLIPHUB_LAN_TOKEN", secrets.token_urlsafe(24))
+        app.state.lan_token = token
 
     if os.environ.get("CLIPHUB_OPEN_BROWSER", "1") == "1":
         threading.Thread(target=_open_browser, args=(port,), daemon=True).start()
@@ -199,7 +197,8 @@ if __name__ == "__main__":
     print("=" * 55)
     print(f"  • Local Interface : http://localhost:{port}")
     if host == "0.0.0.0":
-        print(f"  • LAN Access      : http://{local_ip}:{port}/?token={lan_token()} (LAN Mode Active)")
+        print(f"  • LAN Interface   : http://{local_ip}:{port}")
+        print(f"  • LAN Token       : {lan_token()} (Pass as X-ClipHub-Token or ?token=)")
     else:
         print(f"  • Security Mode   : Desktop Only (Loopback 127.0.0.1)")
         print(f"  • LAN Sharing     : Pass --host 0.0.0.0 to enable")

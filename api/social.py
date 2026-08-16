@@ -65,9 +65,13 @@ class InstagramQueueActionRequest(BaseModel):
 social_uploads = {}
 upload_lock = asyncio.Lock()
 
-def _clean_stale_social_uploads(max_age_sec: int = 86400):
+def _clean_stale_social_uploads(max_age_sec: int = 3600):
     now = time.time()
-    stale = [k for k, v in social_uploads.items() if (now - v.get("created_at", now)) > max_age_sec]
+    terminal_states = {"completed", "failed", "partial"}
+    stale = [
+        k for k, v in social_uploads.items()
+        if v.get("status") in terminal_states and (now - v.get("created_at", now)) > max_age_sec
+    ]
     for k in stale:
         social_uploads.pop(k, None)
 
@@ -112,19 +116,24 @@ async def _bg_social_post(upload_id: str, job_id: str, clip_filename: str, title
                 if hasattr(res, "status"):
                     if res.status == "completed":
                         results["instagram"] = {"success": True, "url": getattr(res, "reel_url", None)}
+                        update_progress("instagram", 100, "Instagram reel published")
                     else:
                         results["instagram"] = {
                             "success": False,
                             "status": res.status,
                             "error": "Instagram upload submitted but requires manual verification."
                         }
+                        update_progress("instagram", 100, "Needs manual verification")
                         has_errors = True
                 elif isinstance(res, str):
                     results["instagram"] = {"success": True, "url": res}
+                    update_progress("instagram", 100, "Instagram reel published")
                 else:
                     results["instagram"] = {"success": True, "url": None}
+                    update_progress("instagram", 100, "Instagram reel finished")
             except Exception as e:
                 results["instagram"] = {"success": False, "error": str(e)}
+                update_progress("instagram", 100, f"Error: {e}")
                 has_errors = True
                 
     if "youtube" in platforms:
@@ -137,7 +146,7 @@ async def _bg_social_post(upload_id: str, job_id: str, clip_filename: str, title
             start_poll = time.time()
             res = {}
             while time.time() - start_poll < 600:
-                res = worker.results.get(upload_id, {})
+                res = worker.get_result(upload_id)
                 st = res.get("status")
                 if st in ["scheduled", "completed", "failed"]:
                     break
@@ -147,11 +156,14 @@ async def _bg_social_post(upload_id: str, job_id: str, clip_filename: str, title
             
             if res.get("success"):
                 results["youtube"] = {"success": True, "url": res.get("url")}
+                update_progress("youtube", 100, "YouTube video scheduled")
             else:
                 results["youtube"] = {"success": False, "error": res.get("error", "Unknown error")}
+                update_progress("youtube", 100, f"YouTube upload failed: {res.get('error')}")
                 has_errors = True
         except Exception as e:
             results["youtube"] = {"success": False, "error": str(e)}
+            update_progress("youtube", 100, f"YouTube error: {e}")
             has_errors = True
             
     status = "failed" if has_errors and len(results) == len(platforms) else "completed"

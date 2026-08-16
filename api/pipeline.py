@@ -42,7 +42,7 @@ def get_video_metadata(video_path: str) -> dict:
             "-show_entries", "stream=width,height,r_frame_rate,codec_type,codec_name:format=format_name,duration",
             "-of", "json", str(video_path)
         ]
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True, timeout=15.0)
         data = json.loads(result.stdout)
         
         streams = data.get("streams", [])
@@ -76,6 +76,9 @@ def get_video_metadata(video_path: str) -> dict:
             mins = int(dur_s // 60)
             secs = int(dur_s % 60)
             meta["duration"] = f"{mins:02d}:{secs:02d}"
+    except subprocess.TimeoutExpired:
+        logger.warning(f"FFprobe timed out probing metadata for {video_path}")
+        meta["error"] = True
     except Exception as e:
         logger.warning(f"Failed to probe video metadata for {video_path}: {e}")
         meta["error"] = True
@@ -138,31 +141,37 @@ def _list_clips(job_id: str = None, newer_than: float = 0) -> list:
             # 3. Match by partial title (fuzzy / prefix)
             if not clip_meta:
                 for item in meta_list:
-                    it_title = clean_clip_title(item.get("title", "")).lower()
-                    f_title  = clean_clip_title(f.name).lower()
-                    if it_title and f_title and (it_title in f_title or f_title in it_title or it_title[:15] == f_title[:15]):
+                    item_title = item.get("title", "")
+                    clean_item = re.sub(r'[^\w\s]', '', item_title).strip().replace(" ", "_")
+                    clean_file = re.sub(r'[^\w\s]', '', f.name).strip()
+                    if clean_item and (clean_item.lower() in clean_file.lower() or clean_file.lower() in clean_item.lower()):
                         clip_meta = item
                         break
             
-            # 4. Fallback to list order index if meta_list length matches mp4 file count
+            # 4. Fallback to positional mapping
             if not clip_meta and idx < len(meta_list):
                 clip_meta = meta_list[idx]
-            
-            raw_title = clip_meta.get("title") or f.name
-            social_cap = clip_meta.get("social_caption", "")
-            if social_cap: social_cap = re.sub(r'^(?:clip[_\s\-]*\d+[_\s\-]*|\d+[\.\:\-]\s*)+', '', social_cap, flags=re.I).strip()
-            
+                
+            title_text = clean_clip_title(clip_meta.get("title") or f.stem)
+            hook_score = clip_meta.get("hook_score")
+            social_caption = clip_meta.get("social_caption") or clip_meta.get("caption", "")
+            editorial_data = clip_meta.get("editorial_data", {})
+            ai_audio_events = clip_meta.get("ai_audio_events", [])
+
             clips.append({
-                "filename": f.name, "size_mb": round(stat.st_size / 1024 / 1024, 1),
-                "url": f"/output/{d.name}/{f.name}", "modified": stat.st_mtime,
-                "title": clean_clip_title(raw_title), "clip_number": cidx + 1 if cidx >= 0 else (idx + 1),
-                "social_caption": social_cap, "reason": clip_meta.get("reason", clip_meta.get("hook_explanation", "")),
-                "hook_score": clip_meta.get("hook_score", clip_meta.get("viral_score", 90)), "viral_rating": clip_meta.get("viral_rating", None),
-                "retention_score": clip_meta.get("retention_score", None), "viral_analysis": clip_meta.get("viral_analysis", ""),
-                "broll_cues": clip_meta.get("broll_cues", []),
-                "product_recommendations": clip_meta.get("product_recommendations", [])
+                "job_id": d.name,
+                "filename": f.name,
+                "title": title_text,
+                "hook_score": hook_score,
+                "social_caption": social_caption,
+                "editorial_data": editorial_data,
+                "ai_audio_events": ai_audio_events,
+                "url": f"/output/{d.name}/{f.name}",
+                "modified": stat.st_mtime,
+                "size_mb": round(stat.st_size / (1024 * 1024), 2)
             })
-    return sorted(clips, key=lambda c: c["modified"], reverse=True)
+    clips.sort(key=lambda x: x["modified"], reverse=True)
+    return clips
 
 async def _run_process(job_id: str, cmd: list, start_time: float):
     job = registry.get(job_id)
@@ -196,7 +205,9 @@ async def _run_process(job_id: str, cmd: list, start_time: float):
         except Exception as e: logger.warning(f"Failed to inject nvidia paths: {e}")
 
         process = await asyncio.create_subprocess_exec(
-            *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
             cwd=str(BASE_DIR), env=env
         )
         if job: job.process = process
@@ -225,19 +236,27 @@ async def _run_process(job_id: str, cmd: list, start_time: float):
                 if clips_meta_path.exists():
                     with open(clips_meta_path, "r", encoding="utf-8") as f:
                         clips_meta = json.load(f)
+                    registry.set_state(job_id, "waiting_for_review")
                     registry.add_event(job_id, {"type": "phase_1_complete", "metadata": clips_meta})
-
-        if not success:
+                else:
+                    registry.set_state(job_id, "completed")
+            else:
+                registry.set_state(job_id, "completed")
+        else:
+            registry.set_state(job_id, "failed")
             registry.add_event(job_id, {
                 "type": "error",
                 "message": f"Pipeline exited with code {process.returncode}. Check the log for details."
             })
+
         clips = _list_clips(job_id=job_id, newer_than=start_time - 5)
         registry.add_event(job_id, {"type": "done", "success": success, "clips": clips, "is_phase_1": is_phase_1})
     except Exception as e:
+        registry.set_state(job_id, "failed")
         registry.add_event(job_id, {"type": "error", "message": str(e)})
     finally:
-        registry.mark_done(job_id)
+        if job and job.state != "waiting_for_review":
+            registry.mark_done(job_id)
 
 from pydantic import BaseModel, Field, model_validator
 from typing import Literal, Optional, List, Dict, Any
@@ -249,8 +268,8 @@ class JobConfigModel(BaseModel):
     font_preset: Literal["default", "hormozi", "beast", "minimal"] = "default"
     font_name: str = ""
     font_size: int = Field(default=48, ge=12, le=140)
-    primary_color: str = "#FFFFFF"
-    outline_color: str = "#000000"
+    primary_color: str = Field(default="#FFFFFF", pattern=r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
+    outline_color: str = Field(default="#000000", pattern=r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
     no_title: bool = False
     commentary_mode: Literal["off", "hook_only", "hook_commentary", "full_editorial"] = "hook_commentary"
     commentary_voice: str = "af_sarah"
@@ -306,6 +325,7 @@ async def start_from_upload(filename: str):
     if Path(filename).name != filename:
         return JSONResponse({"error": "Invalid upload filename."}, status_code=400)
     save_path = (UPLOAD_DIR / filename).resolve()
+    orig_name = filename
     if not save_path.is_relative_to(UPLOAD_DIR.resolve()) or not save_path.exists():
         m = re.match(r"job_([a-f0-9]{8})", filename)
         if m:
@@ -314,14 +334,18 @@ async def start_from_upload(filename: str):
                 candidate = UPLOAD_DIR / f"job_{jid}{ext}"
                 if candidate.exists():
                     save_path = candidate
-                    filename = candidate.name
+                    orig_job = registry.get(jid)
+                    if orig_job:
+                        orig_name = orig_job.filename
+                    else:
+                        orig_name = candidate.name
                     break
     if not save_path.is_relative_to(UPLOAD_DIR.resolve()) or not save_path.is_file():
         return JSONResponse({"error": f"File not found: {filename}"}, status_code=404)
         
     job_id = str(uuid.uuid4())[:8]
-    registry.register(job_id, str(save_path), filename)
-    return {"job_id": job_id, "filename": filename}
+    registry.register(job_id, str(save_path), orig_name)
+    return {"job_id": job_id, "filename": orig_name}
 
 @router.post("/config/{job_id}")
 async def set_job_config(job_id: str, config: JobConfigModel):
@@ -339,6 +363,7 @@ async def cancel_job(job_id: str):
                     subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)], capture_output=True)
                 else:
                     job.process.terminate()
+                registry.set_state(job_id, "cancelled")
                 registry.add_event(job_id, {"type": "error", "message": "Job was cancelled by user."})
                 return {"status": "cancelled"}
             else:
@@ -361,6 +386,9 @@ async def submit_review(job_id: str, request: Request):
         job = registry.get(job_id)
         if not job:
             return JSONResponse({"error": "Job not found"}, status_code=404)
+
+        if getattr(job, "state", "") == "phase_1_running":
+            return JSONResponse({"error": "Job is still processing Phase 1 analysis. Review cannot be submitted until Phase 1 is complete."}, status_code=409)
             
         job_dir = OUTPUT_DIR / job_id
         if not job_dir.exists():
@@ -372,7 +400,9 @@ async def submit_review(job_id: str, request: Request):
             json.dump(validated_clips, f, indent=2, ensure_ascii=False)
             
         # Synchronized atomic restart for phase 2 execution
-        registry.restart_job(job_id, phase="2")
+        restarted = registry.restart_job(job_id, phase="2")
+        if not restarted:
+            return JSONResponse({"error": "Failed to schedule Phase 2 execution."}, status_code=500)
         
         return {"status": "ok", "job_id": job_id}
     except Exception as e:

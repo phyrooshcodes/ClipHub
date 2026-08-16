@@ -289,20 +289,55 @@ def preflight_checks(input_video: str) -> None:
 
 
 def _prune_stale_temp_files(temp_root: str = "temp", max_age_days: int = 7) -> None:
-    """Evicts intermediate artifacts and temporary processing directories older than max_age_days."""
+    """Evicts intermediate artifacts and temporary processing directories older than max_age_days without touching active jobs."""
     if not os.path.exists(temp_root):
         return
     now = time.time()
     cutoff = now - (max_age_days * 86400)
+    
+    # Check journal to avoid deleting active or recently modified jobs
+    active_job_ids = set()
+    journal_path = os.path.join(temp_root, ".jobs_journal.json")
+    if os.path.exists(journal_path):
+        try:
+            with open(journal_path, "r", encoding="utf-8") as f:
+                jdata = json.load(f)
+                for jid, job in jdata.get("jobs", {}).items():
+                    if not job.get("done", False) or (now - job.get("start_time", 0) < 86400):
+                        active_job_ids.add(jid)
+        except Exception:
+            pass
+
     for entry in os.scandir(temp_root):
         try:
             if entry.name.startswith("processing_") and entry.is_dir():
-                if entry.stat().st_mtime < cutoff:
+                folder_job_id = entry.name.replace("processing_", "")
+                if folder_job_id not in active_job_ids and entry.stat().st_mtime < cutoff:
                     shutil.rmtree(entry.path, ignore_errors=True)
-            elif entry.is_file() and entry.stat().st_mtime < cutoff:
+            elif entry.is_file() and entry.name != ".jobs_journal.json" and entry.stat().st_mtime < cutoff:
                 os.remove(entry.path)
         except Exception:
             pass
+
+
+def _compute_fast_content_fingerprint(filepath: str) -> str:
+    """Content-addressed fingerprint: head + tail + middle chunks + exact file size."""
+    import hashlib
+    hasher = hashlib.sha256()
+    stat = os.stat(filepath)
+    hasher.update(str(stat.st_size).encode())
+    with open(filepath, "rb") as f:
+        # First 64KB
+        hasher.update(f.read(65536))
+        # Middle 64KB
+        if stat.st_size > 131072:
+            f.seek(stat.st_size // 2)
+            hasher.update(f.read(65536))
+        # Last 64KB
+        if stat.st_size > 196608:
+            f.seek(max(0, stat.st_size - 65536))
+            hasher.update(f.read(65536))
+    return hasher.hexdigest()[:16]
 
 
 def run_pipeline(args: argparse.Namespace) -> None:
@@ -338,17 +373,17 @@ def run_pipeline(args: argparse.Namespace) -> None:
 
     # Define deterministic content & version-based cache keys
     import hashlib
-    PIPELINE_VERSION = "2.2.0"
-    HOOK_DETECTOR_VERSION = "2.1.0"
-    file_stat = os.stat(input_video)
+    PIPELINE_VERSION = "2.3.0"
+    HOOK_DETECTOR_VERSION = "2.2.0"
+    content_hash = _compute_fast_content_fingerprint(input_video)
     
-    # Transcript cache: tied to file path, size, modification time, whisper model, language, and pipeline version
-    transcript_hash_str = f"{os.path.abspath(input_video)}_{file_stat.st_size}_{file_stat.st_mtime}_{args.model}_{args.language}_{PIPELINE_VERSION}"
+    # Transcript cache: content-addressed to binary chunks, whisper model, language, and pipeline version
+    transcript_hash_str = f"{content_hash}_{args.model}_{args.language}_{PIPELINE_VERSION}"
     words_cache_key = hashlib.sha256(transcript_hash_str.encode()).hexdigest()[:12]
     words_cache_path = os.path.join(temp_dir, f"words_{words_cache_key}.json")
     
     metadata_file = os.path.join(output_dir, "clips_metadata.json")
-    # Hook cache: tied to transcript key, max_clips, commentary mode, and detector version
+    # Hook cache: content-addressed to transcript key, max_clips, commentary mode, and detector version
     hook_hash_str = f"{words_cache_key}_{args.max_clips}_{getattr(args, 'commentary_mode', 'off')}_{HOOK_DETECTOR_VERSION}"
     hook_cache_key = hashlib.sha256(hook_hash_str.encode()).hexdigest()[:12]
     hooks_cache_path = os.path.join(temp_dir, f"hooks_{hook_cache_key}.json")
