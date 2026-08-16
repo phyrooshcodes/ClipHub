@@ -526,7 +526,7 @@ document.addEventListener("DOMContentLoaded", () => {
         
         const btnText = document.getElementById('btn-proceed-modal-text');
         if (btnText && (!currentPendingJob || !currentPendingJob.isStandaloneTool)) {
-          btnText.innerHTML = `<i class="ri-sparkling-fill"></i> <span>Generate Clips (${st.name})</span>`;
+          btnText.textContent = `Generate Clips (${st.name})`;
         }
       });
 
@@ -549,14 +549,14 @@ document.addEventListener("DOMContentLoaded", () => {
     if (isStandaloneTool) {
       document.getElementById('caption-studio-title').innerHTML = `Add Viral Captions: <span style="color:var(--brand-purple);">Choose Style</span>`;
       document.getElementById('caption-studio-subtitle').textContent = `Select the animation style to burn onto your uploaded clip!`;
-      if (btnText) btnText.innerHTML = `<i class="ri-magic-line"></i> <span>Burn Captions Onto Video</span>`;
+      if (btnText) btnText.textContent = `Burn Captions Onto Video`;
     } else {
       document.getElementById('caption-studio-title').innerHTML = `Step 2: Choose Your <span style="color:var(--brand-purple);">Caption Style</span>`;
       document.getElementById('caption-studio-subtitle').textContent = `Select a viral typography & animation preset below.`;
       const curStyle = localStorage.getItem('captionStyle') || 'kinetic_slide';
       const curObj = CAPTION_STYLES_DATA.find(s => s.id === curStyle);
       const name = curObj ? curObj.name : 'Selected Style';
-      if (btnText) btnText.innerHTML = `<i class="ri-sparkling-fill"></i> <span>Generate Clips (${name})</span>`;
+      if (btnText) btnText.textContent = `Generate Clips (${name})`;
     }
 
     modal.classList.remove('hidden');

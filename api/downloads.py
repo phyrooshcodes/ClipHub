@@ -75,8 +75,7 @@ async def _run_ytdl(job: DownloadJob, python_exe: str, save_path: str):
     async def execute_cmd() -> bool:
         cmd = [
             python_exe, "-m", "yt_dlp",
-            "--remote-components", "ejs:github",
-            "--js-runtimes", "node",
+            "--extractor-args", "youtube:player_client=android,web",
             "--format", "bestvideo[height<=1080]+bestaudio/best[height<=1080]/best",
             "--merge-output-format", "mp4",
             "--output", save_path,
