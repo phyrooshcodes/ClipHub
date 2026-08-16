@@ -180,8 +180,9 @@
             </div>
           </div>
           <div class="script-footer">
-            <button class="btn-outline-dashed"><i class="ri-add-line"></i> Add New Segment</button>
-            <button class="btn-primary-gradient" id="btn-approve-review"><i class="ri-sparkling-fill"></i> <span id="btn-proceed-text">Approve & Render Clips</span></button>
+            <button class="btn-outline-dashed" id="btn-add-segment"><i class="ri-add-line"></i> Add New Segment</button>
+            <span class="header-pill" id="script-status-pill" style="font-size:11px;"><i class="ri-sparkling-fill"></i> AI Review Ready</span>
+            <button id="btn-approve-review" class="hidden"></button>
           </div>
         </div>
 
@@ -696,7 +697,7 @@
         </div>
         <div class="modal-footer" style="padding:16px 20px; border-top:1px solid var(--border-light); display:flex; justify-content:space-between; align-items:center;">
           <button id="btn-caption-studio-back" class="btn-outline-dashed" style="padding:8px 16px;">Back</button>
-          <button id="btn-caption-studio-proceed" class="btn-primary-gradient" style="padding:10px 24px;"><i class="ri-check-line"></i> <span id="btn-proceed-modal-text">Apply Style & Continue →</span></button>
+          <button id="btn-caption-studio-proceed" class="btn-primary-gradient" style="padding:10px 28px;"><i class="ri-sparkling-fill"></i> <span id="btn-proceed-modal-text">Generate Clips</span></button>
         </div>
       </div>
     </div>

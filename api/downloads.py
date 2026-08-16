@@ -49,6 +49,7 @@ def _clean_old_downloads():
                 active_downloads.pop(k, None)
 
 @router.post("/prepare-download")
+@router.post("/api/download-yt")
 async def prepare_download():
     _clean_old_downloads()
     with _downloads_lock:

@@ -526,7 +526,7 @@ document.addEventListener("DOMContentLoaded", () => {
         
         const btnText = document.getElementById('btn-proceed-modal-text');
         if (btnText && (!currentPendingJob || !currentPendingJob.isStandaloneTool)) {
-          btnText.textContent = `Apply "${st.name}" & Continue →`;
+          btnText.innerHTML = `<i class="ri-sparkling-fill"></i> <span>Generate Clips (${st.name})</span>`;
         }
       });
 
@@ -545,19 +545,18 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById('standalone-caption-loading')?.classList.add('hidden');
     document.getElementById('standalone-caption-result')?.classList.add('hidden');
 
+    const btnText = document.getElementById('btn-proceed-modal-text');
     if (isStandaloneTool) {
       document.getElementById('caption-studio-title').innerHTML = `Add Viral Captions: <span style="color:var(--brand-purple);">Choose Style</span>`;
       document.getElementById('caption-studio-subtitle').textContent = `Select the animation style to burn onto your uploaded clip!`;
-      const btnText = document.getElementById('btn-proceed-modal-text');
-      if (btnText) btnText.innerHTML = `Burn Captions Onto Video`;
+      if (btnText) btnText.innerHTML = `<i class="ri-magic-line"></i> <span>Burn Captions Onto Video</span>`;
     } else {
       document.getElementById('caption-studio-title').innerHTML = `Step 2: Choose Your <span style="color:var(--brand-purple);">Caption Style</span>`;
       document.getElementById('caption-studio-subtitle').textContent = `Select a viral typography & animation preset below.`;
-      const btnText = document.getElementById('btn-proceed-modal-text');
       const curStyle = localStorage.getItem('captionStyle') || 'kinetic_slide';
       const curObj = CAPTION_STYLES_DATA.find(s => s.id === curStyle);
       const name = curObj ? curObj.name : 'Selected Style';
-      if (btnText) btnText.textContent = `Apply "${name}" & Continue →`;
+      if (btnText) btnText.innerHTML = `<i class="ri-sparkling-fill"></i> <span>Generate Clips (${name})</span>`;
     }
 
     modal.classList.remove('hidden');
@@ -1307,7 +1306,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         if (isYoutube) {
-          document.getElementById('step-download').classList.remove('hidden');
+          document.getElementById('step-download')?.classList.remove('hidden');
           // fetch job ID from API
           const res = await fetch('/api/download-yt', {
             method: 'POST',
@@ -1322,6 +1321,8 @@ document.addEventListener("DOMContentLoaded", () => {
             localStorage.setItem('ytUrl', fileOrUrl);
             await sendConfig(data.job_id);
             connectYoutubeWS(data.job_id, fileOrUrl);
+          } else {
+            throw new Error(data.error || "Failed to start YouTube download job");
           }
         } else if (isExistingUpload) {
           currentJobId = fileOrUrl;
@@ -1341,11 +1342,15 @@ document.addEventListener("DOMContentLoaded", () => {
              localStorage.setItem('currentJobId_ts', Date.now());
              await sendConfig(data.job_id);
              connectPipelineWS(data.job_id);
+           } else {
+             throw new Error(data.error || "Upload failed");
            }
         }
       } catch(e) {
-        console.error(e);
-        updateProgress(null, "Failed to upload!", 0);
+        console.error("Pipeline initialization error:", e);
+        const errMsg = e.message || "Failed to start pipeline";
+        updateProgress(null, `Error: ${errMsg}`, 0);
+        Toast.show(`Initialization error: ${errMsg}`, "error");
       }
     };
 
