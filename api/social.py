@@ -75,7 +75,7 @@ def _clean_stale_social_uploads(max_age_sec: int = 3600):
     for k in stale:
         social_uploads.pop(k, None)
 
-async def _bg_social_post(upload_id: str, job_id: str, clip_filename: str, title: str, caption: str, platforms: List[str], product_recommendations: List[dict] = None, amazon_store_tag: str = "", enable_comment_affiliate: bool = True, enable_native_shopping: bool = False):
+async def _bg_social_post(upload_id: str, job_id: str, clip_filename: str, title: str, caption: str, platforms: List[str], product_recommendations: List[dict] = None, amazon_store_tag: str = "", enable_comment_affiliate: bool = True, enable_native_shopping: bool = False, allow_duplicate: bool = False):
     _clean_stale_social_uploads()
     if product_recommendations is None:
         product_recommendations = []
@@ -140,7 +140,7 @@ async def _bg_social_post(upload_id: str, job_id: str, clip_filename: str, title
         try:
             from modules.youtube_worker import get_youtube_worker
             worker = get_youtube_worker()
-            worker.enqueue(upload_id, str(video_path), title, caption, [], None, product_recommendations, amazon_store_tag, enable_comment_affiliate, enable_native_shopping, lambda p, m: update_progress("youtube", p, m))
+            worker.enqueue(upload_id, str(video_path), title, caption, [], None, product_recommendations, amazon_store_tag, enable_comment_affiliate, enable_native_shopping, lambda p, m: update_progress("youtube", p, m), allow_duplicate=allow_duplicate)
             
             # Poll for completion with bounded 10-minute timeout
             start_poll = time.time()
@@ -166,8 +166,13 @@ async def _bg_social_post(upload_id: str, job_id: str, clip_filename: str, title
             update_progress("youtube", 100, f"YouTube error: {e}")
             has_errors = True
             
-    status = "failed" if has_errors and len(results) == len(platforms) else "completed"
-    if has_errors and status == "completed": status = "partial"
+    success_count = sum(1 for r in results.values() if r.get("success"))
+    if success_count == len(platforms):
+        status = "completed"
+    elif success_count > 0:
+        status = "partial"
+    else:
+        status = "failed"
     social_uploads[upload_id]["status"] = status
     social_uploads[upload_id]["results"] = results
 
@@ -439,7 +444,7 @@ async def start_social_post(req: SocialPostRequest, background_tasks: Background
             return {"upload_id": upload["id"], "status": upload["status"], "upload": upload}
         except Exception as exc: return JSONResponse({"error": str(exc)}, status_code=500)
     upload_id = str(uuid.uuid4())
-    background_tasks.add_task(_bg_social_post, upload_id, req.job_id, req.clip_filename, req.title, req.caption, requested, req.product_recommendations, req.amazon_store_tag, req.enable_comment_affiliate, req.enable_native_shopping)
+    background_tasks.add_task(_bg_social_post, upload_id, req.job_id, req.clip_filename, req.title, req.caption, requested, req.product_recommendations, req.amazon_store_tag, req.enable_comment_affiliate, req.enable_native_shopping, req.allow_duplicate)
     return {"upload_id": upload_id, "status": "pending"}
 
 @router.get("/api/social/post-status/{upload_id}")

@@ -118,6 +118,9 @@ class JobRegistry:
             if job_id not in self._events:
                 self._events[job_id] = []
             self._events[job_id].append(event)
+            # Bound in-memory event buffer to last 200 events to prevent runtime heap accumulation
+            if len(self._events[job_id]) > 200:
+                self._events[job_id] = self._events[job_id][-200:]
             # Persist major milestone events to journal
             if event.get("type") in ("start", "done", "error", "phase", "review", "phase_1_complete"):
                 self._save_journal()

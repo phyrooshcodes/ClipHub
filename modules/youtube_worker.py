@@ -26,6 +26,13 @@ from modules.publishers.youtube.scheduler import (
 
 logger = logging.getLogger(__name__)
 
+import json
+import os
+import hashlib
+from pathlib import Path
+
+YT_HISTORY_FILE = Path(__file__).parent.parent / "temp" / ".youtube_history.json"
+
 class YouTubePersistentWorker:
     def __init__(self):
         self._lock = threading.Lock()
@@ -52,11 +59,66 @@ class YouTubePersistentWorker:
         """Whether the persistent worker thread owns or is opening a browser."""
         return self._thread is not None and self._thread.is_alive()
 
+    def _load_history(self) -> dict:
+        if YT_HISTORY_FILE.exists():
+            try:
+                with open(YT_HISTORY_FILE, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            except Exception:
+                pass
+        return {}
+
+    def _save_history_entry(self, video_path: str, record: dict):
+        try:
+            YT_HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
+            hist = self._load_history()
+            p = Path(video_path)
+            size = p.stat().st_size if p.exists() else 0
+            key = f"{p.name}_{size}"
+            hist[key] = record
+            temp_file = YT_HISTORY_FILE.with_suffix(".tmp")
+            with open(temp_file, "w", encoding="utf-8") as f:
+                json.dump(hist, f, indent=2)
+            if temp_file.exists():
+                temp_file.replace(YT_HISTORY_FILE)
+        except Exception as e:
+            logger.debug(f"[YouTube Worker] History save notice: {e}")
+
+    def has_uploaded(self, video_path: str) -> Optional[dict]:
+        try:
+            p = Path(video_path)
+            if not p.exists():
+                return None
+            key = f"{p.name}_{p.stat().st_size}"
+            hist = self._load_history()
+            return hist.get(key)
+        except Exception:
+            return None
+
     def get_result(self, upload_id: str) -> dict:
         with self._lock:
             return dict(self.results.get(upload_id, {}))
 
-    def enqueue(self, upload_id, video_path, title, description, tags, thumbnail_path, product_recommendations, amazon_store_tag, enable_comment_affiliate, enable_native_shopping, progress_cb):
+    def enqueue(self, upload_id, video_path, title, description, tags, thumbnail_path, product_recommendations, amazon_store_tag, enable_comment_affiliate, enable_native_shopping, progress_cb, allow_duplicate: bool = False):
+        if not allow_duplicate:
+            prev = self.has_uploaded(video_path)
+            if prev and prev.get("success"):
+                logger.info(f"[YouTube Worker] Skipping duplicate upload for {video_path}")
+                with self._lock:
+                    self.results[upload_id] = {
+                        "status": "scheduled",
+                        "success": True,
+                        "url": prev.get("url"),
+                        "scheduled_time": prev.get("scheduled_time", ""),
+                        "duplicate_skipped": True
+                    }
+                if progress_cb:
+                    try:
+                        progress_cb(100, "Already scheduled to YouTube (duplicate skipped)")
+                    except Exception:
+                        pass
+                return upload_id
+
         with self._lock:
             self.results[upload_id] = {"status": "queued"}
         self.progress_callbacks[upload_id] = progress_cb
@@ -273,13 +335,17 @@ class YouTubePersistentWorker:
                 raise RuntimeError("Schedule verification timed out.")
                 
             self._notify(upload_id, 95, "Successfully scheduled YouTube video")
+            rec = {
+                "status": "scheduled",
+                "success": True,
+                "url": video_url,
+                "scheduled_time": scheduled_display_time,
+                "title": title,
+                "timestamp": time.time()
+            }
             with self._lock:
-                self.results[upload_id] = {
-                    "status": "scheduled",
-                    "success": True,
-                    "url": video_url,
-                    "scheduled_time": scheduled_display_time
-                }
+                self.results[upload_id] = rec
+            self._save_history_entry(video_path, rec)
 
             if affiliate_comment_text and video_url:
                 self._notify(upload_id, 98, "Posting and pinning affiliate comment...")

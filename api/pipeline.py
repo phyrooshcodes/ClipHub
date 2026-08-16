@@ -289,9 +289,18 @@ class ClipReviewItem(BaseModel):
     ai_audio_events: Optional[List[Dict[str, Any]]] = None
 
     @model_validator(mode="after")
-    def validate_range(self):
+    def validate_range_and_paths(self):
         if self.end_ms <= self.start_ms:
             raise ValueError(f"end_ms ({self.end_ms}) must be strictly greater than start_ms ({self.start_ms})")
+        if self.ai_audio_events:
+            temp_dir = (BASE_DIR / "temp").resolve()
+            out_dir = (BASE_DIR / "output").resolve()
+            for ev in self.ai_audio_events:
+                audio_path = ev.get("audio_path")
+                if audio_path:
+                    p = Path(audio_path).resolve()
+                    if not (p.is_relative_to(temp_dir) or p.is_relative_to(out_dir)):
+                        raise ValueError(f"Invalid audio event path: {audio_path}")
         return self
 
 MAX_UPLOAD_SIZE = 2 * 1024 * 1024 * 1024  # 2 GB safety quota

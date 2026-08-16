@@ -199,14 +199,32 @@ def _find_free_port(start: int = 9300) -> int:
     return start  # fallback
 
 
+def _clean_stale_chrome_lock(user_data_dir: Path | str):
+    """Safely cleans stale SingletonLock only if the holding process is dead."""
+    lock_file = Path(user_data_dir) / "SingletonLock"
+    if not (lock_file.is_symlink() or lock_file.exists()):
+        return
+    stale = True
+    try:
+        if lock_file.is_symlink():
+            target = os.readlink(str(lock_file))
+            parts = target.split("-")
+            if len(parts) >= 2 and parts[-1].isdigit():
+                pid = int(parts[-1])
+                try:
+                    os.kill(pid, 0)
+                    stale = False  # Process is actively running!
+                except (OSError, ProcessLookupError):
+                    stale = True
+        if stale:
+            lock_file.unlink(missing_ok=True)
+    except Exception:
+        pass
+
+
 def _launch_persistent_context(playwright, user_data_dir: str, headless: bool, viewport: dict, cdp_port: int | None = None) -> tuple[BrowserContext, Optional[subprocess.Popen]]:
     """Launch persistent context using system Chrome with anti-bot detection evasions."""
-    lock_file = Path(user_data_dir) / "SingletonLock"
-    if lock_file.is_symlink() or lock_file.exists():
-        try:
-            lock_file.unlink(missing_ok=True)
-        except Exception:
-            pass
+    _clean_stale_chrome_lock(user_data_dir)
 
     user_agent_str = _get_platform_user_agent()
     system_chrome = _find_system_chrome()
