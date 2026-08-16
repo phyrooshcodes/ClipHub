@@ -35,16 +35,22 @@ UI_FILE    = BASE_DIR / "ui" / "index.html"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-# ─── FastAPI App ────────────────────────────────────────────
-app = FastAPI(title="ClipHub")
+from contextlib import asynccontextmanager
 
-@app.on_event("startup")
-async def start_instagram_queue_worker() -> None:
-    """The server is the only process allowed to run the browser uploader."""
-    from modules.instagram_queue import get_instagram_queue
-    from modules.youtube_worker import get_youtube_worker
-    get_instagram_queue(start_worker=True)
-    get_youtube_worker()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """The server is the only process allowed to run the background upload workers."""
+    try:
+        from modules.instagram_queue import get_instagram_queue
+        from modules.youtube_worker import get_youtube_worker
+        get_instagram_queue(start_worker=True)
+        get_youtube_worker()
+    except Exception as e:
+        logger.warning(f"[Server] Worker initialization notice: {e}")
+    yield
+
+# ─── FastAPI App ────────────────────────────────────────────
+app = FastAPI(title="ClipHub", lifespan=lifespan)
 
 # ─── Include Routers ────────────────────────────────────────
 app.include_router(pipeline_router)
@@ -70,15 +76,28 @@ async def get_logo():
 
 # ─── Helper ─────────────────────────────────────────────────
 def get_local_ip() -> str:
+    import socket
+    # 1. Primary method: probe outbound routing table (no traffic sent)
     try:
-        import socket
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(("8.8.8.8", 80))
         ip = s.getsockname()[0]
         s.close()
-        return ip
+        if ip and ip != "127.0.0.1":
+            return ip
     except Exception:
-        return "127.0.0.1"
+        pass
+
+    # 2. Secondary method: query hostname IP list (works offline/airgapped)
+    try:
+        hostname = socket.gethostname()
+        for ip in socket.gethostbyname_ex(hostname)[2]:
+            if not ip.startswith("127.") and not ip.startswith("169.254."):
+                return ip
+    except Exception:
+        pass
+
+    return "127.0.0.1"
 
 @app.get("/api/server-info")
 async def server_info():

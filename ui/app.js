@@ -65,7 +65,24 @@ document.addEventListener("DOMContentLoaded", () => {
   // Refresh badges every 30s
   setInterval(refreshSystemBadges, 30000);
   
-  // Elements
+  // Pro Creator Keyboard Shortcuts
+  document.addEventListener('keydown', (e) => {
+    const isEditing = ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName);
+    
+    // Escape closes any open modal
+    if (e.key === 'Escape') {
+      document.querySelectorAll('.modal-backdrop:not(.hidden)').forEach(m => m.classList.add('hidden'));
+    }
+    
+    // Space toggles main video player if not editing text
+    if (e.code === 'Space' && !isEditing) {
+      const v = document.getElementById('main-video');
+      if (v && v.src && v.style.display !== 'none') {
+        e.preventDefault();
+        v.paused ? v.play() : v.pause();
+      }
+    }
+  });
   const sectionUpload = document.getElementById('section-upload');
   const sectionProcessing = document.getElementById('section-processing');
   const sectionClips = document.getElementById('section-clips');
@@ -1934,7 +1951,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if(doYt) platforms.push('youtube');
         
         if(platforms.length === 0) {
-          alert('Please select at least one platform.');
+          Toast.show('Please select at least one platform (YouTube or Instagram).', 'warning');
           return;
         }
         

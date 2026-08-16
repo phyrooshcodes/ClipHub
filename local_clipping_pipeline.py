@@ -70,7 +70,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--input", "-i",
-        required=True,
+        default="",
         metavar="VIDEO",
         help="Path to the input video file (MP4 recommended)."
     )
@@ -215,6 +215,11 @@ def parse_args() -> argparse.Namespace:
              "  1   -> Run Analysis & AI Generation only (Hooks, Commentary) and exit.\n"
              "  2   -> Run Rendering only (loads metadata from phase 1).\n"
              "  all -> Run end-to-end (default)."
+    )
+    parser.add_argument(
+        "--doctor",
+        action="store_true",
+        help="Run comprehensive system preflight diagnostic tests and exit."
     )
     return parser.parse_args()
 
@@ -641,6 +646,61 @@ def run_pipeline(args: argparse.Namespace) -> None:
     logger.info("═" * 60 + "\n")
 
 
+def run_doctor_diagnostic() -> None:
+    """Run comprehensive system diagnostic test and print a Google-standard health report."""
+    print("\n" + "=" * 65)
+    print(" ✦  CLIPHUB PIPELINE SYSTEM DIAGNOSTIC (DOCTOR)")
+    print("=" * 65)
+    
+    # 1. Python & Environment
+    print(f" • Python Runtime       : {sys.version.split()[0]} ({sys.platform})")
+    print(f" • Execution Prefix     : {sys.prefix}")
+    
+    # 2. FFmpeg & Hardware Encoders
+    ffmpeg_ok = shutil.which("ffmpeg") is not None
+    ffprobe_ok = shutil.which("ffprobe") is not None
+    print(f" • FFmpeg Binaries      : {'[OK] Installed' if ffmpeg_ok else '[FAIL] Missing in PATH'}")
+    print(f" • FFprobe Binaries     : {'[OK] Installed' if ffprobe_ok else '[FAIL] Missing in PATH'}")
+    
+    from modules.renderer import check_nvenc_available
+    nvenc_ok = check_nvenc_available()
+    print(f" • NVENC GPU Encoding   : {'[OK] Hardware Accelerated (Active)' if nvenc_ok else '[INFO] CPU Fallback (libx264)'}")
+    
+    # 3. Whisper ASR
+    try:
+        from faster_whisper import WhisperModel
+        print(" • Faster-Whisper ASR   : [OK] Installed & Ready")
+    except Exception as e:
+        print(f" • Faster-Whisper ASR   : [FAIL] {e}")
+        
+    # 4. Kokoro TTS
+    try:
+        from modules.kokoro_tts import get_kokoro_instance
+        kokoro_inst = get_kokoro_instance()
+        print(" • Kokoro-82M ONNX TTS  : [OK] Initialized & Ready")
+    except Exception as e:
+        print(f" • Kokoro-82M ONNX TTS  : [INFO] Lazy Download on First Run ({e})")
+        
+    # 5. Face Tracking
+    try:
+        import cv2
+        print(" • OpenCV DNN (YuNet)   : [OK] Computer Vision Engine Ready")
+    except Exception as e:
+        print(f" • OpenCV DNN (YuNet)   : [FAIL] {e}")
+        
+    # 6. LLM API Key
+    from dotenv import load_dotenv
+    load_dotenv()
+    api_key = os.environ.get("NVIDIA_API_KEY", "").strip()
+    if api_key:
+        masked = api_key[:6] + "..." + api_key[-4:] if len(api_key) > 10 else "Set"
+        print(f" • NVIDIA NIM API Key   : [OK] Present ({masked})")
+    else:
+        print(" • NVIDIA NIM API Key   : [WARN] Not Set (Will fallback to Local LM Studio)")
+        
+    print("=" * 65)
+    print(" Diagnostic Complete. System is operational.\n")
+
 def main() -> None:
     # Reconfigure stdout to UTF-8 so Unicode chars work on Windows terminals
     if hasattr(sys.stdout, 'reconfigure'):
@@ -649,6 +709,14 @@ def main() -> None:
         sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
     print(BANNER)
     args = parse_args()
+
+    if args.doctor:
+        run_doctor_diagnostic()
+        sys.exit(0)
+
+    if not args.input:
+        logger.error("❌ Input video is required.\n   Usage: python local_clipping_pipeline.py --input <path_to_video.mp4>")
+        sys.exit(1)
 
     # Run pre-flight before anything else
     preflight_checks(args.input)

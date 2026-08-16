@@ -219,8 +219,16 @@ def compute_crop_coords(
         except ImportError:
             raw_smoothed = sampled_xs
 
+        # Apply deadband window (4% of width) so micro-head-movements keep camera rock-solid
+        deadband_px = max(15.0, src_w * 0.04)
+        last_anchor_x = float(raw_smoothed[0]) if len(raw_smoothed) > 0 else (src_w / 2.0)
+
         for raw_x in raw_smoothed:
-            smooth_center_x = euro_filter.filter(float(raw_x))
+            if abs(raw_x - last_anchor_x) > deadband_px:
+                # Smoothly shift the anchor towards the new face position
+                last_anchor_x = last_anchor_x + 0.3 * (raw_x - last_anchor_x)
+            
+            smooth_center_x = euro_filter.filter(float(last_anchor_x))
             cx = int(round(smooth_center_x - crop_w / 2.0))
             cx = max(0, min(cx, src_w - crop_w))
             dynamic_crop_x.append(cx)

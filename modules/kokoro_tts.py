@@ -52,13 +52,15 @@ def get_kokoro_instance():
         models_dir = base_dir / "models" / "kokoro"
         models_dir.mkdir(parents=True, exist_ok=True)
         
-        model_path = models_dir / "kokoro-v1.0.fp16.onnx"
-        voices_path = models_dir / "voices-v1.0.bin"
-
-        if not model_path.exists():
-            _download_file(MODEL_URL, str(model_path))
+        # Check for existing kokoro-v1.0.onnx or fp16 variant with valid size (>1000 bytes)
+        model_path = models_dir / "kokoro-v1.0.onnx"
+        if not model_path.exists() or model_path.stat().st_size < 1000:
+            model_path = models_dir / "kokoro-v1.0.fp16.onnx"
+            if not model_path.exists() or model_path.stat().st_size < 1000:
+                _download_file(MODEL_URL, str(model_path))
         
-        if not voices_path.exists():
+        voices_path = models_dir / "voices-v1.0.bin"
+        if not voices_path.exists() or voices_path.stat().st_size < 1000:
             _download_file(VOICES_URL, str(voices_path))
 
         from kokoro_onnx import Kokoro

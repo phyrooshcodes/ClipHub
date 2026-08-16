@@ -176,6 +176,20 @@ def transcribe_audio(
     return words
 
 
+def clean_transcript_grammar(text: str) -> str:
+    """Polishes raw transcript text by capitalizing sentence starters and fixing basic contractions."""
+    import re
+    if not text:
+        return ""
+    # Capitalize first letter of each sentence
+    text = re.sub(r'(?:^|[.!?]\s+)([a-z])', lambda m: m.group(0).upper(), text)
+    # Fix solitary 'i' to 'I'
+    text = re.sub(r'\b(i)\b', 'I', text)
+    # Clean redundant spaces before punctuation
+    text = re.sub(r'\s+([,.:;?!])', r'\1', text)
+    return text.strip()
+
+
 def words_to_full_text(words: List[Dict]) -> str:
     """
     Reconstruct a full plain-text transcript from the word list.
@@ -185,9 +199,10 @@ def words_to_full_text(words: List[Dict]) -> str:
         words: List of word-timestamp dicts from transcribe_audio().
 
     Returns:
-        A single string with all words joined by spaces.
+        A single string with all words joined by spaces and grammar polished.
     """
-    return " ".join(w["word"] for w in words)
+    raw = " ".join(w["word"] for w in words)
+    return clean_transcript_grammar(raw)
 
 
 def words_to_timed_transcript(words: List[Dict]) -> str:

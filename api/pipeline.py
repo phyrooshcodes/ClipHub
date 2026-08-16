@@ -166,7 +166,13 @@ def _list_clips(job_id: str = None, newer_than: float = 0) -> list:
 async def _run_process(job_id: str, cmd: list, start_time: float):
     job = registry.get(job_id)
     try:
-        env = {**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1", "PYTHONUNBUFFERED": "1", "QT_QPA_PLATFORM": "offscreen"}
+        env = os.environ.copy()
+        env.update({
+            "PYTHONIOENCODING": "utf-8",
+            "PYTHONUTF8": "1",
+            "PYTHONUNBUFFERED": "1",
+            "QT_QPA_PLATFORM": "offscreen"
+        })
         try:
             import site
             site_dirs = [str(BASE_DIR / "venv" / "Scripts" / "site-packages"), str(BASE_DIR / "venv" / "Lib" / "site-packages")]

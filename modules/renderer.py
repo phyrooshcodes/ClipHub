@@ -169,8 +169,8 @@ def render_clip(
         # Duck source audio under AI audio
         filter_complex.append(f"[{a_head}][ai_mix]sidechaincompress=threshold=0.015:ratio=15:attack=10:release=300[ducked_source]")
         
-        # Mix ducked source with AI mix
-        filter_complex.append(f"[ducked_source][ai_mix]amix=inputs=2:duration=first:normalize=0[voice_mix]")
+        # Mix ducked source with AI mix and apply peak limiter
+        filter_complex.append(f"[ducked_source][ai_mix]amix=inputs=2:duration=first:normalize=0,alimiter=limit=0.98[voice_mix]")
         a_head = "voice_mix"
 
     if music_idx != -1:
@@ -187,13 +187,16 @@ def render_clip(
         )
         # Duck music under voice mix (source + AI)
         filter_complex.append(f"[bed][{a_head}]sidechaincompress=threshold=0.015:ratio=10:attack=15:release=300[ducked_bed]")
-        filter_complex.append(f"[{a_head}][ducked_bed]amix=inputs=2:duration=first:normalize=0,alimiter=limit=0.95[final_audio]")
+        filter_complex.append(f"[{a_head}][ducked_bed]amix=inputs=2:duration=first:normalize=0,loudnorm=I=-14:LRA=7:TP=-1.5,alimiter=limit=0.95[final_audio]")
+        a_head = "final_audio"
+    elif a_head != "0:a" and a_head != f"{silent_audio_idx}:a":
+        filter_complex.append(f"[{a_head}]loudnorm=I=-14:LRA=7:TP=-1.5,alimiter=limit=0.95[final_audio]")
         a_head = "final_audio"
 
     filter_str = ";".join(filter_complex)
     
     use_nvenc = check_nvenc_available() if encoder == "auto" else (encoder == "h264_nvenc")
-    enc_args = ["-c:v", "h264_nvenc", "-preset", NVENC_PRESET, "-cq", NVENC_CQ, "-r", "60"] if use_nvenc else ["-c:v", "libx264", "-preset", "fast", "-crf", "23", "-r", "60"]
+    enc_args = ["-c:v", "h264_nvenc", "-preset", NVENC_PRESET, "-cq", NVENC_CQ, "-r", "60", "-fps_mode", "cfr"] if use_nvenc else ["-c:v", "libx264", "-preset", "fast", "-crf", "23", "-r", "60", "-fps_mode", "cfr"]
 
     # If a_head is an input stream specifier (e.g. "0:a", "1:a"), map directly without brackets.
     # If a_head is a filtergraph label (e.g. "voice_mix", "final_audio"), enclose in brackets.
