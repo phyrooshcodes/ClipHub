@@ -125,22 +125,40 @@ class YouTubePersistentWorker:
     def enqueue(self, upload_id, video_path, title, description, tags, thumbnail_path, product_recommendations, amazon_store_tag, enable_comment_affiliate, enable_native_shopping, progress_cb, allow_duplicate: bool = False):
         if not allow_duplicate:
             prev = self.has_uploaded(video_path)
-            if prev and prev.get("success"):
-                logger.info(f"[YouTube Worker] Skipping duplicate upload for {video_path}")
-                with self._lock:
-                    self.results[upload_id] = {
-                        "status": "scheduled",
-                        "success": True,
-                        "url": prev.get("url"),
-                        "scheduled_time": prev.get("scheduled_time", ""),
-                        "duplicate_skipped": True
-                    }
-                if progress_cb:
-                    try:
-                        progress_cb(100, "Already scheduled to YouTube (duplicate skipped)")
-                    except Exception:
-                        pass
-                return upload_id
+            if prev:
+                prev_status = prev.get("status")
+                if prev_status == "scheduled" and prev.get("success"):
+                    logger.info(f"[YouTube Worker] Skipping duplicate upload for {video_path} (already scheduled)")
+                    with self._lock:
+                        self.results[upload_id] = {
+                            "status": "scheduled",
+                            "success": True,
+                            "url": prev.get("url"),
+                            "scheduled_time": prev.get("scheduled_time", ""),
+                            "duplicate_skipped": True
+                        }
+                    if progress_cb:
+                        try:
+                            progress_cb(100, "Already scheduled to YouTube (duplicate skipped)")
+                        except Exception:
+                            pass
+                    return upload_id
+                elif prev_status == "uploaded_draft":
+                    logger.info(f"[YouTube Worker] Video bytes already exist as YouTube draft for {video_path}")
+                    with self._lock:
+                        self.results[upload_id] = {
+                            "status": "uploaded_draft",
+                            "success": True,
+                            "url": prev.get("url"),
+                            "message": "Video was already uploaded as a draft on YouTube Studio.",
+                            "duplicate_skipped": True
+                        }
+                    if progress_cb:
+                        try:
+                            progress_cb(100, "Video exists as draft on YouTube (duplicate upload skipped)")
+                        except Exception:
+                            pass
+                    return upload_id
 
         with self._lock:
             self.results[upload_id] = {"status": "queued"}
@@ -267,11 +285,20 @@ class YouTubePersistentWorker:
                 except Exception as e:
                     if str(e) == "RESTART_HEADFUL":
                         logger.info("[YouTube Worker] Restarting browser context in HEADFUL mode...")
+                        try:
+                            self._queue.task_done()
+                        except Exception:
+                            pass
                         if self._context:
                             try: self._context.close()
-                            except: pass
+                            except Exception:
+                                pass
                             self._context = None
                         break
+                    try:
+                        self._queue.task_done()
+                    except Exception:
+                        pass
                     logger.error(f"[YouTube Worker] Queue error: {e}")
                     time.sleep(1)
 
@@ -384,6 +411,11 @@ class YouTubePersistentWorker:
                     post_pinned_comment(page, video_url, affiliate_comment_text)
                 except Exception as c_exc:
                     logger.warning(f"[YouTube Worker] Could not post pinned comment: {c_exc}")
+
+            if getattr(self, "_force_headful", False):
+                self._force_headful = False
+                os.environ.pop("CLIPHUB_YOUTUBE_HEADLESS", None)
+                os.environ.pop("CLIPHUB_YOUTUBE_WAIT_FOR_2FA", None)
 
             self._notify(upload_id, 100, "Upload & affiliate monetization complete!")
             

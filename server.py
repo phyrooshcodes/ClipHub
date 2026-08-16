@@ -57,8 +57,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173", "tauri://localhost", "http://tauri.localhost"],
     allow_credentials=True,
-    allow_methods=["GET", "POST"],
-    allow_headers=["Content-Type", "X-ClipHub-Token"],
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type", "X-ClipHub-Token", "Authorization", "X-LAN-Token"],
 )
 
 from api.security import is_loopback, lan_mode_enabled, lan_token, _extract_token

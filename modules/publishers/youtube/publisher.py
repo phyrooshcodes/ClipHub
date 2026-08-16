@@ -514,10 +514,15 @@ def connect_youtube_playwright() -> bool:
                         import shutil
                         target_dir = get_channel_profile_dir(c_id)
                         if target_dir != PROFILE_DIR:
+                            temp_target = target_dir.parent / f"{c_id}_tmp_{int(time.time())}"
+                            shutil.copytree(PROFILE_DIR, temp_target, dirs_exist_ok=True)
                             if target_dir.exists():
-                                shutil.rmtree(target_dir, ignore_errors=True)
-                            shutil.copytree(PROFILE_DIR, target_dir)
-                            logger.info("[YouTube] Profile isolated to %s", target_dir)
+                                backup_dir = target_dir.parent / f"{c_id}_bak"
+                                if backup_dir.exists():
+                                    shutil.rmtree(backup_dir, ignore_errors=True)
+                                target_dir.rename(backup_dir)
+                            temp_target.rename(target_dir)
+                            logger.info("[YouTube] Profile cleanly isolated to %s", target_dir)
                     except Exception as e:
                         logger.error("[YouTube] Failed to isolate profile: %s", e)
     except Exception as e:

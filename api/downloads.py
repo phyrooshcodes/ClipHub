@@ -29,6 +29,11 @@ class DownloadJob:
         self.task = None
         self.created_at = time.time()
 
+    def add_event(self, event: dict):
+        self.events.append(event)
+        if len(self.events) > 200:
+            self.events = self.events[-200:]
+
 active_downloads: Dict[str, DownloadJob] = {}
 _downloads_lock = threading.Lock()
 
@@ -77,7 +82,7 @@ async def _run_ytdl(job: DownloadJob, python_exe: str, save_path: str):
             "--newline", "--no-playlist", "--no-part", "--", job.url
         ]
 
-        job.events.append({"type": "ytdl_start", "url": job.url})
+        job.add_event({"type": "ytdl_start", "url": job.url})
         try:
             process = await asyncio.create_subprocess_exec(
                 *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
@@ -91,19 +96,19 @@ async def _run_ytdl(job: DownloadJob, python_exe: str, save_path: str):
 
                 m = re.search(r"\[download\]\s+([\d.]+)%\s+of\s+([~\d.]+\w+)\s+at\s+([\d.]+\w+/s)\s+ETA\s+(\S+)", text)
                 if m:
-                    job.events.append({
+                    job.add_event({
                         "type": "ytdl_progress", "percent": float(m.group(1)),
                         "size": m.group(2), "speed": m.group(3), "eta": m.group(4),
                     })
                     print(f"[YouTube Download] {text}", flush=True)
                     continue
-                job.events.append({"type": "ytdl_log", "raw": text})
+                job.add_event({"type": "ytdl_log", "raw": text})
                 print(f"[YouTube Download] {text}", flush=True)
 
             await process.wait()
             return process.returncode == 0 and Path(save_path).exists()
         except Exception as e:
-            job.events.append({"type": "ytdl_log", "raw": f"Execution error: {e}"})
+            job.add_event({"type": "ytdl_log", "raw": f"Execution error: {e}"})
             print(f"[YouTube Download Error] {e}", flush=True)
             return False
 
@@ -111,15 +116,15 @@ async def _run_ytdl(job: DownloadJob, python_exe: str, save_path: str):
         success = await execute_cmd()
         if success and Path(save_path).exists():
             registry.register(job.job_id, save_path, f"job_{job.job_id}.mp4")
-            job.events.append({
+            job.add_event({
                 "type": "ytdl_done", "job_id": job.job_id,
                 "filename": f"job_{job.job_id}.mp4",
                 "size_mb": round(Path(save_path).stat().st_size / 1024 / 1024, 1),
             })
         else:
-            job.events.append({"type": "error", "message": "Public download failed or URL is invalid."})
+            job.add_event({"type": "error", "message": "Public download failed or URL is invalid."})
     except Exception as e:
-        job.events.append({"type": "error", "message": str(e)})
+        job.add_event({"type": "error", "message": str(e)})
     finally:
         job.done = True
 
@@ -185,7 +190,7 @@ async def list_uploads():
             if not f.is_file() or f.suffix.lower() not in valid_exts:
                 continue
             stat = f.stat()
-            m = re.match(r"job_([a-f0-9]{8})(\.[a-zA-Z0-9]+)$", f.name)
+            m = re.match(r"job_([a-f0-9]{8,32})(\.[a-zA-Z0-9]+)$", f.name)
             if m:
                 jid = m.group(1)
                 job = registry.get(jid)
