@@ -62,13 +62,16 @@ class JobRegistry:
                 max_age_sec = self._MAX_AGE_HOURS * 3600
                 for jid, jdata in data.get("jobs", {}).items():
                     if now - jdata.get("start_time", 0) < max_age_sec:
+                        # Any job loaded from a previous server session has lost its subprocess.
+                        # Mark previous session jobs as done or recoverable to prevent permanent zombie hangs.
+                        was_done = jdata.get("done", True)
                         self._jobs[jid] = Job(
                             job_id=jdata["job_id"],
                             path=jdata["path"],
                             filename=jdata["filename"],
                             start_time=jdata.get("start_time", now),
-                            done=jdata.get("done", True),
-                            started=jdata.get("started", True)
+                            done=was_done,
+                            started=was_done
                         )
                 self._configs = data.get("configs", {})
                 self._events = data.get("events", {})
@@ -101,6 +104,9 @@ class JobRegistry:
             if job_id not in self._events:
                 self._events[job_id] = []
             self._events[job_id].append(event)
+            # Persist major milestone events to journal
+            if event.get("type") in ("start", "done", "error", "phase", "review"):
+                self._save_journal()
 
     def get_events(self, job_id: str) -> List[dict]:
         with self._lock:
@@ -111,6 +117,22 @@ class JobRegistry:
             if job_id in self._jobs:
                 self._jobs[job_id].done = True
                 self._save_journal()
+
+    def restart_job(self, job_id: str, phase: str = "2") -> bool:
+        """Atomically resets and prepares a job for next phase without exposing internal maps."""
+        with self._lock:
+            job = self._jobs.get(job_id)
+            if not job:
+                return False
+            self._events[job_id] = []
+            job.done = False
+            job.started = False
+            config = self._configs.get(job_id, {})
+            config["force_restart"] = True
+            config["phase"] = phase
+            self._configs[job_id] = config
+            self._save_journal()
+            return True
 
     def evict_stale(self) -> int:
         with self._lock:

@@ -560,13 +560,16 @@ def run_pipeline(args: argparse.Namespace) -> None:
                 job_id_val = os.path.basename(os.path.normpath(args.output_dir))
                 if job_id_val == "output": job_id_val = ""
                 
+                platforms = ["instagram"]
+                if os.environ.get("CLIPHUB_AUTO_PUBLISH_YOUTUBE", "0").lower() in ("1", "true", "yes"):
+                    platforms.append("youtube")
                 req_data = {
                     "job_id": job_id_val,
                     "clip_filename": clip_filename,
                     "title": title,
                     "caption": caption,
-                    "platforms": ["instagram", "youtube"],
-                    "allow_duplicate": True
+                    "platforms": platforms,
+                    "allow_duplicate": False
                 }
                 server_base = os.environ.get("CLIPHUB_SERVER_URL", "http://127.0.0.1:7842").rstrip("/")
                 req = urllib.request.Request(
@@ -594,7 +597,7 @@ def run_pipeline(args: argparse.Namespace) -> None:
 
     # ─── Cleanup ─────────────────────────────────────────────
     if not args.keep_temp and os.path.exists(temp_dir):
-        # Delete only large audio.wav files and subtitle files, keeping cache words.json
+        # Delete only large audio.wav files, temporary subtitle files, sendcmd, and AI speech wavs
         audio_file = os.path.join(temp_dir, "audio.wav")
         if os.path.exists(audio_file):
             try:
@@ -603,13 +606,16 @@ def run_pipeline(args: argparse.Namespace) -> None:
             except Exception as e:
                 logger.warning(f"[Cleanup] Failed to remove audio file: {e}")
         
-        # Clean up temporary ASS files
+        # Clean up temporary ASS, sendcmd, and intermediate TTS WAV files
         try:
             for f in os.listdir(temp_dir):
-                if f.endswith(".ass"):
-                    os.remove(os.path.join(temp_dir, f))
+                if f.endswith(".ass") or f.endswith(".sendcmd.txt") or (f.endswith(".wav") and f != "audio.wav"):
+                    try:
+                        os.remove(os.path.join(temp_dir, f))
+                    except Exception:
+                        pass
         except Exception as e:
-            logger.warning(f"[Cleanup] Failed to remove subtitle files: {e}")
+            logger.warning(f"[Cleanup] Failed to remove temporary processing files: {e}")
         logger.info(f"\n[Cleanup] Temporary processing files cleaned up (cache preserved).")
 
     # ─── Summary ─────────────────────────────────────────────

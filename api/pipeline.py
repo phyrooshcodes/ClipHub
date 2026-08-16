@@ -234,7 +234,7 @@ async def _run_process(job_id: str, cmd: list, start_time: float):
         registry.mark_done(job_id)
 
 from pydantic import BaseModel, Field
-from typing import Literal, Optional
+from typing import Literal, Optional, List, Dict, Any
 
 class JobConfigModel(BaseModel):
     model: Literal["tiny", "base", "small"] = "small"
@@ -248,10 +248,20 @@ class JobConfigModel(BaseModel):
     no_title: bool = False
     commentary_mode: Literal["off", "hook_only", "hook_commentary", "full_editorial"] = "hook_commentary"
     commentary_voice: str = "af_sarah"
-    language: Optional[str] = None
+    language: str = ""
     auto_publish: bool = False
     phase: Literal["1", "2", "all"] = "1"
     force_restart: bool = False
+
+class ClipReviewItem(BaseModel):
+    start_ms: int = Field(ge=0)
+    end_ms: int = Field(gt=0)
+    title: Optional[str] = "Untitled Clip"
+    hook_score: Optional[Any] = None
+    social_caption: Optional[str] = None
+    editorial_data: Optional[Dict[str, Any]] = None
+    filename: Optional[str] = None
+    ai_audio_events: Optional[List[Dict[str, Any]]] = None
 
 MAX_UPLOAD_SIZE = 2 * 1024 * 1024 * 1024  # 2 GB safety quota
 
@@ -323,7 +333,14 @@ async def cancel_job(job_id: str):
 @router.post("/api/submit-review/{job_id}")
 async def submit_review(job_id: str, request: Request):
     try:
-        modified_metadata = await request.json()
+        raw_body = await request.json()
+        if isinstance(raw_body, list):
+            validated_clips = [ClipReviewItem(**c).model_dump() for c in raw_body]
+        elif isinstance(raw_body, dict) and "clips" in raw_body:
+            validated_clips = [ClipReviewItem(**c).model_dump() for c in raw_body["clips"]]
+        else:
+            return JSONResponse({"error": "Invalid review payload. Array of clips expected."}, status_code=400)
+
         job = registry.get(job_id)
         if not job:
             return JSONResponse({"error": "Job not found"}, status_code=404)
@@ -332,26 +349,18 @@ async def submit_review(job_id: str, request: Request):
         if not job_dir.exists():
             return JSONResponse({"error": "Job output dir not found"}, status_code=404)
             
-        # Overwrite the clips_metadata.json with the user's reviewed version
+        # Overwrite the clips_metadata.json with the validated user version
         clips_meta_path = job_dir / "clips_metadata.json"
         with open(clips_meta_path, "w", encoding="utf-8") as f:
-            json.dump(modified_metadata, f, indent=2, ensure_ascii=False)
+            json.dump(validated_clips, f, indent=2, ensure_ascii=False)
             
-        # Clear previous events and mark as running again
-        registry._events[job_id] = []
-        job.done = False
-        
-        # We need to trigger the process with --phase 2. We'll set a flag in the job config 
-        # so when the client reconnects to the WS, it launches phase 2.
-        config = registry.get_config(job_id)
-        config["force_restart"] = True
-        config["phase"] = "2"
-        registry.set_config(job_id, config)
+        # Synchronized atomic restart for phase 2 execution
+        registry.restart_job(job_id, phase="2")
         
         return {"status": "ok", "job_id": job_id}
     except Exception as e:
         logger.error(f"Error in submit-review: {e}")
-        return JSONResponse({"error": str(e)}, status_code=500)
+        return JSONResponse({"error": str(e)}, status_code=400)
 
 @router.websocket("/ws/{job_id}")
 async def run_pipeline_ws(websocket: WebSocket, job_id: str):
@@ -377,7 +386,7 @@ async def run_pipeline_ws(websocket: WebSocket, job_id: str):
             should_launch = True
 
     if should_launch:
-        meta_event = get_video_metadata(job.path)
+        meta_event = await asyncio.to_thread(get_video_metadata, job.path)
         registry.add_event(job_id, meta_event)
         registry.add_event(job_id, {"type": "start", "filename": job.filename})
 
@@ -407,8 +416,9 @@ async def run_pipeline_ws(websocket: WebSocket, job_id: str):
         cmd += ["--commentary-mode", commentary_mode]
         if config.get("commentary_voice"):
             cmd += ["--commentary-voice", config.get("commentary_voice")]
-        if config.get("language", "").strip():
-            cmd += ["--language", config.get("language").strip()]
+        lang = (config.get("language") or "").strip()
+        if lang:
+            cmd += ["--language", lang]
         if config.get("auto_publish"): 
             cmd += ["--auto-publish"]
             

@@ -1,5 +1,6 @@
 import os
 import sys
+import time
 import uuid
 import json
 import asyncio
@@ -15,6 +16,26 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 BASE_DIR = Path(__file__).parent.parent
 OUTPUT_DIR = BASE_DIR / "output"
+
+MAX_UPLOAD_SIZE = 2 * 1024 * 1024 * 1024  # 2 GB safety quota
+
+async def _save_bounded_upload_to_temp(file: UploadFile, suffix: str = ".mp4") -> str:
+    import tempfile
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+        tmp_path = tmp.name
+        bytes_written = 0
+        while True:
+            chunk = await file.read(4 * 1024 * 1024)
+            if not chunk:
+                break
+            bytes_written += len(chunk)
+            if bytes_written > MAX_UPLOAD_SIZE:
+                tmp.close()
+                if os.path.exists(tmp_path):
+                    os.remove(tmp_path)
+                raise ValueError("Uploaded file exceeds 2 GB limit.")
+            tmp.write(chunk)
+    return tmp_path
 
 class InstagramConnectRequest(BaseModel):
     username: str
@@ -158,11 +179,12 @@ def _parse_subprocess_json(stdout_str: str) -> dict:
 
 @router.post("/api/tools/generate-caption")
 async def api_tools_generate_caption(file: UploadFile = File(...)):
-    import tempfile, subprocess
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp:
-        content = await file.read()
-        tmp.write(content)
-        tmp_path = tmp.name
+    import subprocess
+    try:
+        tmp_path = await _save_bounded_upload_to_temp(file)
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=413)
+
     try:
         python_exe = str(BASE_DIR / "venv" / "Scripts" / "python.exe")
         if not Path(python_exe).exists():
@@ -179,10 +201,12 @@ async def api_tools_generate_caption(file: UploadFile = File(...)):
 
 @router.post("/api/tools/generate-products")
 async def api_tools_generate_products(file: UploadFile = File(...)):
-    import tempfile, subprocess
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp:
-        tmp.write(await file.read())
-        tmp_path = tmp.name
+    import subprocess
+    try:
+        tmp_path = await _save_bounded_upload_to_temp(file)
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=413)
+
     try:
         python_exe = str(BASE_DIR / "venv" / "Scripts" / "python.exe")
         if not Path(python_exe).exists():
@@ -199,10 +223,11 @@ async def api_tools_generate_products(file: UploadFile = File(...)):
 
 @router.post("/api/tools/add-captions")
 async def api_tools_add_captions(file: UploadFile = File(...), style: str = Form("kinetic_slide")):
-    import tempfile, subprocess
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp:
-        tmp.write(await file.read())
-        tmp_path = tmp.name
+    import subprocess
+    try:
+        tmp_path = await _save_bounded_upload_to_temp(file)
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=413)
         
     out_dir = OUTPUT_DIR / "caption_studio"
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -279,7 +304,7 @@ async def connect_yt_playwright():
     worker = get_youtube_worker()
     was_running = worker.running
     if was_running:
-        worker.suspend()
+        await asyncio.to_thread(worker.suspend)
         await asyncio.sleep(1.0)
     try:
         await asyncio.to_thread(connect_youtube_playwright)
@@ -318,17 +343,15 @@ async def disconnect_yt():
 async def publisher_health():
     from modules.publishers.youtube.publisher import get_youtube_channel_info, get_channel_profile_dir, PROFILE_DIR, _state_dir, is_youtube_connected
     import time as _time
-    channel_info = get_youtube_channel_info()
-    channel_id = channel_info.get("channel_id", "")
-    active_profile = get_channel_profile_dir(channel_id) if channel_id else PROFILE_DIR
-    profile_exists = active_profile.exists() and any(active_profile.iterdir()) if active_profile.exists() else False
-    profiles_root = _state_dir() / "channel-profiles"
-    channel_profiles = []
-    if profiles_root.exists():
-        for child in sorted(profiles_root.iterdir()):
-            if child.is_dir():
-                channel_profiles.append({"channel_id": child.name, "profile_path": str(child), "has_data": any(child.iterdir()) if list(child.iterdir()) else False})
-    return {"youtube_connected": is_youtube_connected(), "channel": channel_info, "active_profile": str(active_profile), "profile_exists": profile_exists, "channel_profiles": channel_profiles, "timestamp": _time.time()}
+    channel_info = get_youtube_channel_info() if is_youtube_connected() else {}
+    profile_dir = get_channel_profile_dir()
+    profiles_root = PROFILE_DIR
+    return {
+        "status": "ready" if is_youtube_connected() else "unconfigured",
+        "youtube_connected": is_youtube_connected(),
+        "channel_id": channel_info.get("channel_id"),
+        "channel_title": channel_info.get("name")
+    }
 
 @router.get("/api/channels")
 async def list_channels():
@@ -344,9 +367,9 @@ async def list_channels():
 
 @router.post("/api/social/post")
 async def start_social_post(req: SocialPostRequest, background_tasks: BackgroundTasks):
-    requested = {platform.lower() for platform in req.platforms}
-    if not requested or not requested.issubset({"instagram", "youtube"}): return JSONResponse({"error": "Platforms must contain instagram and/or youtube."}, status_code=400)
-    if requested == {"instagram"}:
+    requested = [platform.lower() for platform in req.platforms]
+    if not requested or not set(requested).issubset({"instagram", "youtube"}): return JSONResponse({"error": "Platforms must contain instagram and/or youtube."}, status_code=400)
+    if requested == ["instagram"]:
         try:
             job_dir = (OUTPUT_DIR / req.job_id).resolve()
             video_path = (job_dir / req.clip_filename).resolve()
@@ -356,7 +379,7 @@ async def start_social_post(req: SocialPostRequest, background_tasks: Background
             return {"upload_id": upload["id"], "status": upload["status"], "upload": upload}
         except Exception as exc: return JSONResponse({"error": str(exc)}, status_code=500)
     upload_id = str(uuid.uuid4())
-    background_tasks.add_task(_bg_social_post, upload_id, req.job_id, req.clip_filename, req.title, req.caption, req.platforms, req.product_recommendations, req.amazon_store_tag, req.enable_comment_affiliate, req.enable_native_shopping)
+    background_tasks.add_task(_bg_social_post, upload_id, req.job_id, req.clip_filename, req.title, req.caption, requested, req.product_recommendations, req.amazon_store_tag, req.enable_comment_affiliate, req.enable_native_shopping)
     return {"upload_id": upload_id, "status": "pending"}
 
 @router.get("/api/social/post-status/{upload_id}")

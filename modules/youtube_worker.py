@@ -71,13 +71,14 @@ class YouTubePersistentWorker:
             except:
                 pass
 
-    def suspend(self):
-        """Signal the worker thread to release the browser lock."""
+    def suspend(self, timeout: float = 10.0):
+        """Signal the worker thread to release the browser lock with bounded timeout."""
         logger.info("[YouTube Worker] Suspending persistent browser for manual login...")
         self._pause_event.clear()
         self._suspend_requested = True
-        # Wait until the worker thread actually closes the context
-        while self._context is not None:
+        start = time.time()
+        # Wait until the worker thread actually closes the context or timeout occurs
+        while self._context is not None and (time.time() - start) < timeout:
             time.sleep(0.1)
 
     def resume(self):
@@ -287,6 +288,10 @@ class YouTubePersistentWorker:
                 "error": detail
             }
         finally:
+            self.progress_callbacks.pop(upload_id, None)
+            if len(self.results) > 100:
+                for old_k in list(self.results.keys())[:-100]:
+                    self.results.pop(old_k, None)
             if page:
                 try:
                     page.close()

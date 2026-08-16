@@ -47,6 +47,10 @@ def align_editorial_timeline(
         if duration <= 0:
             return start_time_rel
             
+        # Hard-clamp start_time_rel so TTS event never overflows clip boundary
+        if start_time_rel + duration > clip_duration:
+            start_time_rel = max(0.0, clip_duration - duration)
+
         # Transcribe to get word timings
         # model="tiny" is fast and sufficient for pristine TTS audio
         tts_words = transcribe_audio(audio_path, model_size="tiny", language="en")
@@ -75,41 +79,47 @@ def align_editorial_timeline(
         current_time = process_segment(hook_text.strip(), current_time, "hook")
 
     # 2. Commentary Segments
-    # Find insertion points based on source words
+    # Find insertion points based on exact phrase token sequence
     for seg in editorial_data.get("commentary_segments", []):
-        insert_text = seg.get("insert_after_text", "").strip().lower()
+        insert_text = seg.get("insert_after_text", "").strip()
         if not insert_text:
             continue
             
-        insert_words = insert_text.split()
-        if not insert_words:
+        clean_tokens = [re.sub(r'[^\w]', '', t.lower()) for t in insert_text.split() if re.sub(r'[^\w]', '', t.lower())]
+        if not clean_tokens:
             continue
             
-        last_word = insert_words[-1].strip(".,!?\"'")
-        
         insert_time = -1.0
-        # Search backwards to find the latest occurrence
-        for w in reversed(source_words):
-            if last_word in w["word"].lower():
-                insert_time = w["end"] - clip_start_s
+        n_tokens = len(clean_tokens)
+        # Search backwards for multi-word token sequence
+        for i in range(len(source_words) - n_tokens, -1, -1):
+            window = [re.sub(r'[^\w]', '', source_words[i + k]["word"].lower()) for k in range(n_tokens)]
+            if window == clean_tokens:
+                insert_time = source_words[i + n_tokens - 1]["end"] - clip_start_s
                 break
+                
+        # Fallback to exact single word match if sequence was not found
+        if insert_time < 0:
+            target_single = clean_tokens[-1]
+            for w in reversed(source_words):
+                if re.sub(r'[^\w]', '', w["word"].lower()) == target_single:
+                    insert_time = w["end"] - clip_start_s
+                    break
                 
         if insert_time >= 0:
             # Ensure non-overlap with earlier AI events
             insert_time = max(insert_time, current_time + 0.1)
             if insert_time < clip_duration:
                 current_time = process_segment(seg.get("text", ""), insert_time, "commentary")
-            
+
     # 3. Takeaway (Aligned near end of clip, with safety margin)
     takeaway_val = editorial_data.get("takeaway")
     takeaway_text = takeaway_val.get("text", "") if isinstance(takeaway_val, dict) else (takeaway_val or "")
     if isinstance(takeaway_text, str) and takeaway_text.strip():
         text = takeaway_text.strip()
-        # Estimate ~0.3s per word for provisional alignment
         est_words = len(text.split())
         est_dur = max(1.5, est_words * 0.35)
         ideal_start = max(0.0, clip_duration - est_dur - 0.5)
-        # Ensure we don't start before previous AI event finishes
         actual_start = max(ideal_start, current_time + 0.2)
         if actual_start < clip_duration:
             process_segment(text, actual_start, "takeaway")

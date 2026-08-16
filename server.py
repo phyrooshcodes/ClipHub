@@ -1,9 +1,4 @@
-#!/usr/bin/env python3
-# ============================================================
-# server.py — ClipHub Web UI Server
-# Orchestrator for the ClipHub Web UI
-# ============================================================
-
+import os
 import threading
 import time
 import webbrowser
@@ -102,10 +97,13 @@ def get_local_ip() -> str:
 @app.get("/api/server-info")
 async def server_info():
     ip = get_local_ip()
+    host = os.environ.get("CLIPHUB_HOST", "127.0.0.1")
+    is_lan = host == "0.0.0.0"
     return {
         "local_url": "http://localhost:7842",
-        "wifi_url": f"http://{ip}:7842",
-        "wifi_ip": ip
+        "wifi_url": f"http://{ip}:7842" if is_lan else None,
+        "wifi_ip": ip if is_lan else "127.0.0.1",
+        "is_lan_mode": is_lan
     }
 
 @app.get("/api/system-status")
