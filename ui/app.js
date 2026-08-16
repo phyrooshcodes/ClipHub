@@ -130,12 +130,17 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
   // GSAP Initial Setup - Ensure visibility gracefully
-  gsap.fromTo(".hero-title", { y: 20, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, ease: "power2.out" });
-  gsap.fromTo(".hero-subtitle", { y: 15, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, delay: 0.1, ease: "power2.out" });
-  gsap.fromTo(".dropzone", { scale: 0.98, opacity: 0, y: 10 }, { scale: 1, opacity: 1, y: 0, duration: 0.5, delay: 0.2, ease: "power2.out" });
-  gsap.fromTo(".divider", { opacity: 0 }, { opacity: 1, duration: 0.5, delay: 0.3, ease: "power2.out" });
-  gsap.fromTo(".url-input-wrapper", { y: 15, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, delay: 0.4, ease: "power2.out" });
-
+  if (typeof gsap !== 'undefined') {
+    try {
+      gsap.fromTo(".hero-title", { y: 20, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, ease: "power2.out" });
+      gsap.fromTo(".hero-subtitle", { y: 15, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, delay: 0.1, ease: "power2.out" });
+      gsap.fromTo(".dropzone", { scale: 0.98, opacity: 0, y: 10 }, { scale: 1, opacity: 1, y: 0, duration: 0.5, delay: 0.2, ease: "power2.out" });
+      gsap.fromTo(".divider", { opacity: 0 }, { opacity: 1, duration: 0.5, delay: 0.3, ease: "power2.out" });
+      gsap.fromTo(".url-input-wrapper", { y: 15, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, delay: 0.4, ease: "power2.out" });
+    } catch(e) {
+      console.warn("GSAP animation skipped", e);
+    }
+  }
 
   // Handle Upload Events
   let stagedFile = null;
@@ -160,9 +165,14 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   dropzone.addEventListener('click', (e) => {
-    if (!stagedFile && !e.target.closest('.yt-input-wrapper') && !e.target.closest('#btn-proceed')) {
+    if (!stagedFile && !e.target.closest('.yt-input-wrapper') && !e.target.closest('#btn-proceed') && !e.target.closest('.yt-divider')) {
       fileInput.click();
     }
+  });
+
+  document.querySelector('.btn-browse')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    fileInput.click();
   });
   dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('dragover'); });
   dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
@@ -314,7 +324,9 @@ document.addEventListener("DOMContentLoaded", () => {
     currentJobId = savedJobId;
     sectionUpload.classList.add('hidden');
     sectionProcessing.classList.remove('hidden');
-    gsap.to(sectionProcessing, { y: 0, opacity: 1, duration: 0.6, ease: "power3.out" });
+    if (typeof gsap !== 'undefined') {
+      try { gsap.to(sectionProcessing, { y: 0, opacity: 1, duration: 0.6, ease: "power3.out" }); } catch(e){}
+    }
     
     if (savedYtUrl) {
       connectYoutubeWS(savedJobId, savedYtUrl);
@@ -643,7 +655,9 @@ document.addEventListener("DOMContentLoaded", () => {
     document.documentElement.classList.add('modal-open');
     document.body.classList.add('modal-open');
     modalSettings.classList.remove('hidden');
-    gsap.fromTo(".modal", { scale: 0.98, opacity: 0, y: 10 }, { scale: 1, opacity: 1, y: 0, duration: 0.2, ease: "power2.out" });
+    if (typeof gsap !== 'undefined') {
+      try { gsap.fromTo(".modal", { scale: 0.98, opacity: 0, y: 10 }, { scale: 1, opacity: 1, y: 0, duration: 0.2, ease: "power2.out" }); } catch(e){}
+    }
     refreshNvidiaKeyStatus();
   });
 
@@ -1101,10 +1115,18 @@ document.addEventListener("DOMContentLoaded", () => {
     
     procBar.style.width = percent + "%";
     procStageName.textContent = name + "...";
-    gsap.to(procPercent, {
-      innerHTML: percent + "%", duration: 0.3, snap: { innerHTML: 1 },
-      onUpdate: function() { procPercent.innerHTML = Math.round(this.targets()[0].innerHTML.replace('%','')) + "%"; }
-    });
+    if (typeof gsap !== 'undefined') {
+      try {
+        gsap.to(procPercent, {
+          innerHTML: percent + "%", duration: 0.3, snap: { innerHTML: 1 },
+          onUpdate: function() { procPercent.innerHTML = Math.round(this.targets()[0].innerHTML.replace('%','')) + "%"; }
+        });
+      } catch(e) {
+        procPercent.textContent = percent + "%";
+      }
+    } else {
+      procPercent.textContent = percent + "%";
+    }
   }
 
   function appendLog(message) {
@@ -1135,83 +1157,90 @@ document.addEventListener("DOMContentLoaded", () => {
     
     resetSteps();
     
-    const tl = gsap.timeline();
-    tl.to(sectionUpload, { 
-      y: -50, opacity: 0, duration: 0.6, ease: "power3.inOut",
-      onComplete: async () => {
-        sectionUpload.classList.add('hidden');
-        sectionProcessing.classList.remove('hidden');
-        gsap.fromTo(sectionProcessing, { y: 50, opacity: 0 }, { y: 0, opacity: 1, duration: 0.8, ease: "power3.out" });
-        
-        try {
-          // Send config (model, caption_style, etc) FIRST before initiating connections
-          async function sendConfig(jobId) {
-            const model = document.getElementById('config-model')?.value || 'small';
-            const captionStyle = localStorage.getItem('captionStyle') || document.getElementById('config-caption-style')?.value || 'kinetic_slide';
-            const commentaryMode = document.getElementById('config-commentary-mode')?.value || 'hook_commentary';
-            const commentaryVoice = document.getElementById('config-commentary-voice')?.value || 'af_sarah';
-            try {
-              await fetch(`/config/${jobId}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                   model: model,
-                   caption_style: captionStyle,
-                   auto_publish: currentPublishingMode() === 'auto',
-                   commentary_mode: commentaryMode,
-                   commentary_voice: commentaryVoice
-                })
-              });
-            } catch(e) {}
-          }
-          
-          if (isYoutube) {
-             document.getElementById('step-download').classList.remove('hidden');
-             updateProgress('step-download', "Initializing YouTube Download", 0);
-             const res = await fetch('/prepare-download', { method: 'POST' });
-             const data = await res.json();
-             if (data.job_id) {
-               currentJobId = data.job_id;
-               localStorage.setItem('currentJobId', data.job_id);
-               localStorage.setItem('ytUrl', fileOrUrl);
-               await sendConfig(data.job_id);
-               connectYoutubeWS(data.job_id, fileOrUrl);
-             }
-          } else if (isExistingUpload) {
-             updateProgress(null, "Initializing existing file", 10);
-             const res = await fetch(`/api/start-from-upload/${encodeURIComponent(fileOrUrl)}`, { method: 'POST' });
-             const data = await res.json();
-             if (data.job_id) {
-               currentJobId = data.job_id;
-               localStorage.setItem('currentJobId', data.job_id);
-               localStorage.setItem('currentJobId_ts', Date.now());
-               await sendConfig(data.job_id);
-               connectPipelineWS(data.job_id);
-             } else {
-               updateProgress(null, "Error: " + (data.error || "File not found"), 0);
-               appendLog(`<span class="log-error">[Error]</span> Failed to initialize existing file. It may have been cleaned up or does not exist.`);
-               setTimeout(() => btnCancel.click(), 2500);
-             }
-          } else {
-             updateProgress(null, "Uploading file", 5);
-             const fd = new FormData();
-             fd.append('file', fileOrUrl);
-             const res = await fetch('/upload', { method: 'POST', body: fd });
-             const data = await res.json();
-             if (data.job_id) {
-               currentJobId = data.job_id;
-               localStorage.setItem('currentJobId', data.job_id);
-               localStorage.setItem('currentJobId_ts', Date.now());
-               await sendConfig(data.job_id);
-               connectPipelineWS(data.job_id);
-             }
-          }
-        } catch(e) {
-          console.error(e);
-          updateProgress(null, "Failed to upload!", 0);
-        }
+    const launchPipeline = async () => {
+      sectionUpload.classList.add('hidden');
+      sectionProcessing.classList.remove('hidden');
+      if (typeof gsap !== 'undefined') {
+        try { gsap.fromTo(sectionProcessing, { y: 50, opacity: 0 }, { y: 0, opacity: 1, duration: 0.8, ease: "power3.out" }); } catch(e){}
       }
-    });
+      
+      try {
+        // Send config (model, caption_style, etc) FIRST before initiating connections
+        async function sendConfig(jobId) {
+          const model = document.getElementById('config-model')?.value || 'small';
+          const captionStyle = localStorage.getItem('captionStyle') || document.getElementById('config-caption-style')?.value || 'kinetic_slide';
+          const commentaryMode = document.getElementById('config-commentary-mode')?.value || 'hook_commentary';
+          const commentaryVoice = document.getElementById('config-commentary-voice')?.value || 'af_sarah';
+          try {
+            await fetch(`/config/${jobId}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ 
+                 model: model,
+                 caption_style: captionStyle,
+                 commentary_mode: commentaryMode,
+                 commentary_voice: commentaryVoice
+              })
+            });
+          } catch(e) { console.error("Config send failed", e); }
+        }
+
+        if (isYoutube) {
+          document.getElementById('step-download').classList.remove('hidden');
+          // fetch job ID from API
+          const res = await fetch('/api/download-yt', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: fileOrUrl })
+          });
+          const data = await res.json();
+          if (data.job_id) {
+            currentJobId = data.job_id;
+            localStorage.setItem('currentJobId', data.job_id);
+            localStorage.setItem('currentJobId_ts', Date.now());
+            localStorage.setItem('ytUrl', fileOrUrl);
+            await sendConfig(data.job_id);
+            connectYoutubeWS(data.job_id, fileOrUrl);
+          }
+        } else if (isExistingUpload) {
+          currentJobId = fileOrUrl;
+          localStorage.setItem('currentJobId', fileOrUrl);
+          localStorage.setItem('currentJobId_ts', Date.now());
+          await sendConfig(fileOrUrl);
+          connectPipelineWS(fileOrUrl);
+        } else {
+           // Normal file upload
+           const fd = new FormData();
+           fd.append('file', fileOrUrl);
+           const res = await fetch('/upload', { method: 'POST', body: fd });
+           const data = await res.json();
+           if (data.job_id) {
+             currentJobId = data.job_id;
+             localStorage.setItem('currentJobId', data.job_id);
+             localStorage.setItem('currentJobId_ts', Date.now());
+             await sendConfig(data.job_id);
+             connectPipelineWS(data.job_id);
+           }
+        }
+      } catch(e) {
+        console.error(e);
+        updateProgress(null, "Failed to upload!", 0);
+      }
+    };
+
+    if (typeof gsap !== 'undefined') {
+      try {
+        const tl = gsap.timeline();
+        tl.to(sectionUpload, {
+          y: -50, opacity: 0, duration: 0.4, ease: "power3.inOut",
+          onComplete: launchPipeline
+        });
+      } catch(e) {
+        launchPipeline();
+      }
+    } else {
+      launchPipeline();
+    }
   }
 
   function connectYoutubeWS(jobId, url) {
@@ -1555,7 +1584,9 @@ document.addEventListener("DOMContentLoaded", () => {
       `;
     });
     container.innerHTML = html;
-    gsap.to("#clips-container .clip-card", { y: 0, opacity: 1, duration: 0.4, stagger: 0.05, ease: "power2.out", delay: 0.1 });
+    if (typeof gsap !== 'undefined') {
+      try { gsap.to("#clips-container .clip-card", { y: 0, opacity: 1, duration: 0.4, stagger: 0.05, ease: "power2.out", delay: 0.1 }); } catch(e){}
+    }
   }
 
   function escapeUploadText(value) {
@@ -1812,7 +1843,9 @@ document.addEventListener("DOMContentLoaded", () => {
       });
       
       container.innerHTML = html;
-      gsap.to("#history-container .clip-card", { y: 0, opacity: 1, duration: 0.4, stagger: 0.05, ease: "power2.out", delay: 0.1 });
+      if (typeof gsap !== 'undefined') {
+        try { gsap.to("#history-container .clip-card", { y: 0, opacity: 1, duration: 0.4, stagger: 0.05, ease: "power2.out", delay: 0.1 }); } catch(e){}
+      }
       
     } catch(e) {
       console.error(e);
@@ -1831,29 +1864,52 @@ document.addEventListener("DOMContentLoaded", () => {
     localStorage.removeItem('currentJobId');
     
     // Reset to upload screen
-    gsap.to(sectionProcessing, { 
-      opacity: 0, y: 30, duration: 0.5, ease: "power2.inOut", 
-      onComplete: () => {
-        sectionProcessing.classList.add('hidden');
-        sectionUpload.classList.remove('hidden');
-        gsap.fromTo(sectionUpload, { y: -30, opacity: 0 }, { y: 0, opacity: 1, duration: 0.6, ease: "power3.out" });
-        loadRecentUploads(); // refresh uploads
+    const resetToUpload = () => {
+      sectionProcessing.classList.add('hidden');
+      sectionUpload.classList.remove('hidden');
+      if (typeof gsap !== 'undefined') {
+        try { gsap.fromTo(sectionUpload, { y: -30, opacity: 0 }, { y: 0, opacity: 1, duration: 0.6, ease: "power3.out" }); } catch(e){}
       }
-    });
+      loadRecentUploads();
+    };
+
+    if (typeof gsap !== 'undefined') {
+      try {
+        gsap.to(sectionProcessing, { 
+          opacity: 0, y: 30, duration: 0.5, ease: "power2.inOut", 
+          onComplete: resetToUpload
+        });
+      } catch(e) {
+        resetToUpload();
+      }
+    } else {
+      resetToUpload();
+    }
   });
 
   const btnBackFromClips = document.getElementById('btn-back-from-clips');
   if (btnBackFromClips) {
     btnBackFromClips.addEventListener('click', () => {
-      gsap.to(sectionClips, { 
-        opacity: 0, y: 30, duration: 0.4, ease: "power2.inOut", 
-        onComplete: () => {
-          sectionClips.classList.add('hidden');
-          sectionUpload.classList.remove('hidden');
-          gsap.fromTo(sectionUpload, { y: -30, opacity: 0 }, { y: 0, opacity: 1, duration: 0.6, ease: "power3.out" });
-          loadRecentUploads();
+      const resetClipsToUpload = () => {
+        sectionClips.classList.add('hidden');
+        sectionUpload.classList.remove('hidden');
+        if (typeof gsap !== 'undefined') {
+          try { gsap.fromTo(sectionUpload, { y: -30, opacity: 0 }, { y: 0, opacity: 1, duration: 0.6, ease: "power3.out" }); } catch(e){}
         }
-      });
+        loadRecentUploads();
+      };
+      if (typeof gsap !== 'undefined') {
+        try {
+          gsap.to(sectionClips, { 
+            opacity: 0, y: 30, duration: 0.4, ease: "power2.inOut", 
+            onComplete: resetClipsToUpload
+          });
+        } catch(e) {
+          resetClipsToUpload();
+        }
+      } else {
+        resetClipsToUpload();
+      }
     });
   }
 
