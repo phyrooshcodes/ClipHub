@@ -523,6 +523,11 @@ document.addEventListener("DOMContentLoaded", () => {
         const cfg = document.getElementById('config-caption-style');
         if (cfg) cfg.value = st.id;
         renderCaptionStudioGrid();
+        
+        const btnText = document.getElementById('btn-proceed-modal-text');
+        if (btnText && (!currentPendingJob || !currentPendingJob.isStandaloneTool)) {
+          btnText.textContent = `Apply "${st.name}" & Continue →`;
+        }
       });
 
       grid.appendChild(card);
@@ -543,13 +548,16 @@ document.addEventListener("DOMContentLoaded", () => {
     if (isStandaloneTool) {
       document.getElementById('caption-studio-title').innerHTML = `Add Viral Captions: <span style="color:var(--brand-purple);">Choose Style</span>`;
       document.getElementById('caption-studio-subtitle').textContent = `Select the animation style to burn onto your uploaded clip!`;
-      const btnText = document.getElementById('btn-proceed-modal-text') || document.getElementById('btn-proceed-text');
-      if (btnText) btnText.textContent = `✨ Burn Captions Onto Video`;
+      const btnText = document.getElementById('btn-proceed-modal-text');
+      if (btnText) btnText.innerHTML = `Burn Captions Onto Video`;
     } else {
       document.getElementById('caption-studio-title').innerHTML = `Step 2: Choose Your <span style="color:var(--brand-purple);">Caption Style</span>`;
       document.getElementById('caption-studio-subtitle').textContent = `Select a viral typography & animation preset below.`;
-      const btnText = document.getElementById('btn-proceed-modal-text') || document.getElementById('btn-proceed-text');
-      if (btnText) btnText.textContent = `✨ Start Generating Clips`;
+      const btnText = document.getElementById('btn-proceed-modal-text');
+      const curStyle = localStorage.getItem('captionStyle') || 'kinetic_slide';
+      const curObj = CAPTION_STYLES_DATA.find(s => s.id === curStyle);
+      const name = curObj ? curObj.name : 'Selected Style';
+      if (btnText) btnText.textContent = `Apply "${name}" & Continue →`;
     }
 
     modal.classList.remove('hidden');
