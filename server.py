@@ -105,6 +105,18 @@ async def get_app():
 async def get_logo():
     return FileResponse(BASE_DIR / "ui" / "logo.jpg")
 
+@app.get("/logo.png", response_class=FileResponse)
+async def get_logo_png():
+    return FileResponse(BASE_DIR / "ui" / "logo.png")
+
+@app.get("/favicon.png", response_class=FileResponse)
+async def get_favicon_png():
+    return FileResponse(BASE_DIR / "ui" / "favicon.png")
+
+@app.get("/favicon.ico", response_class=FileResponse)
+async def get_favicon():
+    return FileResponse(BASE_DIR / "ui" / "favicon.ico")
+
 # ─── Helper ─────────────────────────────────────────────────
 def get_local_ip() -> str:
     import socket

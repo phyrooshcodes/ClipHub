@@ -154,16 +154,23 @@ html, body {
 }
 
 .logo-box {
-  width: 34px;
-  height: 34px;
-  background: var(--brand-gradient);
-  color: #ffffff;
+  width: 36px;
+  height: 36px;
   border-radius: var(--radius-md);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 18px;
-  box-shadow: 0 4px 10px rgba(37, 99, 235, 0.25);
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25);
+  flex-shrink: 0;
+  background: #ffffff;
+}
+
+.logo-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .logo-info {
