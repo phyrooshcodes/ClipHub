@@ -1244,15 +1244,31 @@ document.addEventListener("DOMContentLoaded", () => {
       const icon = c.querySelector('.step-icon');
       if (icon) icon.innerHTML = i + 1;
     });
-    document.getElementById('step-download').classList.add('hidden');
+    document.getElementById('step-download')?.classList.add('hidden');
+    
+    const stageName = document.getElementById('proc-stage-name');
+    if (stageName) stageName.textContent = 'Pipeline Ready';
+    
+    const statusBadge = document.getElementById('pipeline-status-badge');
+    if (statusBadge) statusBadge.textContent = 'Standby';
+
+    const jobMeta = document.getElementById('proc-job-meta');
+    if (jobMeta) jobMeta.textContent = 'Select or drop a video file above to begin';
+
     consoleOutput.innerHTML = '<div id="empty-log-state" style="text-align:center; padding:20px; color:#a0a0aa; font-size:13px;">No activity yet</div>';
   }
 
   async function startProcessing(fileOrUrl, isYoutube=false, isExistingUpload=false) {
+    const stageName = document.getElementById('proc-stage-name');
+    if (stageName) stageName.textContent = 'Initializing Pipeline...';
+    const statusBadge = document.getElementById('pipeline-status-badge');
+    if (statusBadge) statusBadge.textContent = 'Active';
+
     document.getElementById('proc-filename').textContent = typeof fileOrUrl === 'string' ? fileOrUrl : fileOrUrl.name;
     if (isYoutube) document.getElementById('proc-filename').textContent = "YouTube Video";
     
     resetSteps();
+    if (statusBadge) statusBadge.textContent = 'Active';
     
     const launchPipeline = async () => {
       sectionUpload.classList.add('hidden');

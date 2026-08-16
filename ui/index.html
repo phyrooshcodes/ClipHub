@@ -193,10 +193,15 @@
           </div>
           <div class="pipeline-body">
             <div class="job-info">
-              <div class="job-thumb"></div>
+              <div class="job-thumb" id="job-thumb-box">
+                <i class="ri-movie-2-line" style="font-size:18px; color:var(--brand-primary); opacity:0.85;"></i>
+              </div>
               <div class="job-details">
-                <h4 id="proc-stage-name">Waiting for upload...</h4>
-                <div class="job-meta" id="proc-job-meta">Resolution: — &nbsp;&nbsp; Duration: —</div>
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <h4 id="proc-stage-name">Pipeline Ready</h4>
+                  <span id="pipeline-status-badge" class="header-pill" style="padding:2px 8px; font-size:10px;">Standby</span>
+                </div>
+                <div class="job-meta" id="proc-job-meta">Select or drop a video file above to begin</div>
               </div>
             </div>
             
