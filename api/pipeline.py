@@ -269,7 +269,7 @@ async def cancel_job(job_id: str):
         try:
             if job.process.returncode is None:
                 pid = job.process.pid
-                if platform.system() == "Windows":
+                if sys.platform == "win32":
                     subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)], capture_output=True)
                 else:
                     job.process.terminate()

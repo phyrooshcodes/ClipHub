@@ -146,6 +146,20 @@ async def get_music_tracks():
         logger.error(f"Error listing music tracks: {e}")
         return []
 
+def _parse_subprocess_json(stdout_str: str) -> dict:
+    cleaned = stdout_str.strip()
+    try:
+        return json.loads(cleaned)
+    except Exception:
+        # Search lines backwards for valid JSON in case warnings/logs were output
+        lines = [line.strip() for line in cleaned.split("\n") if line.strip()]
+        for line in reversed(lines):
+            try:
+                return json.loads(line)
+            except Exception:
+                continue
+        raise ValueError(f"No valid JSON found in process output: {cleaned[:200]}")
+
 @router.post("/api/tools/generate-caption")
 async def api_tools_generate_caption(file: UploadFile = File(...)):
     import tempfile, subprocess
@@ -161,7 +175,7 @@ async def api_tools_generate_caption(file: UploadFile = File(...)):
                 python_exe = sys.executable
         cmd = [python_exe, str(BASE_DIR / "tools_generate_caption.py"), tmp_path]
         result = await asyncio.to_thread(subprocess.run, cmd, capture_output=True, text=True, check=True)
-        return json.loads(result.stdout.strip())
+        return _parse_subprocess_json(result.stdout)
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
     finally:
@@ -181,7 +195,7 @@ async def api_tools_generate_products(file: UploadFile = File(...)):
                 python_exe = sys.executable
         cmd = [python_exe, str(BASE_DIR / "tools_generate_products.py"), tmp_path]
         result = await asyncio.to_thread(subprocess.run, cmd, capture_output=True, text=True, check=True)
-        return json.loads(result.stdout.strip())
+        return _parse_subprocess_json(result.stdout)
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
     finally:
@@ -207,7 +221,7 @@ async def api_tools_add_captions(file: UploadFile = File(...), style: str = Form
                 python_exe = sys.executable
         cmd = [python_exe, str(BASE_DIR / "tools_add_captions.py"), tmp_path, style, str(out_path)]
         result = await asyncio.to_thread(subprocess.run, cmd, capture_output=True, text=True, check=True)
-        data = json.loads(result.stdout.strip())
+        data = _parse_subprocess_json(result.stdout)
         if "error" in data and not data.get("success"):
             return JSONResponse(data, status_code=400)
         return {"success": True, "video_url": f"/output/caption_studio/{out_filename}", "words_count": data.get("words_count", 0)}

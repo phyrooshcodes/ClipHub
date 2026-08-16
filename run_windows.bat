@@ -200,7 +200,7 @@ echo  ^| [3] Mobile ^& Wi-Fi Mode (Terminal Only - Phone/Tablet)        ^|
 echo  ^| [4] Classic Web UI (FastAPI - Launches local browser)        ^|
 echo  +==============================================================+
 echo:
-set /p UI_CHOICE="Enter your choice (1, 2, or 3) [1]: "
+set /p UI_CHOICE="Enter your choice (1, 2, 3, or 4) [1]: "
 if "%UI_CHOICE%"=="" set UI_CHOICE=1
 
 :PROCESS_CHOICE
