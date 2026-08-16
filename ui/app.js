@@ -335,7 +335,7 @@ document.addEventListener("DOMContentLoaded", () => {
           card.innerHTML = `
             <i class="ri-video-line" style="font-size: 2rem; color: var(--accent-cyan); margin-bottom: 8px; display: block;"></i>
             <p style="margin:0; font-size: 0.8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(u.filename)}">${escapeHtml(u.filename)}</p>
-            <span style="font-size: 0.7rem; color: var(--text-muted);">${u.size} MB</span>
+            <span style="font-size: 0.7rem; color: var(--text-muted);">${u.size_mb} MB</span>
           `;
           card.onmouseover = () => { card.style.background = 'rgba(255,255,255,0.1)'; card.style.borderColor = 'var(--accent-primary)'; };
           card.onmouseout = () => { card.style.background = 'rgba(255,255,255,0.05)'; card.style.borderColor = 'var(--border-color)'; };
@@ -820,6 +820,7 @@ document.addEventListener("DOMContentLoaded", () => {
           body: formData
         });
         const data = await res.json();
+        if (!res.ok || data.error) throw new Error(data.error || 'Caption generation failed');
         
         document.getElementById('ask-caption-loading')?.classList.add('hidden');
         document.getElementById('ask-caption-result')?.classList.remove('hidden');
@@ -899,6 +900,7 @@ document.addEventListener("DOMContentLoaded", () => {
           body: formData
         });
         const data = await res.json();
+        if (!res.ok || data.error) throw new Error(data.error || 'Product generation failed');
         
         document.getElementById('ask-product-loading')?.classList.add('hidden');
         document.getElementById('ask-product-result')?.classList.remove('hidden');
@@ -1096,11 +1098,13 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  function appendLog(html) {
+  function appendLog(message) {
     const empty = document.getElementById('empty-log-state');
     if (empty) empty.remove();
     const p = document.createElement('p');
-    p.innerHTML = html;
+    // Process output and yt-dlp metadata are untrusted.  Rendering them as
+    // HTML allowed a title or log line to execute script in the dashboard.
+    p.textContent = String(message).replace(/<[^>]*>/g, '');
     consoleOutput.appendChild(p);
     consoleOutput.scrollTop = consoleOutput.scrollHeight;
   }
@@ -1307,6 +1311,7 @@ document.addEventListener("DOMContentLoaded", () => {
         appendLog(`<span class="log-info">[System]</span> ${data.log}`);
       } else if (data.type === 'error') {
         appendLog(`<span class="log-error">[Error]</span> ${data.message}`);
+        updateProgress(null, 'Pipeline failed', 0);
         if (data.message === 'Job not found.') {
           localStorage.removeItem('currentJobId');
           setTimeout(() => btnCancel.click(), 1500);
@@ -1322,7 +1327,10 @@ document.addEventListener("DOMContentLoaded", () => {
         appendLog(`<span class="log-highlight">[System]</span> Phase 1 complete. Waiting for Human Review...`);
         showHumanReviewUI(jobId, data.metadata);
       } else if (data.type === 'done') {
-        if (!data.is_phase_1) {
+        if (!data.success) {
+          appendLog('[Error] Pipeline failed. Check the preceding log entries.');
+          updateProgress(null, 'Pipeline failed', 0);
+        } else if (!data.is_phase_1) {
           updateProgress('step-render', "Finished Processing", 100);
           appendLog(`<span class="log-highlight">[Success]</span> Pipeline completed.`);
           setTimeout(() => fetchClips(jobId), 1000);
@@ -1346,7 +1354,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const card = document.createElement('div');
       card.className = 'review-card';
       
-      let html = `<div class="rc-header"><span>Clip ${idx + 1}: ${escapeHtml(clip.title)}</span><div class="rc-actions"><select class="rc-select"><option>Keep</option><option>Discard</option></select></div></div>`;
+      let html = `<div class="rc-header"><span>Clip ${idx + 1}: ${escapeHtml(clip.title)}</span><div class="rc-actions"><select class="rc-select" data-idx="${idx}"><option>Keep</option><option>Discard</option></select></div></div>`;
       
       const hookText = typeof clip.editorial_data.hook === 'object' ? (clip.editorial_data.hook?.text || '') : (clip.editorial_data.hook || '');
       const takeawayText = typeof clip.editorial_data.takeaway === 'object' ? (clip.editorial_data.takeaway?.text || '') : (clip.editorial_data.takeaway || '');
@@ -1408,10 +1416,22 @@ document.addEventListener("DOMContentLoaded", () => {
         approveBtn.innerHTML = '<i class="ri-loader-4-line spin"></i> Submitting...';
         
         try {
+          const discarded = new Set(
+            [...document.querySelectorAll('.rc-select')]
+              .filter(select => select.value === 'Discard')
+              .map(select => Number(select.dataset.idx))
+          );
+          const approvedMetadata = metadata.filter((_, idx) => !discarded.has(idx));
+          if (approvedMetadata.length === 0) {
+            Toast.show("At least one clip must be kept for Phase 2 rendering.", "warning");
+            approveBtn.disabled = false;
+            approveBtn.innerHTML = '<i class="ri-magic-line"></i> <span id="btn-proceed-text">Generate Clip</span>';
+            return;
+          }
           const res = await fetch(`/api/submit-review/${jobId}`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify(metadata)
+            body: JSON.stringify(approvedMetadata)
           });
           const data = await res.json();
           if (data.status === 'ok') {
@@ -2098,7 +2118,7 @@ document.addEventListener("DOMContentLoaded", () => {
       } else {
          logToModal(`Failed to initialize: ${data.error}`);
          if(!updateModal) {
-           btn.innerHTML = data.error || 'Failed';
+            btn.textContent = data.error || 'Failed';
            btn.title = data.error || '';
            btn.disabled = false;
          }

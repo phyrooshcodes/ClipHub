@@ -258,7 +258,8 @@ echo:
 for /f "tokens=5" %%a in ('netstat -aon 2^>nul ^| findstr :7842 ^| findstr LISTENING') do taskkill /f /pid %%a >nul 2>&1
 
 set CLIPHUB_OPEN_BROWSER=0
-python server.py
+set CLIPHUB_HOST=0.0.0.0
+python server.py --host 0.0.0.0
 goto END_LAUNCH
 
 :LAUNCH_BETA

@@ -85,7 +85,7 @@ Transcript:
         cleaned = re.sub(r"```(?:json)?", "", content).strip().strip("`").strip()
         return json.loads(cleaned)
     except Exception as e:
-        return {"products": [], "error": str(e)}
+        raise RuntimeError(f"NVIDIA API product generation failed: {e}")
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
@@ -101,13 +101,14 @@ if __name__ == "__main__":
         transcript = transcribe(audio_path, model_size=model_size)
         if not transcript:
             print(json.dumps({"error": "No speech detected in video."}))
-            sys.exit(0)
+            sys.exit(1)
             
         result = generate_products(transcript)
         result["transcript"] = transcript
         print(json.dumps(result))
     except Exception as e:
         print(json.dumps({"error": str(e)}))
+        sys.exit(1)
     finally:
         if os.path.exists(audio_path):
             try:

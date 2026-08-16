@@ -3,11 +3,13 @@ import threading
 import time
 import webbrowser
 import logging
+import secrets
 from pathlib import Path
 
 import uvicorn
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
 # Import API Routers
@@ -22,6 +24,11 @@ logger = logging.getLogger("server")
 # ─── Paths ──────────────────────────────────────────────────
 BASE_DIR   = Path(__file__).parent
 load_dotenv(BASE_DIR / ".env")
+
+# LAN mode is opt-in.  A token is generated when the launcher enables it so a
+# device on the same Wi-Fi cannot silently operate the user's social accounts.
+if os.environ.get("CLIPHUB_HOST") == "0.0.0.0" and not os.environ.get("CLIPHUB_LAN_TOKEN"):
+    os.environ["CLIPHUB_LAN_TOKEN"] = secrets.token_urlsafe(24)
 
 UPLOAD_DIR = BASE_DIR / "temp" / "uploads"
 OUTPUT_DIR = BASE_DIR / "output"
@@ -46,6 +53,33 @@ async def lifespan(app: FastAPI):
 
 # ─── FastAPI App ────────────────────────────────────────────
 app = FastAPI(title="ClipHub", lifespan=lifespan)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173", "tauri://localhost", "http://tauri.localhost"],
+    allow_credentials=True,
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type", "X-ClipHub-Token"],
+)
+
+from api.security import is_loopback, lan_mode_enabled, lan_token
+
+@app.middleware("http")
+async def require_lan_token(request, call_next):
+    """Protect every HTTP route when the server is intentionally LAN-visible."""
+    client_host = request.client.host if request.client else None
+    if lan_mode_enabled() and not is_loopback(client_host):
+        supplied = (
+            request.headers.get("X-ClipHub-Token")
+            or request.cookies.get("cliphub_lan_token")
+            or request.query_params.get("token")
+        )
+        if supplied != lan_token():
+            from fastapi.responses import JSONResponse
+            return JSONResponse({"error": "LAN authorization required."}, status_code=401)
+    response = await call_next(request)
+    if lan_mode_enabled() and request.query_params.get("token") == lan_token():
+        response.set_cookie("cliphub_lan_token", lan_token(), httponly=True, samesite="strict")
+    return response
 
 from fastapi.staticfiles import StaticFiles
 
@@ -151,6 +185,10 @@ if __name__ == "__main__":
 
     host = cli_args.host
     port = cli_args.port
+    if host == "0.0.0.0":
+        # Support direct CLI use as well as the Windows launcher.
+        os.environ["CLIPHUB_HOST"] = host
+        os.environ.setdefault("CLIPHUB_LAN_TOKEN", secrets.token_urlsafe(24))
 
     if os.environ.get("CLIPHUB_OPEN_BROWSER", "1") == "1":
         threading.Thread(target=_open_browser, args=(port,), daemon=True).start()
@@ -161,7 +199,7 @@ if __name__ == "__main__":
     print("=" * 55)
     print(f"  • Local Interface : http://localhost:{port}")
     if host == "0.0.0.0":
-        print(f"  • LAN Access      : http://{local_ip}:{port} (LAN Mode Active)")
+        print(f"  • LAN Access      : http://{local_ip}:{port}/?token={lan_token()} (LAN Mode Active)")
     else:
         print(f"  • Security Mode   : Desktop Only (Loopback 127.0.0.1)")
         print(f"  • LAN Sharing     : Pass --host 0.0.0.0 to enable")

@@ -13,6 +13,7 @@ from typing import List, Optional
 from fastapi import APIRouter, WebSocket, UploadFile, File, Request
 from fastapi.responses import JSONResponse
 from api.jobs import registry
+from api.security import websocket_is_authorized
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -226,6 +227,11 @@ async def _run_process(job_id: str, cmd: list, start_time: float):
                         clips_meta = json.load(f)
                     registry.add_event(job_id, {"type": "phase_1_complete", "metadata": clips_meta})
 
+        if not success:
+            registry.add_event(job_id, {
+                "type": "error",
+                "message": f"Pipeline exited with code {process.returncode}. Check the log for details."
+            })
         clips = _list_clips(job_id=job_id, newer_than=start_time - 5)
         registry.add_event(job_id, {"type": "done", "success": success, "clips": clips, "is_phase_1": is_phase_1})
     except Exception as e:
@@ -297,6 +303,8 @@ async def upload_video(file: UploadFile = File(...)):
 
 @router.post("/api/start-from-upload/{filename}")
 async def start_from_upload(filename: str):
+    if Path(filename).name != filename:
+        return JSONResponse({"error": "Invalid upload filename."}, status_code=400)
     save_path = (UPLOAD_DIR / filename).resolve()
     if not save_path.is_relative_to(UPLOAD_DIR.resolve()) or not save_path.exists():
         m = re.match(r"job_([a-f0-9]{8})", filename)
@@ -308,7 +316,7 @@ async def start_from_upload(filename: str):
                     save_path = candidate
                     filename = candidate.name
                     break
-    if not save_path.exists():
+    if not save_path.is_relative_to(UPLOAD_DIR.resolve()) or not save_path.is_file():
         return JSONResponse({"error": f"File not found: {filename}"}, status_code=404)
         
     job_id = str(uuid.uuid4())[:8]
@@ -373,6 +381,9 @@ async def submit_review(job_id: str, request: Request):
 
 @router.websocket("/ws/{job_id}")
 async def run_pipeline_ws(websocket: WebSocket, job_id: str):
+    if not websocket_is_authorized(websocket):
+        await websocket.close(code=1008)
+        return
     await websocket.accept()
     job = registry.get(job_id)
     if not job:

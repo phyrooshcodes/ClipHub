@@ -108,8 +108,21 @@ async def _bg_social_post(upload_id: str, job_id: str, clip_filename: str, title
             try:
                 loop = asyncio.get_event_loop()
                 ig_func = functools.partial(post_instagram_reel, str(video_path), caption, progress=lambda p, m: update_progress("instagram", p, m))
-                url = await loop.run_in_executor(None, ig_func)
-                results["instagram"] = {"success": True, "url": url}
+                res = await loop.run_in_executor(None, ig_func)
+                if hasattr(res, "status"):
+                    if res.status == "completed":
+                        results["instagram"] = {"success": True, "url": getattr(res, "reel_url", None)}
+                    else:
+                        results["instagram"] = {
+                            "success": False,
+                            "status": res.status,
+                            "error": "Instagram upload submitted but requires manual verification."
+                        }
+                        has_errors = True
+                elif isinstance(res, str):
+                    results["instagram"] = {"success": True, "url": res}
+                else:
+                    results["instagram"] = {"success": True, "url": None}
             except Exception as e:
                 results["instagram"] = {"success": False, "error": str(e)}
                 has_errors = True
@@ -207,7 +220,16 @@ async def api_tools_generate_caption(file: UploadFile = File(...)):
             if not Path(python_exe).exists():
                 python_exe = sys.executable
         cmd = [python_exe, str(BASE_DIR / "tools_generate_caption.py"), tmp_path]
-        result = await asyncio.to_thread(subprocess.run, cmd, capture_output=True, text=True, check=True)
+        result = await asyncio.to_thread(subprocess.run, cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            err_msg = "Caption generation failed."
+            try:
+                data = json.loads(result.stdout.strip())
+                err_msg = data.get("error", err_msg)
+            except Exception:
+                if result.stderr.strip():
+                    err_msg = result.stderr.strip()
+            return JSONResponse({"error": err_msg}, status_code=500)
         return _parse_subprocess_json(result.stdout)
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
@@ -229,7 +251,16 @@ async def api_tools_generate_products(file: UploadFile = File(...)):
             if not Path(python_exe).exists():
                 python_exe = sys.executable
         cmd = [python_exe, str(BASE_DIR / "tools_generate_products.py"), tmp_path]
-        result = await asyncio.to_thread(subprocess.run, cmd, capture_output=True, text=True, check=True)
+        result = await asyncio.to_thread(subprocess.run, cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            err_msg = "Product recommendation failed."
+            try:
+                data = json.loads(result.stdout.strip())
+                err_msg = data.get("error", err_msg)
+            except Exception:
+                if result.stderr.strip():
+                    err_msg = result.stderr.strip()
+            return JSONResponse({"error": err_msg}, status_code=500)
         return _parse_subprocess_json(result.stdout)
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)

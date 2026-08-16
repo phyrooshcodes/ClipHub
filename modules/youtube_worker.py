@@ -45,6 +45,11 @@ class YouTubePersistentWorker:
             self._thread = threading.Thread(target=self._run, daemon=True, name="youtube-worker")
             self._thread.start()
 
+    @property
+    def running(self) -> bool:
+        """Whether the persistent worker thread owns or is opening a browser."""
+        return self._thread is not None and self._thread.is_alive()
+
     def enqueue(self, upload_id, video_path, title, description, tags, thumbnail_path, product_recommendations, amazon_store_tag, enable_comment_affiliate, enable_native_shopping, progress_cb):
         self.results[upload_id] = {"status": "queued"}
         self.progress_callbacks[upload_id] = progress_cb

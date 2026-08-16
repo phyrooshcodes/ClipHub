@@ -69,10 +69,10 @@ function Sidebar({ page, setPage, clipCount }: { page: Page; setPage: (p: Page) 
 
 // ── Config Defaults ───────────────────────────────────────────────────────
 const DEFAULT_CONFIG = {
-  model: 'small', max_clips: 8, music: 'none',
+  model: 'small', max_clips: 8,
   caption_style: 'kinetic_slide', font_preset: 'default',
   font_size: 48, primary_color: '#FFFFFF', outline_color: '#000000',
-  broll: false, no_title: false, language: '',
+  no_title: false, language: '', phase: 'all',
 };
 
 // ── Upload Page ───────────────────────────────────────────────────────────
@@ -90,6 +90,7 @@ function UploadPage({ onJobStart }: { onJobStart: (jobId: string, filename: stri
     const fd = new FormData(); fd.append('file', file);
     const r = await fetch(`${API}/upload`, { method: 'POST', body: fd });
     const d = await r.json();
+    if (!r.ok || !d.job_id) throw new Error(d.error || 'Upload failed');
     setPendingJob({ jobId: d.job_id, filename: file.name });
   };
 
@@ -107,11 +108,10 @@ function UploadPage({ onJobStart }: { onJobStart: (jobId: string, filename: stri
       const d = await r.json();
       const jobId = d.job_id;
       // Start download via WebSocket
-      const ws = new WebSocket(`ws://127.0.0.1:7842/download/${jobId}`);
-      ws.onopen = () => ws.send(JSON.stringify({ url: url.trim() }));
+      const ws = new WebSocket(`ws://127.0.0.1:7842/ws-ytdl/${jobId}?url=${encodeURIComponent(url.trim())}`);
       ws.onmessage = (e) => {
         const ev = JSON.parse(e.data);
-        if (ev.type === 'done' && ev.filename) {
+        if (ev.type === 'ytdl_done' && ev.filename) {
           setPendingJob({ jobId, filename: ev.filename });
           ws.close();
         }
@@ -127,7 +127,7 @@ function UploadPage({ onJobStart }: { onJobStart: (jobId: string, filename: stri
     if (!pendingJob) return;
     await fetch(`${API}/config/${pendingJob.jobId}`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...config, force_restart: false }),
+      body: JSON.stringify({ ...config, phase: 'all', force_restart: false }),
     });
     onJobStart(pendingJob.jobId, pendingJob.filename);
     setPendingJob(null); setUrl('');
@@ -182,8 +182,6 @@ function UploadPage({ onJobStart }: { onJobStart: (jobId: string, filename: stri
               <option value="tiny">Tiny (fastest)</option>
               <option value="base">Base</option>
               <option value="small">Small (recommended)</option>
-              <option value="medium">Medium</option>
-              <option value="large">Large (best quality)</option>
             </select>
           </div>
           <div className="config-field">
@@ -193,22 +191,12 @@ function UploadPage({ onJobStart }: { onJobStart: (jobId: string, filename: stri
             </select>
           </div>
           <div className="config-field">
-            <label className="config-label">Background Music</label>
-            <select className="select-dark" value={config.music} onChange={e => cfg('music', e.target.value)}>
-              <option value="none">None</option>
-              <option value="chill">Chill</option>
-              <option value="hype">Hype</option>
-              <option value="ambient">Ambient</option>
-            </select>
-          </div>
-          <div className="config-field">
             <label className="config-label">Caption Style</label>
             <select className="select-dark" value={config.caption_style} onChange={e => cfg('caption_style', e.target.value)}>
               <option value="kinetic_slide">Kinetic Slide</option>
-              <option value="word_pop">Word Pop</option>
-              <option value="karaoke">Karaoke</option>
-              <option value="subtitle">Subtitle</option>
-              <option value="none">None</option>
+              <option value="tiktok_pop">TikTok Pop</option>
+              <option value="karaoke_glow">Karaoke Glow</option>
+              <option value="minimal_fade">Minimal Fade</option>
             </select>
           </div>
         </div>
@@ -216,10 +204,6 @@ function UploadPage({ onJobStart }: { onJobStart: (jobId: string, filename: stri
           <div className="toggle-row">
             <span className="toggle-label">Remove title card</span>
             <button className={`toggle ${config.no_title ? 'on' : ''}`} onClick={() => cfg('no_title', !config.no_title)} />
-          </div>
-          <div className="toggle-row">
-            <span className="toggle-label">B-roll overlay</span>
-            <button className={`toggle ${config.broll ? 'on' : ''}`} onClick={() => cfg('broll', !config.broll)} />
           </div>
         </div>
       </div>
@@ -247,15 +231,20 @@ function JobPage({ jobId, filename, onDone, onBack }: {
   const logRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    let terminal = false;
     const ws = new WebSocket(`ws://127.0.0.1:7842/ws/${jobId}`);
     ws.onmessage = (e) => {
       const ev = JSON.parse(e.data);
       if (ev.type === 'stage') setStage(ev.stage);
-      if (ev.type === 'done') { setStatus('done'); if (ev.clips?.length) onDone(ev.clips); }
-      if (ev.type === 'error') setStatus('error');
+      if (ev.type === 'done') {
+        terminal = true;
+        if (ev.success === false) setStatus('error');
+        else { setStatus('done'); if (ev.clips?.length) onDone(ev.clips); }
+      }
+      if (ev.type === 'error') { terminal = true; setStatus('error'); }
       if (ev.raw) setLogs(p => [...p, { text: ev.raw, kind: ev.type }]);
     };
-    ws.onclose = () => { if (status === 'running') setStatus('done'); };
+    ws.onclose = () => { if (!terminal) setStatus('error'); };
     return () => ws.close();
   }, [jobId]);
 
@@ -320,7 +309,7 @@ function PublishModal({ clip, jobId, onClose }: { clip: Clip; jobId: string; onC
   const publish = async () => {
     setPublishing(true);
     try {
-      const r = await fetch(`${API}/social/post`, {
+      const r = await fetch(`${API}/api/social/post`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ job_id: jobId, clip_filename: clip.filename, title: clip.title, caption, platforms }),
       });
@@ -344,7 +333,7 @@ function PublishModal({ clip, jobId, onClose }: { clip: Clip; jobId: string; onC
           <textarea className="textarea-dark" value={caption} onChange={e => setCaption(e.target.value)} rows={4} style={{ userSelect: 'text' }} />
           <div className="config-label" style={{ marginTop: 14, marginBottom: 6 }}>Platforms</div>
           <div className="platform-row">
-            {['instagram', 'youtube', 'tiktok'].map(p => (
+            {['instagram', 'youtube'].map(p => (
               <button key={p} className={`platform-chip ${platforms.includes(p) ? 'selected' : ''}`} onClick={() => toggleP(p)}>
                 {p.charAt(0).toUpperCase() + p.slice(1)}
               </button>

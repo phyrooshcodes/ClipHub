@@ -9,6 +9,7 @@ from pathlib import Path
 from fastapi import APIRouter, WebSocket, Query
 from fastapi.responses import JSONResponse, FileResponse
 from api.jobs import registry
+from api.security import websocket_is_authorized
 
 router = APIRouter()
 BASE_DIR = Path(__file__).parent.parent
@@ -120,6 +121,9 @@ async def _run_ytdl(job: DownloadJob, python_exe: str, save_path: str):
 
 @router.websocket("/ws-ytdl/{job_id}")
 async def download_url_ws(websocket: WebSocket, job_id: str, url: str = ""):
+    if not websocket_is_authorized(websocket):
+        await websocket.close(code=1008)
+        return
     await websocket.accept()
     
     python_exe = str(BASE_DIR / "venv" / "Scripts" / "python.exe")

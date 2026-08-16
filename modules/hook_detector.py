@@ -168,7 +168,7 @@ def _call_with_retry(client: OpenAI, model: str, messages: list, max_tokens: int
                 model=model,
                 messages=messages,
                 temperature=0.2,
-                max_tokens=min(max_tokens, 4096),
+                max_tokens=max_tokens,
                 top_p=0.85,
                 timeout=120.0
             )
@@ -512,11 +512,10 @@ def detect_hooks(
             except Exception as e:
                 logger.error(f"[HookDetector] ❌ Chunk {chunk_idx+1} failed processing: {e}")
 
-    # 4. Deduplicate and merge clips
-    clips = _deduplicate_clips(all_raw_clips, effective_max_clips)
-
-    # Validate and clamp clip timestamps to prevent FFmpeg out-of-bound crashes
-    clips = _validate_and_clamp_clips(clips, video_duration_seconds, words)
+    # 4. Normalize timestamps before deduplication. The model schema uses start_time/end_time,
+    # while deduplication operates on milliseconds.
+    normalized_clips = _validate_and_clamp_clips(all_raw_clips, video_duration_seconds, words)
+    clips = _deduplicate_clips(normalized_clips, effective_max_clips)
 
     logger.info(f"[HookDetector] ✅ Deduplicated down to {len(clips)} viral clips across all chunks.")
     for i, clip in enumerate(clips, 1):
@@ -540,13 +539,19 @@ def _deduplicate_clips(clips: List[Dict], max_clips: int) -> List[Dict]:
     for c in sorted_clips:
         start = c.get("start_ms")
         end = c.get("end_ms")
+        if start is None and "start_time" in c:
+            try: start = int(float(c["start_time"]) * 1000)
+            except: pass
+        if end is None and "end_time" in c:
+            try: end = int(float(c["end_time"]) * 1000)
+            except: pass
         if start is None or end is None:
             continue
 
         overlap_found = False
         for accepted in deduped:
-            a_start = accepted["start_ms"]
-            a_end = accepted["end_ms"]
+            a_start = accepted.get("start_ms", 0)
+            a_end = accepted.get("end_ms", 0)
 
             # Calculate intersection window
             intersect_start = max(start, a_start)
@@ -554,8 +559,8 @@ def _deduplicate_clips(clips: List[Dict], max_clips: int) -> List[Dict]:
 
             if intersect_end > intersect_start:
                 intersect_len = intersect_end - intersect_start
-                len_c = end - start
-                len_a = a_end - a_start
+                len_c = max(1, end - start)
+                len_a = max(1, a_end - a_start)
 
                 # If overlap exceeds 40% of either clip length, consider it a duplicate
                 if (intersect_len / len_c > 0.4) or (intersect_len / len_a > 0.4):
