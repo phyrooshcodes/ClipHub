@@ -13,14 +13,19 @@
     <!-- LEFT SIDEBAR -->
     <aside class="sidebar">
       <div class="sidebar-header">
-        <div class="logo-box">Ch</div>
-        <span class="logo-text">ClipHub</span>
+        <div class="logo-box">
+          <i class="ri-movie-2-line"></i>
+        </div>
+        <div class="logo-info">
+          <span class="logo-text">ClipHub</span>
+          <span class="logo-badge">Studio</span>
+        </div>
       </div>
       
       <nav class="sidebar-nav">
         <!-- Main Nav -->
         <button class="nav-item active" id="btn-nav-studio">
-          <i class="ri-dashboard-line"></i> 
+          <i class="ri-dashboard-3-line"></i> 
           <div class="nav-text">
             <span>Studio</span>
             <small>AI Clipping Workspace</small>
@@ -34,7 +39,7 @@
           </div>
         </button>
         <button class="nav-item" id="btn-nav-review">
-          <i class="ri-user-smile-line"></i> 
+          <i class="ri-user-voice-line"></i> 
           <div class="nav-text">
             <span>Human Review</span>
             <small>Review & Edit Clips</small>
@@ -59,24 +64,29 @@
       <div class="sidebar-spacer"></div>
       
       <div class="sidebar-footer">
-        <!-- Hardware Badges (Needed by app.js) -->
-        <div class="hardware-badges">
-          <div id="ui-gpu-status" class="badge"><i class="ri-cpu-line"></i> GPU</div>
-          <div id="ui-nvenc-status" class="badge"><i class="ri-vidicon-line"></i> NVENC</div>
-          <div id="ui-kokoro-status" class="badge"><i class="ri-voiceprint-line"></i> TTS</div>
-          <div id="ui-whisper-status" class="badge"><i class="ri-mic-line"></i> Whisper</div>
+        <!-- Hardware Acceleration Status Card -->
+        <div class="system-status-card">
+          <div class="status-card-header">
+            <span><i class="ri-cpu-line"></i> SYSTEM ACCEL</span>
+            <span class="status-pulse-dot"></span>
+          </div>
+          <div class="hardware-badges">
+            <div id="ui-gpu-status" class="badge" title="GPU Hardware Status"><i class="ri-cpu-line"></i> GPU</div>
+            <div id="ui-nvenc-status" class="badge" title="NVENC Encoder Status"><i class="ri-vidicon-line"></i> NVENC</div>
+            <div id="ui-kokoro-status" class="badge" title="TTS Audio Engine"><i class="ri-voiceprint-line"></i> TTS</div>
+            <div id="ui-whisper-status" class="badge" title="Whisper ASR Model"><i class="ri-mic-line"></i> Whisper</div>
+          </div>
         </div>
 
         <button class="nav-item-simple" id="btn-settings">
-          <i class="ri-settings-4-line"></i> Settings
+          <i class="ri-settings-3-line"></i>
+          <span>Settings</span>
         </button>
       </div>
     </aside>
 
     <!-- MAIN CONTENT -->
     <main class="main-content">
-      
-
 
       <!-- 4-PANEL DASHBOARD GRID (Studio View) -->
       <div class="dashboard-grid" id="view-studio">
@@ -84,33 +94,47 @@
         <!-- TOP LEFT: Video Player / Dropzone -->
         <div class="panel panel-player">
           <div class="panel-header">
-            <h3 id="player-title">No video loaded</h3>
+            <div class="panel-header-title">
+              <i class="ri-video-line"></i>
+              <h3 id="player-title">No video loaded</h3>
+            </div>
             <div class="player-tags">
-              <span class="tag" id="ui-res">—</span>
-              <span class="tag" id="ui-dur">—</span>
-              <span class="tag" id="ui-fmt">—</span>
+              <span class="tag" id="ui-res"><i class="ri-aspect-ratio-line"></i> —</span>
+              <span class="tag" id="ui-dur"><i class="ri-time-line"></i> —</span>
+              <span class="tag" id="ui-fmt"><i class="ri-file-video-line"></i> —</span>
             </div>
           </div>
           <div class="player-container">
             <!-- Dropzone Overlay -->
             <div class="dropzone-area" id="dropzone">
-              <div class="dropzone-icon-box"></div>
-              <div class="dropzone-title" id="dz-title">Drop your video here</div>
-              <div class="dropzone-sub" id="dz-sub">MP4, MOV, MKV — any format works</div>
-              <div class="dz-actions">
-                <button class="btn-browse">Browse Files</button>
-                <button class="btn-remove hidden" id="btn-remove-file">Remove Upload</button>
-              </div>
-              
-              <div class="yt-input-wrapper">
-                <span class="yt-or">or</span>
-                <div class="yt-input-group">
-                  <input type="text" id="yt-link-input" placeholder="Paste YouTube Link...">
-                  <button id="btn-yt-import">Import</button>
+              <div class="dropzone-inner">
+                <div class="dropzone-icon-box">
+                  <i class="ri-upload-cloud-2-line"></i>
+                </div>
+                <div class="dropzone-title" id="dz-title">Drop your video here</div>
+                <div class="dropzone-sub" id="dz-sub">Supports MP4, MOV, MKV, WebM up to 2GB</div>
+                <div class="dz-actions">
+                  <button class="btn-browse"><i class="ri-folder-open-line"></i> Browse Files</button>
+                  <button class="btn-remove hidden" id="btn-remove-file"><i class="ri-delete-bin-line"></i> Remove File</button>
+                </div>
+                
+                <div class="yt-divider">
+                  <span>OR IMPORT FROM YOUTUBE</span>
+                </div>
+                
+                <div class="yt-input-wrapper">
+                  <div class="yt-input-group">
+                    <i class="ri-youtube-fill yt-icon"></i>
+                    <input type="text" id="yt-link-input" placeholder="Paste YouTube link (e.g. youtube.com/watch?v=...)">
+                    <button id="btn-yt-import"><i class="ri-download-cloud-line"></i> Import</button>
+                  </div>
                 </div>
               </div>
               
-              <button class="btn-primary-gradient mt-4" id="btn-proceed" style="width: 100%; margin-top: 15px;">Proceed to Processing</button>
+              <button class="btn-primary-action" id="btn-proceed">
+                <span>Proceed to Processing</span>
+                <i class="ri-arrow-right-line"></i>
+              </button>
               <input type="file" id="file-input" accept="video/*" hidden>
             </div>
             
@@ -121,18 +145,26 @@
         <!-- TOP RIGHT: Editorial Script -->
         <div class="panel panel-script" id="section-human-review">
           <div class="panel-header between">
-            <h3>EDITORIAL SCRIPT</h3>
+            <div class="panel-header-title">
+              <i class="ri-article-line"></i>
+              <h3>EDITORIAL SCRIPT</h3>
+            </div>
+            <span class="header-pill">AI Review Ready</span>
           </div>
           <div class="panel-tabs">
-            <button class="tab active">SCRIPT</button>
+            <button class="tab active"><i class="ri-file-text-line"></i> SCRIPT SEGMENTS</button>
           </div>
           <div class="script-content" id="review-cards-container">
             <!-- Script segments will be injected here by app.js -->
-            <div class="empty-script" style="text-align:center; padding: 20px; color:#a0a0aa; font-size:13px;">Upload a video to generate script segments.</div>
+            <div class="empty-script">
+              <div class="empty-icon"><i class="ri-file-list-3-line"></i></div>
+              <h4>No Script Generated</h4>
+              <p>Upload a video to analyze transcript, detect viral hooks, and review narrative commentary segments.</p>
+            </div>
           </div>
           <div class="script-footer">
             <button class="btn-outline-dashed"><i class="ri-add-line"></i> Add New Segment</button>
-            <button class="btn-primary-gradient" id="btn-approve-review"><i class="ri-magic-line"></i> <span id="btn-proceed-text">Generate Clip</span></button>
+            <button class="btn-primary-gradient" id="btn-approve-review"><i class="ri-sparkling-fill"></i> <span id="btn-proceed-text">Generate Clips</span></button>
           </div>
         </div>
 
@@ -272,15 +304,18 @@
     <!-- FOOTER STATUS BAR -->
     <footer class="status-bar">
       <div class="status-left">
-        <span id="footer-fps">FPS: —</span>
+        <span class="status-chip"><i class="ri-speed-up-line"></i> <span id="footer-fps">FPS: —</span></span>
         <div class="v-divider"></div>
-        <span id="footer-format">Format: —</span>
+        <span class="status-chip"><i class="ri-video-settings-line"></i> <span id="footer-format">Format: —</span></span>
         <div class="v-divider"></div>
-        <span id="footer-audio">Audio: —</span>
+        <span class="status-chip"><i class="ri-volume-up-line"></i> <span id="footer-audio">Audio: —</span></span>
         <div class="v-divider"></div>
-        <span id="footer-dur">Duration: —</span>
+        <span class="status-chip"><i class="ri-timer-line"></i> <span id="footer-dur">Duration: —</span></span>
         <div class="v-divider"></div>
-        <span id="footer-path">Path: —</span>
+        <span class="status-chip"><i class="ri-folder-line"></i> <span id="footer-path">Path: —</span></span>
+      </div>
+      <div class="status-right">
+        <span class="status-badge-engine"><i class="ri-shield-check-line"></i> NVIDIA CUDA / NVENC</span>
       </div>
     </footer>
     </main>

@@ -34,12 +34,21 @@ document.addEventListener("DOMContentLoaded", () => {
       const bKokoro = document.getElementById('ui-kokoro-status');
       const bWhisper = document.getElementById('ui-whisper-status');
       
-      const renderBadge = (txt, isGood) => `${txt} <div class="dot-green" style="${isGood ? '' : 'background:#e2e8f0;box-shadow:none;'}"></div>`;
+      const formatGpu = (gpu) => {
+        if (!gpu) return 'GPU';
+        if (gpu.includes('RTX') || gpu.includes('GTX')) {
+          const m = gpu.match(/(RTX\s*\d+(?:\s*Ti)?|GTX\s*\d+)/i);
+          return m ? m[1] : 'NVIDIA';
+        }
+        return gpu.length > 10 ? gpu.slice(0, 8) + '…' : gpu;
+      };
+
+      const renderBadge = (txt, isGood, tooltip = '') => `<span title="${tooltip || txt}" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:72px;">${txt}</span> <div class="dot-green" style="${isGood ? '' : 'background:#cbd5e1;box-shadow:none;'}"></div>`;
       
-      if (bGpu) bGpu.innerHTML = renderBadge(data.gpu, data.gpu !== 'CPU Only' && data.gpu !== 'CPU / Unknown');
-      if (bNvenc) bNvenc.innerHTML = renderBadge(data.nvenc, data.nvenc === 'Ready');
-      if (bKokoro) bKokoro.innerHTML = renderBadge(data.kokoro, data.kokoro === 'Ready');
-      if (bWhisper) bWhisper.innerHTML = renderBadge(data.whisper, data.whisper === 'Ready');
+      if (bGpu) bGpu.innerHTML = renderBadge(formatGpu(data.gpu), data.gpu !== 'CPU Only' && data.gpu !== 'CPU / Unknown', data.gpu);
+      if (bNvenc) bNvenc.innerHTML = renderBadge('NVENC', data.nvenc === 'Ready', `NVENC: ${data.nvenc}`);
+      if (bKokoro) bKokoro.innerHTML = renderBadge('TTS', data.kokoro === 'Ready', `Kokoro TTS: ${data.kokoro}`);
+      if (bWhisper) bWhisper.innerHTML = renderBadge('Whisper', data.whisper === 'Ready', `Whisper ASR: ${data.whisper}`);
       
     } catch (e) {
       console.error("Failed to refresh badges", e);
