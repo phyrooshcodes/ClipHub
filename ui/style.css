@@ -1077,8 +1077,8 @@ html, body {
 }
 
 .step-icon {
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   background: var(--bg-card);
   border: 1.5px solid var(--border-light);
@@ -1087,28 +1087,74 @@ html, body {
   align-items: center;
   justify-content: center;
   font-weight: 700;
-  font-size: 11.5px;
+  font-size: 11px;
   font-family: var(--font-mono);
-  transition: all 0.2s;
+  position: relative;
+  transition: all 0.25s ease;
+  overflow: visible;
+}
+
+.step-progress-ring {
+  position: absolute;
+  top: -3px;
+  left: -3px;
+  width: 38px;
+  height: 38px;
+  transform: rotate(-90deg);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+
+.step.active .step-progress-ring {
+  opacity: 1;
+}
+
+.ring-bg {
+  fill: none;
+  stroke: var(--border-strong);
+  stroke-width: 2.5;
+}
+
+.ring-fill {
+  fill: none;
+  stroke: var(--brand-primary);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-dasharray: 0, 100;
+  transition: stroke-dasharray 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  filter: drop-shadow(0 0 3px var(--brand-primary-glow));
 }
 
 .step.active .step-icon {
-  background: var(--brand-primary);
-  border-color: var(--brand-primary);
-  color: #ffffff;
-  box-shadow: 0 0 0 3px var(--brand-primary-glow);
-  animation: pulse-step 2s infinite;
-}
-@keyframes pulse-step {
-  0% { transform: scale(1); }
-  50% { transform: scale(1.08); }
-  100% { transform: scale(1); }
+  background: var(--bg-panel);
+  border-color: transparent;
+  color: var(--brand-primary);
+  box-shadow: 0 0 12px var(--brand-primary-glow);
 }
 
-.step.completed .step-icon {
+.step.completed .step-icon,
+.step.done .step-icon {
   background: var(--green);
   border-color: var(--green);
   color: #ffffff;
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.3);
+}
+
+.step.completed .step-progress-ring,
+.step.done .step-progress-ring {
+  opacity: 0;
+}
+
+.step-icon-content {
+  position: relative;
+  z-index: 2;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .step-label {
@@ -1123,7 +1169,8 @@ html, body {
   color: var(--brand-primary);
 }
 
-.step.completed .step-label {
+.step.completed .step-label,
+.step.done .step-label {
   color: var(--text-main);
 }
 

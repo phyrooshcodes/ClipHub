@@ -1172,64 +1172,81 @@ document.addEventListener("DOMContentLoaded", () => {
   // Core API Logic & WebSockets
   // ----------------------------------------------------
   
-  function updateProgress(stepId, name, percent) {
+  function updateStepRing(stepId, percent) {
+    const card = document.getElementById(stepId);
+    if (!card) return;
+    const ringFill = card.querySelector('.ring-fill');
+    if (ringFill) {
+      const clamped = Math.max(0, Math.min(100, Math.round(percent)));
+      ringFill.setAttribute('stroke-dasharray', `${clamped}, 100`);
+    }
+  }
+
+  function updateProgress(stepId, name, percent, exactStepPercent = null) {
+    // Map virtual steps (like step-download) to physical stepper IDs
+    if (stepId === 'step-download') stepId = 'step-demux';
+
     const stepMsgMap = {
-      'step-download': 'Fetching from YouTube...',
-      'step-demux': 'Extracting streams...',
-      'step-asr': 'Transcribing audio locally (Whisper)...',
-      'step-hook': 'AI is finding the golden hooks...',
-      'step-face': 'Tracking faces (CPU is sweating)...',
-      'step-subs': 'Baking in those viral captions...',
-      'step-render': 'Finalizing pixels... Grab a coffee ☕'
+      'step-demux': 'Extracting audio & video streams...',
+      'step-asr': 'Transcribing speech locally with Whisper...',
+      'step-hook': 'Detecting viral hooks & retention spikes...',
+      'step-face': 'Tracking speaker faces & auto-framing...',
+      'step-subs': 'Baking kinetic subtitle animations...',
+      'step-render': 'Rendering final vertical clips...'
     };
     
     if (stepId && stepMsgMap[stepId]) {
       const funText = document.getElementById('fun-status-text');
-      if(funText) funText.textContent = stepMsgMap[stepId];
-    } else if (!stepId) {
-      const funText = document.getElementById('fun-status-text');
-      if(funText) funText.textContent = 'Initializing pipeline...';
+      if (funText) funText.textContent = stepMsgMap[stepId];
     }
 
     if (stepId) {
-      document.querySelectorAll('.step').forEach(c => c.classList.remove('active'));
+      document.querySelectorAll('.stepper .step').forEach(c => {
+        if (c.id !== stepId) c.classList.remove('active');
+      });
       const card = document.getElementById(stepId);
       if (card) {
         card.classList.remove('hidden');
         card.classList.add('active');
-        const iconContainer = card.querySelector('.step-icon');
-        if (iconContainer) iconContainer.innerHTML = '<i class="ri-loader-4-line spin"></i>';
         
-        // mark previous ones as done based on typical order
-        const steps = Array.from(document.querySelectorAll('.step:not(.hidden)'));
+        // Update SVG circular ring on active step
+        const ringPercent = exactStepPercent !== null ? exactStepPercent : Math.min(100, (percent / (pipelineStageMap[Object.keys(pipelineStageMap).find(k => pipelineStageMap[k].id === stepId) || 1]?.percent || 100)) * 100);
+        updateStepRing(stepId, ringPercent || percent);
+
+        // Mark preceding steps as completed
+        const steps = Array.from(document.querySelectorAll('.stepper .step'));
         const idx = steps.indexOf(card);
         if (idx > 0) {
-          for(let i=0; i<idx; i++) {
-             const prev = steps[i];
-             if (!prev.classList.contains('done')) {
-               prev.classList.remove('active');
-               prev.classList.add('done');
-               const pIcon = prev.querySelector('.step-icon');
-               if (pIcon) pIcon.innerHTML = '<i class="ri-check-line"></i>';
-             }
+          for (let i = 0; i < idx; i++) {
+            const prev = steps[i];
+            prev.classList.remove('active');
+            prev.classList.add('completed', 'done');
+            updateStepRing(prev.id, 100);
+            const pContent = prev.querySelector('.step-icon-content');
+            if (pContent) pContent.innerHTML = '<i class="ri-check-line"></i>';
+            const prevConnector = prev.nextElementSibling;
+            if (prevConnector && prevConnector.classList.contains('step-connector')) {
+              prevConnector.classList.add('completed');
+            }
           }
         }
       }
     }
     
-    procBar.style.width = percent + "%";
-    procStageName.textContent = name + "...";
-    if (typeof gsap !== 'undefined') {
+    if (procBar) procBar.style.width = Math.min(100, Math.max(0, percent)) + "%";
+    if (procStageName) procStageName.textContent = name + (name.endsWith('...') || name.endsWith(')') ? '' : '...');
+    
+    if (typeof gsap !== 'undefined' && procPercent) {
       try {
         gsap.to(procPercent, {
-          innerHTML: percent + "%", duration: 0.3, snap: { innerHTML: 1 },
+          innerHTML: Math.round(percent) + "%", duration: 0.3, snap: { innerHTML: 1 },
           onUpdate: function() { procPercent.innerHTML = Math.round(this.targets()[0].innerHTML.replace('%','')) + "%"; }
         });
       } catch(e) {
-        procPercent.textContent = percent + "%";
+        procPercent.textContent = Math.round(percent) + "%";
       }
-    } else {
-      procPercent.textContent = percent + "%";
+    } else if (procPercent) {
+      procPercent.textContent = Math.round(percent) + "%";
     }
   }
 
@@ -1237,8 +1254,6 @@ document.addEventListener("DOMContentLoaded", () => {
     const empty = document.getElementById('empty-log-state');
     if (empty) empty.remove();
     const p = document.createElement('p');
-    // Process output and yt-dlp metadata are untrusted.  Rendering them as
-    // HTML allowed a title or log line to execute script in the dashboard.
     p.textContent = String(message).replace(/<[^>]*>/g, '');
     consoleOutput.appendChild(p);
     consoleOutput.scrollTop = consoleOutput.scrollHeight;
@@ -1246,11 +1261,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function resetSteps() {
     pipelineClip = { current: 0, total: 0 };
-    document.querySelectorAll('.step').forEach((c, i) => {
-      c.classList.remove('active', 'done');
-      const icon = c.querySelector('.step-icon');
-      if (icon) icon.innerHTML = i + 1;
+    document.querySelectorAll('.stepper .step').forEach((c, i) => {
+      c.classList.remove('active', 'completed', 'done');
+      updateStepRing(c.id, 0);
+      const content = c.querySelector('.step-icon-content');
+      if (content) content.innerHTML = i + 1;
     });
+    document.querySelectorAll('.stepper .step-connector').forEach(c => c.classList.remove('completed'));
     document.getElementById('step-download')?.classList.add('hidden');
     
     const stageName = document.getElementById('proc-stage-name');
@@ -1261,6 +1278,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const jobMeta = document.getElementById('proc-job-meta');
     if (jobMeta) jobMeta.textContent = 'Select or drop a video file above to begin';
+
+    if (procBar) procBar.style.width = "0%";
+    if (procPercent) procPercent.textContent = "Estimated time remaining: —";
+    const procSpeed = document.getElementById('proc-speed');
+    if (procSpeed) procSpeed.textContent = "Avg. Speed: —";
 
     consoleOutput.innerHTML = '<div id="empty-log-state" style="text-align:center; padding:20px; color:#a0a0aa; font-size:13px;">No activity yet</div>';
   }
@@ -1382,14 +1404,25 @@ document.addEventListener("DOMContentLoaded", () => {
       catch (e) { console.warn('Malformed WS message:', event.data); return; }
       if (data.type === 'ytdl_start') {
          appendLog(`<span class="log-info">[YT-DLP]</span> Downloading ${data.url}`);
+         updateProgress('step-demux', 'Starting Download...', 5, 0);
       } else if (data.type === 'ytdl_log') {
          appendLog(data.raw);
       } else if (data.type === 'ytdl_progress') {
-         // scale YT progress up to 20%
-         updateProgress('step-download', "Downloading Video", data.percent * 0.2);
+         const pct = Math.max(0, Math.min(100, data.percent || 0));
+         updateProgress('step-demux', `Downloading Video (${Math.round(pct)}%)`, pct * 0.2, pct);
+         
+         const procSpeed = document.getElementById('proc-speed');
+         if (procSpeed && data.speed) {
+           procSpeed.textContent = `Avg. Speed: ${data.speed} ${data.size ? '· ' + data.size : ''}`;
+         }
+         const procPercent = document.getElementById('proc-percent');
+         if (procPercent && data.eta) {
+           procPercent.textContent = `ETA: ${data.eta}`;
+         }
       } else if (data.type === 'ytdl_done') {
          document.getElementById('proc-filename').textContent = data.filename;
          appendLog(`<span class="log-highlight">[YT-DLP]</span> Completed! Connecting to Pipeline...`);
+         updateProgress('step-demux', 'Download Finished', 20, 100);
          localStorage.removeItem('ytUrl');
          currentWs.close();
          connectPipelineWS(jobId);
