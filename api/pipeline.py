@@ -350,15 +350,11 @@ async def run_pipeline_ws(websocket: WebSocket, job_id: str):
             if not Path(python_exe).exists():
                 python_exe = sys.executable
 
-        music = config.get("music", "none")
-        if music == "off": music = "none"
-
         cmd = [
             python_exe, str(BASE_DIR / "local_clipping_pipeline.py"),
             "--input", job.path, "--output-dir", str(job_dir),
             "--model", config.get("model", "small"),
             "--max-clips", str(config.get("max_clips", 10)),
-            "--music", music,
             "--caption-style", config.get("caption_style", "kinetic_slide"),
             "--font-preset", config.get("font_preset", "default"),
             "--font-name", config.get("font_name", ""),

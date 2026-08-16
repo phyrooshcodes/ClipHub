@@ -111,11 +111,6 @@ def parse_args() -> argparse.Namespace:
              "Useful for debugging subtitle/audio files."
     )
     parser.add_argument(
-        "--music",
-        default="none",
-        help="Background music choice: 'none', 'ambient', 'lofi', 'focus', 'auto' (random matches), or custom file."
-    )
-    parser.add_argument(
         "--caption-style",
         default="kinetic_slide",
         choices=[
@@ -448,37 +443,10 @@ def run_pipeline(args: argparse.Namespace) -> None:
         render_clip,
         check_nvenc_available
     )
-    from modules.music_director import MusicDirector
 
     use_nvenc = check_nvenc_available()
     rendered_clips = []
-    # Background music director setup
-    music_director = None
-    if args.music and args.music.lower() not in ("none", "off", ""):
-        music_dir = Path(__file__).parent / "Music"
-        if args.music.lower() == "auto":
-            has_audio = any(p.suffix.lower() in (".mp3", ".wav", ".m4a", ".aac") for p in music_dir.rglob("*")) if music_dir.exists() else False
-            if not has_audio:
-                from modules.bg_music import get_music_track
-                get_music_track("ambient")
-                get_music_track("lofi")
-            music_director = MusicDirector(music_dir)
-        else:
-            from modules.bg_music import get_music_track
-            track_path = get_music_track(args.music)
-            if track_path:
-                music_director = MusicDirector(Path(__file__).parent / "Music")
-                # Intercept _library_entries to only return this specific file
-                original_entries = music_director._library_entries
-                def custom_entries():
-                    entries = original_entries()
-                    target_name = os.path.basename(track_path)
-                    return [e for e in entries if e["name"] == target_name]
-                music_director._library_entries = custom_entries
-            else:
-                logger.warning(f"Background music track '{args.music}' could not be loaded; continuing without background music.")
 
-    used_music_paths = set()
     for idx, clip in enumerate(clips):
         clip_num  = idx + 1
         start_ms  = clip["start_ms"]
@@ -536,24 +504,6 @@ def run_pipeline(args: argparse.Namespace) -> None:
             outline_color=args.outline_color
         )
 
-        music_choice = None
-        if music_director:
-            music_choice = music_director.choose(
-                clip=clip,
-                clip_words=clip_words,
-                clip_duration_s=(end_ms - start_ms) / 1000.0,
-                used_paths=used_music_paths,
-            )
-            if music_choice:
-                used_music_paths.add(music_choice["path"])
-                logger.info(
-                    f"   [Music] {music_choice['name']} | "
-                    f"{music_choice['mood'].replace('_', ' ')} | "
-                    f"excerpt starts {music_choice['start_s']:.1f}s"
-                )
-            else:
-                logger.info("   [Music] no safe local track found; preserving original audio only.")
-
         # ─── Stage 6: NVENC Render ───────────────────────────
         logger.info(f"   [6/6] Rendering with {'NVENC ⚡' if use_nvenc else 'libx264 (CPU fallback)'} ...")
         
@@ -567,13 +517,12 @@ def run_pipeline(args: argparse.Namespace) -> None:
             end_ms=end_ms,
             crop_coords=crop_coords,
             subtitle_path=sub_path,
-            music_choice=music_choice,
             clip_index=idx,
             encoder="auto" if use_nvenc else "libx264",
             editorial_data=editorial_data,
             commentary_voice=getattr(args, "commentary_voice", "af_sarah"),
             intro_duration=getattr(args, "intro_duration", 2.5),
-            ai_audio_events=clip.get("ai_audio_events", [])
+            ai_audio_events=ai_audio_events
         )
 
         # Keep publishing independent from generation: enqueue only. The

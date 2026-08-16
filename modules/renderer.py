@@ -100,23 +100,6 @@ def render_clip(
         command += ["-i", ev["audio_path"]]
         ai_inputs.append({"idx": input_idx, "start_ms": int(ev["start_s"] * 1000)})
         input_idx += 1
-        
-    # Music Input
-    music_idx = -1
-    music_dict = None
-    if isinstance(music_choice, dict) and music_choice.get("path"):
-        music_dict = music_choice
-    elif isinstance(music_choice, str) and music_choice.lower() not in ("none", "", "off"):
-        from modules.bg_music import get_music_track
-        m_path = get_music_track(music_choice)
-        if m_path:
-            music_dict = {"path": m_path, "start_s": 0.0}
-
-    if music_dict:
-        music_start = float(music_dict.get("start_s", 0.0))
-        command += ["-stream_loop", "-1", "-ss", f"{music_start:.3f}", "-i", music_dict["path"]]
-        music_idx = input_idx
-        input_idx += 1
 
     filter_complex = []
     
@@ -169,27 +152,10 @@ def render_clip(
         # Duck source audio under AI audio
         filter_complex.append(f"[{a_head}][ai_mix]sidechaincompress=threshold=0.015:ratio=15:attack=10:release=300[ducked_source]")
         
-        # Mix ducked source with AI mix and apply peak limiter
-        filter_complex.append(f"[ducked_source][ai_mix]amix=inputs=2:duration=first:normalize=0,alimiter=limit=0.98[voice_mix]")
-        a_head = "voice_mix"
-
-    if music_idx != -1:
-        # Prepare Music track
-        fade_in = min(0.8, duration_s / 3)
-        fade_out = min(1.3, duration_s / 3)
-        fade_out_start = max(0.0, duration_s - fade_out)
-        
-        filter_complex.append(
-            f"[{music_idx}:a]aformat=channel_layouts=stereo,atrim=duration={duration_s:.3f},"
-            f"asetpts=N/SR/TB,afade=t=in:st=0:d={fade_in:.3f},"
-            f"afade=t=out:st={fade_out_start:.3f}:d={fade_out:.3f},"
-            f"volume=0.035[bed]"
-        )
-        # Duck music under voice mix (source + AI)
-        filter_complex.append(f"[bed][{a_head}]sidechaincompress=threshold=0.015:ratio=10:attack=15:release=300[ducked_bed]")
-        filter_complex.append(f"[{a_head}][ducked_bed]amix=inputs=2:duration=first:normalize=0,loudnorm=I=-14:LRA=7:TP=-1.5,alimiter=limit=0.95[final_audio]")
+        # Mix ducked source with AI mix and apply EBU R128 normalization & peak limiter
+        filter_complex.append(f"[ducked_source][ai_mix]amix=inputs=2:duration=first:normalize=0,loudnorm=I=-14:LRA=7:TP=-1.5,alimiter=limit=0.95[final_audio]")
         a_head = "final_audio"
-    elif a_head != "0:a" and a_head != f"{silent_audio_idx}:a":
+    elif has_audio:
         filter_complex.append(f"[{a_head}]loudnorm=I=-14:LRA=7:TP=-1.5,alimiter=limit=0.95[final_audio]")
         a_head = "final_audio"
 

@@ -140,11 +140,7 @@ async def save_nvidia_key(payload: dict):
 
 @router.get("/api/music/tracks")
 async def get_music_tracks():
-    from modules.bg_music import list_available_tracks
-    try: return list_available_tracks()
-    except Exception as e:
-        logger.error(f"Error listing music tracks: {e}")
-        return []
+    return []
 
 def _parse_subprocess_json(stdout_str: str) -> dict:
     cleaned = stdout_str.strip()
