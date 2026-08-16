@@ -64,8 +64,9 @@ async def _run_ytdl(job: DownloadJob, python_exe: str, save_path: str):
     env = os.environ.copy()
     local_bin = str(BASE_DIR / "bin")
     c_ffmpeg = r"C:\ffmpeg\bin"
+    node_dir = r"C:\Program Files\nodejs"
     current_path = env.get("PATH", "")
-    paths_to_add = [p for p in [local_bin, c_ffmpeg] if Path(p).exists() and p not in current_path]
+    paths_to_add = [p for p in [local_bin, c_ffmpeg, node_dir] if Path(p).exists() and p not in current_path]
     if paths_to_add:
         env["PATH"] = os.pathsep.join(paths_to_add) + os.pathsep + current_path
 
@@ -75,8 +76,9 @@ async def _run_ytdl(job: DownloadJob, python_exe: str, save_path: str):
     async def execute_cmd() -> bool:
         cmd = [
             python_exe, "-m", "yt_dlp",
-            "--extractor-args", "youtube:player_client=android,web",
-            "--format", "bestvideo[height<=1080]+bestaudio/best[height<=1080]/best",
+            "--remote-components", "ejs:github",
+            "--js-runtimes", "node",
+            "--format", "bestvideo[height<=1080]+bestaudio/bestvideo+bestaudio/best[height<=1080]/best",
             "--merge-output-format", "mp4",
             "--output", save_path,
             "--newline", "--no-playlist", "--no-part", "--", job.url
