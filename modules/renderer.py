@@ -97,13 +97,15 @@ def render_clip(
     # AI Audio Inputs
     ai_inputs = []
     for ev in ai_audio_events:
-        command += ["-i", ev["audio_path"]]
-        ai_inputs.append({"idx": input_idx, "start_ms": int(ev["start_s"] * 1000)})
-        input_idx += 1
+        if os.path.exists(ev["audio_path"]):
+            command += ["-i", ev["audio_path"]]
+            ev["input_idx"] = input_idx
+            ai_inputs.append(ev)
+            input_idx += 1
 
     filter_complex = []
     
-    # ─── Video Chain ───
+    # ─── Video Cropping ───
     v_head = "0:v"
     if use_dynamic:
         filter_complex.append(f"[{canvas_idx}:v]sendcmd=f='{sendcmd_ffmpeg}'[v_cmd]")
@@ -115,88 +117,79 @@ def render_clip(
         filter_complex.append(f"[0:v]crop={crop_w}:{crop_h}:{crop_x}:{crop_y}[crop_out]")
         v_head = "crop_out"
 
-    # Freeze-Frame Pause on Commentary & Voiceover
-    # If AI commentary segments are present, freeze the video frame at the insertion point
-    # so the video pauses with the pause icon while the AI speaks, and then resumes seamlessly.
-    freeze_events = [
-        ev for ev in ai_audio_events
-        if ev.get("type") in ("commentary", "hook", "takeaway") and (ev.get("end_s", 0) - ev.get("start_s", 0)) > 0.5
-    ]
-    
-    if freeze_events:
-        freeze_events.sort(key=lambda x: x["start_s"])
-        v_parts = []
-        last_t = 0.0
-        n_splits = len(freeze_events) + (1 if freeze_events[-1]["start_s"] < duration_s else 0)
+    a_head = f"{silent_audio_idx}:a" if not has_audio else "0:a"
+
+    # ─── Explainer Video & Audio Splicing (Strictly Sequential - ZERO Voice Overlap) ───
+    if ai_inputs:
+        v_segments = []
+        a_segments = []
         
-        if n_splits > 1:
-            split_tags = "".join(f"[v_sp_{i}]" for i in range(n_splits))
-            filter_complex.append(f"[{v_head}]split={n_splits}{split_tags}")
+        # 1. AI Intro Hook (Video holds opening frame while Sarah introduces the clip)
+        hook_ev = next((ev for ev in ai_inputs if ev.get("type") == "hook"), None)
+        if hook_ev:
+            filter_complex.append(f"[{v_head}]trim=start=0:end=0.1,setpts=PTS-STARTPTS,tpad=stop_mode=clone:stop_duration={hook_ev['duration']:.3f}[v_seg_hook]")
+            v_segments.append("[v_seg_hook]")
+            filter_complex.append(f"[{hook_ev['input_idx']}:a]asetpts=PTS-STARTPTS[a_seg_hook]")
+            a_segments.append("[a_seg_hook]")
+
+        # 2. Source Speech and Mid-Clip Commentary Segments
+        comm_events = [ev for ev in ai_inputs if ev.get("type") == "commentary"]
+        comm_events.sort(key=lambda x: x.get("source_time", 0.0))
+        
+        last_src_t = 0.0
+        for c_idx, cev in enumerate(comm_events):
+            t_insert = min(duration_s, max(last_src_t + 0.1, cev.get("source_time", duration_s * 0.4)))
             
-            for f_idx, fev in enumerate(freeze_events):
-                t_pause = min(duration_s, max(last_t + 0.05, fev["start_s"]))
-                f_dur = fev["end_s"] - fev["start_s"]
-                filter_complex.append(
-                    f"[v_sp_{f_idx}]trim=start={last_t:.3f}:end={t_pause:.3f},setpts=PTS-STARTPTS,"
-                    f"tpad=stop_mode=clone:stop_duration={f_dur:.3f}[v_frz_{f_idx}]"
-                )
-                v_parts.append(f"[v_frz_{f_idx}]")
-                last_t = t_pause
-                
-            if last_t < duration_s and len(v_parts) < n_splits:
-                tail_idx = len(freeze_events)
-                filter_complex.append(
-                    f"[v_sp_{tail_idx}]trim=start={last_t:.3f}:end={duration_s:.3f},setpts=PTS-STARTPTS[v_frz_tail]"
-                )
-                v_parts.append("[v_frz_tail]")
-                
-            if len(v_parts) > 1:
-                concat_inputs = "".join(v_parts)
-                filter_complex.append(f"{concat_inputs}concat=n={len(v_parts)}:v=1:a=0[v_paused]")
-                v_head = "v_paused"
-            elif len(v_parts) == 1:
-                v_head = v_parts[0].strip("[]")
+            # Source speech segment before commentary (Host speaks at full volume, AI is silent)
+            filter_complex.append(f"[{v_head}]trim=start={last_src_t:.3f}:end={t_insert:.3f},setpts=PTS-STARTPTS[v_src_{c_idx}]")
+            v_segments.append(f"[v_src_{c_idx}]")
+            filter_complex.append(f"[{a_head}]atrim=start={last_src_t:.3f}:end={t_insert:.3f},asetpts=PTS-STARTPTS[a_src_{c_idx}]")
+            a_segments.append(f"[a_src_{c_idx}]")
+            
+            # Freeze-frame pause during commentary (Host is 100% silent, AI explains concept)
+            freeze_start = max(0.0, t_insert - 0.05)
+            filter_complex.append(
+                f"[{v_head}]trim=start={freeze_start:.3f}:end={t_insert:.3f},setpts=PTS-STARTPTS,"
+                f"tpad=stop_mode=clone:stop_duration={cev['duration']:.3f}[v_frz_{c_idx}]"
+            )
+            v_segments.append(f"[v_frz_{c_idx}]")
+            filter_complex.append(f"[{cev['input_idx']}:a]asetpts=PTS-STARTPTS[a_comm_{c_idx}]")
+            a_segments.append(f"[a_comm_{c_idx}]")
+            
+            last_src_t = t_insert
+            
+        # 3. Final Source Speech segment to end of clip
+        if last_src_t < duration_s:
+            filter_complex.append(f"[{v_head}]trim=start={last_src_t:.3f}:end={duration_s:.3f},setpts=PTS-STARTPTS[v_src_tail]")
+            v_segments.append("[v_src_tail]")
+            filter_complex.append(f"[{a_head}]atrim=start={last_src_t:.3f}:end={duration_s:.3f},asetpts=PTS-STARTPTS[a_src_tail]")
+            a_segments.append("[a_src_tail]")
+            
+        if len(v_segments) > 1:
+            filter_complex.append(f"{''.join(v_segments)}concat=n={len(v_segments)}:v=1:a=0[v_sequenced]")
+            v_head = "v_sequenced"
+            
+        if len(a_segments) > 1:
+            filter_complex.append(f"{''.join(a_segments)}concat=n={len(a_segments)}:v=0:a=1,loudnorm=I=-14:LRA=7:TP=-1.5,alimiter=limit=0.95[final_audio]")
+            a_head = "final_audio"
+        elif len(a_segments) == 1:
+            filter_complex.append(f"{a_segments[0]}loudnorm=I=-14:LRA=7:TP=-1.5,alimiter=limit=0.95[final_audio]")
+            a_head = "final_audio"
+    elif has_audio:
+        filter_complex.append(f"[{a_head}]loudnorm=I=-14:LRA=7:TP=-1.5,alimiter=limit=0.95[final_audio]")
+        a_head = "final_audio"
 
     # Scale and Subtitles (Always 100% crisp HD, zero random blur)
     if safe_sub_path:
         filter_complex.append(f"[{v_head}]scale=1080:1920,ass='{safe_sub_path}'[v_final]")
     else:
         filter_complex.append(f"[{v_head}]scale=1080:1920[v_final]")
-    
-    # ─── Audio Chain (Crystal-Clear Voiceover & Source Mixing) ───
-    a_head = f"{silent_audio_idx}:a" if not has_audio else "0:a"
-    
-    if ai_inputs:
-        # Delay AI tracks
-        ai_delayed = []
-        for ai in ai_inputs:
-            filter_complex.append(f"[{ai['idx']}:a]adelay={ai['start_ms']}|{ai['start_ms']}[ai_{ai['idx']}]")
-            ai_delayed.append(f"[ai_{ai['idx']}]")
-            
-        # Mix AI voice tracks with boost
-        if len(ai_delayed) > 1:
-            inputs_str = "".join(ai_delayed)
-            filter_complex.append(f"{inputs_str}amix=inputs={len(ai_delayed)}:dropout_transition=0:normalize=0,volume=1.4[ai_mix]")
-        else:
-            filter_complex.append(f"{ai_delayed[0]}volume=1.4[ai_mix]")
-            
-        # Gently lower source background audio so AI voice is 100% intelligible
-        filter_complex.append(f"[{a_head}]volume=0.65[bg_audio]")
-        
-        # Mix background audio and AI voice track cleanly, then apply EBU R128 broadcast normalization
-        filter_complex.append(f"[bg_audio][ai_mix]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,loudnorm=I=-14:LRA=7:TP=-1.5,alimiter=limit=0.95[final_audio]")
-        a_head = "final_audio"
-    elif has_audio:
-        filter_complex.append(f"[{a_head}]loudnorm=I=-14:LRA=7:TP=-1.5,alimiter=limit=0.95[final_audio]")
-        a_head = "final_audio"
 
     filter_str = ";".join(filter_complex)
     
     use_nvenc = check_nvenc_available() if encoder == "auto" else (encoder == "h264_nvenc")
     enc_args = ["-c:v", "h264_nvenc", "-preset", NVENC_PRESET, "-cq", NVENC_CQ, "-r", "60", "-fps_mode", "cfr"] if use_nvenc else ["-c:v", "libx264", "-preset", "fast", "-crf", "23", "-r", "60", "-fps_mode", "cfr"]
 
-    # If a_head is an input stream specifier (e.g. "0:a", "1:a"), map directly without brackets.
-    # If a_head is a filtergraph label (e.g. "voice_mix", "final_audio"), enclose in brackets.
     is_direct_stream = (a_head == "0:a" or a_head == f"{silent_audio_idx}:a")
     mapped_audio = a_head if is_direct_stream else f"[{a_head}]"
 
@@ -205,7 +198,7 @@ def render_clip(
         "-map", "[v_final]",
         "-map", mapped_audio,
     ] + enc_args + [
-        "-c:a", "aac", "-b:a", AUDIO_BITRATE, "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-shortest", output_path
+        "-c:a", "aac", "-b:a", AUDIO_BITRATE, "-pix_fmt", "yuv420p", "-movflags", "+faststart", output_path
     ]
 
     logger.info(f"[Renderer] Rendering clip {clip_index + 1}: {output_path} (NVENC={use_nvenc})")

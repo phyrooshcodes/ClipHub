@@ -35,122 +35,100 @@ def align_editorial_timeline(
     ai_audio_events = []
     ai_words = []
 
-    # Helper to process a TTS segment
-    def process_segment(text: str, start_time_rel: float, seg_type: str) -> float:
-        nonlocal current_time
-        if not text:
-            return current_time
-            
-        safe_text = "".join(c if c.isalnum() else "_" for c in text[:20])
-        audio_path = os.path.join(temp_dir, f"{seg_type}_{clip['start_ms']}_{safe_text}.wav")
-        
-        # Generate TTS synchronously without event loop conflicts
-        duration = generate_tts_sync(text, voice_id, audio_path)
-        if duration <= 0:
-            return current_time
-            
-        # Ensure start time is strictly after previous AI audio segment
-        target_start = max(start_time_rel, current_time + (0.1 if current_time > 0 else 0.0))
-        
-        # If segment overflows clip duration, attempt to place earlier if room exists
-        if target_start + duration > clip_duration:
-            if clip_duration - duration >= current_time + 0.1:
-                target_start = max(current_time + 0.1, clip_duration - duration)
-            else:
-                # Does not fit in remaining clip timeline without clipping speech
-                return current_time
-
-        # Transcribe to get word timings
-        # model="tiny" is fast and sufficient for pristine TTS audio
-        tts_words = transcribe_audio(audio_path, model_size="tiny", language="en")
-        
-        # Shift words to relative clip timeline
-        for w in tts_words:
-            w["start"] += target_start + clip_start_s
-            w["end"] += target_start + clip_start_s
-            w["is_ai"] = True  # flag for styling later if needed
-            ai_words.append(w)
-            
-        ai_audio_events.append({
-            "start_s": target_start,
-            "end_s": target_start + duration,
-            "audio_path": audio_path,
-            "type": seg_type,
-            "text": text
-        })
-        current_time = target_start + duration
-        return current_time
-
-    # 1. Hook (Starts at 0.0, pauses video at opening)
-    current_time = 0.0
+    # 1. AI Intro Hook (Plays at start while video holds opening frame)
     hook_val = editorial_data.get("hook")
     hook_text = hook_val.get("text", "") if isinstance(hook_val, dict) else (hook_val or "")
+    duration_hook = 0.0
+
     if isinstance(hook_text, str) and hook_text.strip():
-        current_time = process_segment(hook_text.strip(), current_time, "hook")
+        clean_hook = hook_text.strip()
+        safe_text = "".join(c if c.isalnum() else "_" for c in clean_hook[:20])
+        hook_audio_path = os.path.join(temp_dir, f"hook_{clip['start_ms']}_{safe_text}.wav")
+        duration_hook = generate_tts_sync(clean_hook, voice_id, hook_audio_path)
+        
+        if duration_hook > 0:
+            hook_words = transcribe_audio(hook_audio_path, model_size="tiny", language="en")
+            for w in hook_words:
+                w["start"] += clip_start_s
+                w["end"] += clip_start_s
+                w["is_ai"] = True
+                ai_words.append(w)
+                
+            ai_audio_events.append({
+                "type": "hook",
+                "audio_path": hook_audio_path,
+                "duration": duration_hook,
+                "source_time": 0.0,
+                "start_s": 0.0,
+                "end_s": duration_hook,
+                "text": clean_hook
+            })
 
-    # 2. Commentary Segments (Pauses video at sentence conclusion)
-    for seg in editorial_data.get("commentary_segments", []):
+    # 2. AI Commentary Segment (Video pauses on freeze-frame while AI explains concept)
+    comm_segments = editorial_data.get("commentary_segments", [])
+    duration_comm = 0.0
+    t_insert_src = None
+
+    if comm_segments and isinstance(comm_segments, list):
+        seg = comm_segments[0]
+        comm_text = seg.get("text", "").strip()
         insert_text = seg.get("insert_after_text", "").strip()
-        if not insert_text:
-            continue
-            
-        clean_tokens = [re.sub(r'[^\w]', '', t.lower()) for t in insert_text.split() if re.sub(r'[^\w]', '', t.lower())]
-        if not clean_tokens:
-            continue
-            
-        insert_time = -1.0
-        n_tokens = len(clean_tokens)
-        # Search backwards for multi-word token sequence
-        for i in range(len(source_words) - n_tokens, -1, -1):
-            window = [re.sub(r'[^\w]', '', source_words[i + k]["word"].lower()) for k in range(n_tokens)]
-            if window == clean_tokens:
-                insert_time = source_words[i + n_tokens - 1]["end"] - clip_start_s
-                break
+        
+        if comm_text:
+            # Find insertion point in source words
+            if insert_text:
+                clean_tokens = [re.sub(r'[^\w]', '', t.lower()) for t in insert_text.split() if re.sub(r'[^\w]', '', t.lower())]
+                n_tokens = len(clean_tokens)
+                if n_tokens > 0:
+                    for i in range(len(source_words) - n_tokens, -1, -1):
+                        window = [re.sub(r'[^\w]', '', source_words[i + k]["word"].lower()) for k in range(n_tokens)]
+                        if window == clean_tokens:
+                            t_insert_src = source_words[i + n_tokens - 1]["end"] - clip_start_s
+                            break
+                            
+            # Fallback to 40% into clip if no match found
+            if t_insert_src is None or t_insert_src < 3.0 or t_insert_src > clip_duration - 4.0:
+                t_insert_src = max(3.0, clip_duration * 0.40)
                 
-        # Fallback to exact single word match if sequence was not found
-        if insert_time < 0:
-            target_single = clean_tokens[-1]
-            for w in reversed(source_words):
-                if re.sub(r'[^\w]', '', w["word"].lower()) == target_single:
-                    insert_time = w["end"] - clip_start_s
-                    break
-                
-        if insert_time >= 0:
-            insert_time = max(insert_time, current_time + 0.1)
-            if insert_time < clip_duration:
-                current_time = process_segment(seg.get("text", ""), insert_time, "commentary")
+            safe_text = "".join(c if c.isalnum() else "_" for c in comm_text[:20])
+            comm_audio_path = os.path.join(temp_dir, f"commentary_{clip['start_ms']}_{safe_text}.wav")
+            duration_comm = generate_tts_sync(comm_text, voice_id, comm_audio_path)
+            
+            if duration_comm > 0:
+                comm_timeline_start = duration_hook + t_insert_src
+                comm_words = transcribe_audio(comm_audio_path, model_size="tiny", language="en")
+                for w in comm_words:
+                    w["start"] += comm_timeline_start + clip_start_s
+                    w["end"] += comm_timeline_start + clip_start_s
+                    w["is_ai"] = True
+                    ai_words.append(w)
+                    
+                ai_audio_events.append({
+                    "type": "commentary",
+                    "audio_path": comm_audio_path,
+                    "duration": duration_comm,
+                    "source_time": t_insert_src,
+                    "start_s": comm_timeline_start,
+                    "end_s": comm_timeline_start + duration_comm,
+                    "text": comm_text
+                })
 
-    # 3. Takeaway (Aligned near end of clip)
-    takeaway_val = editorial_data.get("takeaway")
-    takeaway_text = takeaway_val.get("text", "") if isinstance(takeaway_val, dict) else (takeaway_val or "")
-    if isinstance(takeaway_text, str) and takeaway_text.strip():
-        text = takeaway_text.strip()
-        est_words = len(text.split())
-        est_dur = max(1.5, est_words * 0.35)
-        ideal_start = max(0.0, clip_duration - est_dur - 0.5)
-        actual_start = max(ideal_start, current_time + 0.2)
-        if actual_start < clip_duration:
-            process_segment(text, actual_start, "takeaway")
-
-    # Freeze-Frame Pause & Timeline Shift:
-    # All source words after an AI pause point are shifted forward by the pause duration
-    # so that 100% of the original host/guest dialogue is preserved without dropping words.
+    # 3. Source Words Shifting:
+    # Shift source words so they never collide with AI hook or AI commentary
     shifted_source_words = []
     for w in source_words:
         w_copy = dict(w)
-        w_start_rel = w["start"] - clip_start_s
+        rel_start = w["start"] - clip_start_s
         
-        # Calculate cumulative pause shift from earlier AI events
-        shift = sum(
-            (ev["end_s"] - ev["start_s"])
-            for ev in ai_audio_events
-            if ev["start_s"] <= w_start_rel
-        )
+        shift = duration_hook
+        if t_insert_src is not None and duration_comm > 0 and rel_start >= t_insert_src:
+            shift += duration_comm
+            
         w_copy["start"] += shift
         w_copy["end"] += shift
         shifted_source_words.append(w_copy)
 
-    # Combine all words and sort chronologically
+    # 4. Combine all words and sort chronologically
     combined_words = shifted_source_words + ai_words
     combined_words.sort(key=lambda x: x["start"])
 
