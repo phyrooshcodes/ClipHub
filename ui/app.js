@@ -588,7 +588,20 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   if (btnStudioProceed) {
     btnStudioProceed.addEventListener('click', async () => {
-      if (!currentPendingJob) return;
+      // Fallback: If currentPendingJob was not set, derive from stagedFile or yt-link-input
+      if (!currentPendingJob) {
+        const ytInput = document.getElementById('yt-link-input')?.value?.trim();
+        if (stagedFile) {
+          currentPendingJob = { source: stagedFile, isYoutube: false, isExistingUpload: false, isStandaloneTool: false };
+        } else if (ytInput) {
+          currentPendingJob = { source: ytInput, isYoutube: true, isExistingUpload: false, isStandaloneTool: false };
+        } else {
+          Toast.show("Please select a video file or enter a YouTube link first.", "info");
+          document.getElementById('modal-caption-studio')?.classList.add('hidden');
+          return;
+        }
+      }
+
       if (currentPendingJob.isStandaloneTool) {
         document.getElementById('caption-studio-main')?.classList.add('hidden');
         document.getElementById('standalone-caption-loading')?.classList.remove('hidden');
@@ -621,8 +634,9 @@ document.addEventListener("DOMContentLoaded", () => {
           document.getElementById('caption-studio-main')?.classList.remove('hidden');
         }
       } else {
+        const jobToStart = { ...currentPendingJob };
         document.getElementById('modal-caption-studio')?.classList.add('hidden');
-        startProcessing(currentPendingJob.source, currentPendingJob.isYoutube, currentPendingJob.isExistingUpload);
+        startProcessing(jobToStart.source, jobToStart.isYoutube, jobToStart.isExistingUpload);
       }
     });
   }
@@ -1351,11 +1365,21 @@ document.addEventListener("DOMContentLoaded", () => {
             throw new Error(data.error || "Failed to start YouTube download job");
           }
         } else if (isExistingUpload) {
-          currentJobId = fileOrUrl;
-          localStorage.setItem('currentJobId', fileOrUrl);
-          localStorage.setItem('currentJobId_ts', Date.now());
-          await sendConfig(fileOrUrl);
-          connectPipelineWS(fileOrUrl);
+          const res = await fetch(`/api/start-from-upload/${encodeURIComponent(fileOrUrl)}`, { method: 'POST' });
+          const data = await res.json();
+          if (data.job_id) {
+            currentJobId = data.job_id;
+            localStorage.setItem('currentJobId', data.job_id);
+            localStorage.setItem('currentJobId_ts', Date.now());
+            if (data.filename) {
+              const fnEl = document.getElementById('proc-filename');
+              if (fnEl) fnEl.textContent = data.filename;
+            }
+            await sendConfig(data.job_id);
+            connectPipelineWS(data.job_id);
+          } else {
+            throw new Error(data.error || "Failed to start pipeline from existing upload");
+          }
         } else {
            // Normal file upload
            const fd = new FormData();
