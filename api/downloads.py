@@ -4,6 +4,7 @@ import re
 import sys
 import time
 import uuid
+import shutil
 from pathlib import Path
 from typing import Dict, List
 import threading
