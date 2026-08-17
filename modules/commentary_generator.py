@@ -11,6 +11,7 @@ load_dotenv()
 NVIDIA_API_KEY = os.environ.get("NVIDIA_API_KEY", "")
 NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1"
 MODEL_NAME = "meta/llama-3.3-70b-instruct"
+MODEL_FALLBACKS = ["meta/llama-3.3-70b-instruct", "nvidia/llama-3.1-nemotron-70b-instruct", "meta/llama-3.1-70b-instruct", "mistralai/mistral-nemo-12b-instruct"]
 
 # We request JSON mode from the LLM
 SYSTEM_PROMPT = """You are the Lead Editor of ClipHub, an AI-powered short-form editorial engine.
@@ -71,7 +72,8 @@ def generate_commentary(
 
     client = OpenAI(
         base_url=NVIDIA_BASE_URL,
-        api_key=key
+        api_key=key,
+        max_retries=0
     )
 
     user_prompt = f"""
@@ -93,28 +95,32 @@ Analyze the above and generate the editorial components as JSON.
     import re
 
     response_content = None
-    for attempt in range(3):
+    for model_candidate in MODEL_FALLBACKS:
         try:
-            response = client.chat.completions.create(
-                model=MODEL_NAME,
+            stream = client.chat.completions.create(
+                model=model_candidate,
                 messages=[
                     {"role": "system", "content": SYSTEM_PROMPT},
                     {"role": "user", "content": user_prompt}
                 ],
                 temperature=0.7,
                 max_tokens=1024,
-                timeout=60.0
+                stream=True,
+                timeout=30.0
             )
-            response_content = response.choices[0].message.content
+            chunks = []
+            for chunk in stream:
+                if chunk.choices and len(chunk.choices) > 0:
+                    delta = chunk.choices[0].delta
+                    c = getattr(delta, "content", None)
+                    if c: chunks.append(c)
+            response_content = "".join(chunks).strip()
             if response_content:
+                logger.info(f"[CommentaryGenerator] Successfully generated commentary via {model_candidate}")
                 break
-        except (APIConnectionError, APITimeoutError, RateLimitError, InternalServerError, APIStatusError) as e:
-            if attempt == 2:
-                logger.error(f"Failed to generate commentary after 3 retries: {e}")
-                return {"hook": None, "commentary_segments": [], "takeaway": None, "qc_flag": f"Generation Error: {e}"}
-            sleep_s = (attempt + 1) * 2
-            logger.warning(f"[CommentaryGenerator] Retry {attempt+1}/3 in {sleep_s}s: {e}")
-            time.sleep(sleep_s)
+        except Exception as e:
+            logger.warning(f"[CommentaryGenerator] Model {model_candidate} failed: {e}. Trying fallback...")
+            continue
 
     if not response_content:
         return {"hook": None, "commentary_segments": [], "takeaway": None, "qc_flag": "Error: Empty response from LLM"}

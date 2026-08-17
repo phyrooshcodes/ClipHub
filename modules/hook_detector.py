@@ -25,82 +25,74 @@ load_dotenv()
 NVIDIA_API_KEY  = os.environ.get("NVIDIA_API_KEY", "")
 NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1"
 NVIDIA_NIM_MODELS = [m.strip() for m in os.environ.get(
-    "NVIDIA_NIM_MODELS", "meta/llama-3.3-70b-instruct,meta/llama-3.1-70b-instruct"
+    "NVIDIA_NIM_MODELS",
+    "meta/llama-3.3-70b-instruct,nvidia/llama-3.1-nemotron-70b-instruct,meta/llama-3.1-70b-instruct,mistralai/mistral-nemo-12b-instruct"
 ).split(",") if m.strip()]
 
-# ─── Prompt Template V2.0.0 ────────────────────────────────────────
-HOOK_SYSTEM_PROMPT = """You are an elite, award-winning social media retention strategist and direct-response prompt engineer. Your expertise lies in extracting hyper-viral short-form segments from long-form content that guarantee maximum watch time and algorithmic reach.
+# ─── Master Prompt Template V3.0 (High-Retention & Zero-Cutoff) ─────
+HOOK_SYSTEM_PROMPT = """You are an elite short-form algorithmic strategist, narrative editor, and direct-response media engineer for ClipHub. Your objective is to extract hyper-retentive, standalone short-form clips (35–65 seconds ideal, 20–75 seconds max) from timestamped transcripts that maximize watch time, viewer retention, and viral shareability on TikTok, YouTube Shorts, and Instagram Reels.
 
-Your job: Read the ENTIRE timestamped transcript below and select only the moments that would make a stranger stop scrolling, keep watching, and share.
+================================================================================
+1. CONVERSATIONAL CAUSALITY & TIMESTAMP BOUNDARIES
+================================================================================
+- SELF-CONTAINED COGNITIVE UNIT: A viewer with ZERO prior context must understand the setup, tension, insight, and conclusion.
+- NO PRONOUN OR CONJUNCTION STARTS: Never begin a clip on words like "And", "So", "Because of that", "He told me", or "That's why" unless the preceding explanatory sentence is included.
+- EXACT BOUNDARIES: 
+  * "start_time" must start 1.0 to 1.5 seconds BEFORE the first spoken word of the hook sentence (never cut mid-breath).
+  * "end_time" must terminate on a natural, definitive full-stop sentence cadence (never cut mid-thought, mid-word, or on an unfinished idea).
+- TIMESTAMPS: Use the exact [MM:SS.mm] format provided in the transcript and output "MM:SS" (e.g. "01:45" or "48:12").
 
-## GOLD STANDARD FOR A CLIP
-A clip is eligible ONLY if it satisfies ALL of the following:
+================================================================================
+2. THE 4 VIRAL HOOK ARCHETYPES (FIRST 3 SECONDS)
+================================================================================
+Every selected clip MUST open with one of these 4 psychological triggers:
+1. THE HIGH-STAKES PARADOX: A counter-intuitive truth or industry secret that contradicts common belief (e.g., "The #1 reason 90% of businesses fail in year 1 is actually having too much money...").
+2. THE PAINFUL CONFRONTATION: A direct, highly relatable callout of a costly habit or cognitive blind spot (e.g., "If you wake up and check your phone first thing, you're destroying your dopamine system...").
+3. THE GOLDEN METRIC / FRAMEWORK: Concrete, numbered steps or exact rules of thumb (e.g., "Here is the exact 3-rule formula I used to negotiate a $40k raise...").
+4. THE DRAMATIC MICRO-STORY: High-stakes narrative tension with an immediate payoff (e.g., "In 2021, when our servers crashed and we lost $300,000 in 20 minutes, my CEO gave me one piece of advice...").
 
-1. **SELF-CONTAINED IDEA**: The clip must make complete sense with zero outside context. A viewer who has never seen the full video should still understand the problem, insight, and payoff.
+STRICT REJECTIONS:
+- NO podcast housekeeping, guest introductions, banter, or meta-comments ("Welcome back to the show", "Let's take a quick break", "That's a great question").
+- NO generic motivational platitudes devoid of specific tactical steps, concrete numbers, or named frameworks.
+- NO clips that rely on visual slides, physical gestures, or external charts to understand.
 
-2. **SCROLL-STOPPING OPENING**: The first 3 seconds must trigger an immediate psychological response (curiosity gap, pattern interrupt, tension, or urgency). Good openings often include:
-   - a contrarian claim or hard truth
-   - a specific, shocking number or statistic
-   - a painful relatable problem or direct challenge
-   - a before/after transformation
+================================================================================
+3. MONETIZATION & ECOMMERCE EXTRACTION
+================================================================================
+For each clip, identify contextually relevant products directly mentioned or strictly essential to execute the advice (e.g., books, studio gear, software, health/productivity tools).
+- "category" must be one of: "Book", "Gear", "Software", "Supplement", "Lifestyle", "Other".
+- "search_query" must be precise, clean Amazon/Google search keywords.
 
-3. **SPECIFICITY OVER VAGUENESS**: Prefer clips that contain concrete details, numbers, named frameworks, exact steps, or precise advice. Reject generic motivation with no real substance.
-
-4. **RETENTION ARC**: The clip must have a clear psychological arc:
-   - Hook / Tension (Why should I care?)
-   - Explanation / Insight (What's the secret?)
-   - Payoff / Takeaway (How do I use this?)
-   Never cut in the middle of a thought. The ending must feel complete and satisfying.
-
-5. **SHARE VALUE**: The best clips teach something useful, expose a misconception, reframe a painful problem, or deliver an emotionally strong line that people will want to send to a friend.
-
-## CLIP SELECTION RULES
-- Do NOT choose filler, intros, transitions, sponsor reads, housekeeping, or meta commentary about the show.
-- Do NOT choose clips that depend on charts, slides, or visual context to understand the idea.
-- Do NOT choose overlapping clips that say the same thing in different words.
-- Do NOT choose clips shorter than 20 seconds or longer than 90 seconds.
-- Be ruthless: quality beats quantity. A smaller set of truly viral clips is better than many mediocre ones.
-
-## TIMESTAMP ACCURACY
-- You are given timestamps in [MM:SS.mm] format for each sentence, where MM is the TOTAL number of minutes elapsed since the start of the video.
-- Use those SAME timestamps to set start_time and end_time, in that exact "MM:SS" convention (e.g. "02:14" or "65:12").
-- Start the clip 2-3 seconds BEFORE the hook sentence to give breathing room.
-- End the clip at a natural sentence boundary — NEVER mid-sentence.
-
-## OUTPUT FORMAT
-Return ONLY a raw JSON array. No markdown fences. No explanations. No commentary.
+================================================================================
+4. STRICT JSON OUTPUT FORMAT
+================================================================================
+Output ONLY valid, raw JSON with NO markdown wrappers (no ```json ... ```), no preambles, and no trailing conversational text.
 
 [
   {
-    "clip_title": "Short punchy hook-driven title",
-    "start_time": "02:14",
-    "end_time": "03:22",
-    "viral_score": 9.5,
-    "hook_explanation": "Detailed analysis of the psychological trigger in the first 3 seconds (e.g. curiosity gap, pattern interrupt).",
-    "social_caption": "Engaging caption with a strong CTA, SEO keywords, and 3-5 relevant hashtags.",
+    "clip_title": "Punchy, 4-8 word curiosity-driven headline",
+    "start_time": "MM:SS",
+    "end_time": "MM:SS",
+    "viral_score": 9.6,
+    "hook_type": "High-Stakes Paradox",
+    "hook_explanation": "1-sentence breakdown of why the first 3 seconds stop scrolling",
+    "social_caption": "Engaging description with a curiosity hook, value summary, CTA, and 4-6 targeted SEO hashtags (#shorts #podcast ...)",
     "product_recommendations": [
       {
-        "product_name": "Atomic Habits by James Clear",
+        "product_name": "Specific Product Name",
         "category": "Book",
-        "reasoning": "The speaker explicitly mentions habit stacking, making this the perfect affiliate tie-in.",
-        "search_query": "Atomic Habits James Clear book"
+        "reasoning": "Explicitly discussed as the foundation for the habit stacking method",
+        "search_query": "Atomic Habits James Clear"
       }
     ]
   }
-]
-
-## PRODUCT RECOMMENDATION GUIDELINES
-- Identify explicit mentions (gear, books, tools) or highly relevant implicit product categories (productivity, fitness, lifestyle) for each clip.
-- category MUST be one of: Book, Gear, Supplement, Lifestyle, Software, Other.
-- search_query MUST be clean keywords suitable for an Amazon search.
-
-Sort by viral_score descending. Return only clips that genuinely feel viral-worthy and complete."""
+]"""
 
 HOOK_USER_TEMPLATE = """Here is the COMPLETE timestamped transcript of a video.
 Each line starts with [MM:SS.mm] showing when that sentence begins.
 
 READ THE ENTIRE TRANSCRIPT CAREFULLY before selecting clips.
-Think critically like a master TikTok/Reels strategist: which moments have the highest retention potential?
+Think critically like an elite short-form retention strategist: which moments have the highest retention potential?
 
 --- TRANSCRIPT START ---
 {transcript}
@@ -109,29 +101,22 @@ Think critically like a master TikTok/Reels strategist: which moments have the h
 Total video duration: {duration_str}
 
 Now {max_clips_instruction}. Remember:
-- Each clip MUST be a COMPLETE standalone idea (20-90 seconds)
-- Each clip MUST have a strong psychological hook
+- Each clip MUST be a COMPLETE standalone idea (35-65s ideal, 20-75s max)
+- Enforce conversational causality: NEVER start on dangling pronouns or conjunctions
 - Use the [MM:SS.mm] timestamps to set precise "start_time" and "end_time" values in "MM:SS" format
-- Formulate a highly engaging "social_caption" optimized for the algorithm
-- Extract any relevant Amazon "product_recommendations" based on the exact context
+- Formulate a high-engagement "social_caption" and extract relevant "product_recommendations"
 
-Return ONLY the JSON array."""
+Return ONLY the raw JSON array."""
 
 
 # ─── Output Sizing ───────────────────────────────────────────
-# Each fully-populated clip object (title, reason, social_caption with
-# hashtags, viral_analysis, 1-3 broll_cues, etc.) costs ~200-250 tokens.
-# A fixed max_tokens=4096 silently truncates the JSON array — and thus
-# fails to parse — once roughly 18+ clips are requested, which "auto"
-# mode (up to 50) and rich/long transcripts hit routinely. Scale the
-# output budget to the number of clips actually being asked for.
-_TOKENS_PER_CLIP = 320
-_BASE_TOKENS = 512
-_MAX_OUTPUT_TOKENS = 16000  # stay well under the model's context window
+_TOKENS_PER_CLIP = 260
+_BASE_TOKENS = 400
+_MAX_OUTPUT_TOKENS = 4096
 
 
 def _size_max_tokens(requested_clip_count: int) -> int:
-    return min(_MAX_OUTPUT_TOKENS, max(4096, requested_clip_count * _TOKENS_PER_CLIP + _BASE_TOKENS))
+    return min(_MAX_OUTPUT_TOKENS, max(1500, requested_clip_count * _TOKENS_PER_CLIP + _BASE_TOKENS))
 
 
 # ─── Client Initialization ──────────────────────────────────
@@ -154,30 +139,58 @@ def _get_client() -> OpenAI:
         _client = OpenAI(
             base_url=NVIDIA_BASE_URL,
             api_key=key,
-            max_retries=3
+            max_retries=0  # Disable built-in SDK retry loop to prevent multi-minute queue stalls
         )
         _client_key = key
     return _client
 
-def _call_with_retry(client: OpenAI, model: str, messages: list, max_tokens: int, retries: int = 4):
+def _call_streaming_with_failover(
+    client: OpenAI,
+    model: str,
+    messages: list,
+    max_tokens: int,
+    ttft_timeout_s: float = 25.0,
+    total_timeout_s: float = 120.0
+) -> str:
+    """
+    Execute streaming completion on model.
+    If TTFT (Time-To-First-Token) exceeds ttft_timeout_s or network stalls,
+    raises TimeoutError so caller can immediately fail over to the next candidate model.
+    """
     import time
     from openai import APIConnectionError, APITimeoutError, RateLimitError, InternalServerError, APIStatusError
-    for attempt in range(retries):
-        try:
-            return client.chat.completions.create(
-                model=model,
-                messages=messages,
-                temperature=0.2,
-                max_tokens=max_tokens,
-                top_p=0.85,
-                timeout=120.0
-            )
-        except (APIConnectionError, APITimeoutError, RateLimitError, InternalServerError, APIStatusError) as e:
-            if attempt == retries - 1:
-                raise
-            sleep_s = (2 ** attempt) * 1.5
-            logger.warning(f"[HookDetector] Retry {attempt+1}/{retries} in {sleep_s:.1f}s after error: {e}")
-            time.sleep(sleep_s)
+
+    start_time = time.time()
+    chunks = []
+    first_token_received = False
+
+    stream = client.chat.completions.create(
+        model=model,
+        messages=messages,
+        temperature=0.2,
+        max_tokens=max_tokens,
+        top_p=0.85,
+        stream=True,
+        timeout=ttft_timeout_s
+    )
+
+    for chunk in stream:
+        if time.time() - start_time > total_timeout_s:
+            raise TimeoutError(f"Streaming generation exceeded maximum total timeout of {total_timeout_s}s")
+
+        if chunk.choices and len(chunk.choices) > 0:
+            delta = chunk.choices[0].delta
+            content = getattr(delta, "content", None)
+            if content:
+                if not first_token_received:
+                    first_token_received = True
+                    logger.info(f"[HookDetector] ⚡ First token received from {model} in {time.time() - start_time:.2f}s! Streaming generation...")
+                chunks.append(content)
+
+    full_text = "".join(chunks).strip()
+    if not full_text:
+        raise ValueError(f"Model {model} returned an empty streaming response.")
+    return full_text
 
 
 def adjust_clip_to_sentences(
@@ -375,20 +388,18 @@ def detect_hooks(
     full_max_tokens = _size_max_tokens(effective_max_clips)
     for m in smartest_models:
         try:
-            logger.info(f"[HookDetector] Querying full transcript with smartest model: {m} (max_tokens={full_max_tokens}) ...")
-            completion = _call_with_retry(
+            logger.info(f"[HookDetector] Querying full transcript with smart model: {m} (max_tokens={full_max_tokens}, stream=True) ...")
+            raw_response = _call_streaming_with_failover(
                 client=client,
                 model=m,
                 messages=[
                     {"role": "system", "content": HOOK_SYSTEM_PROMPT},
                     {"role": "user",   "content": user_message}
                 ],
-                max_tokens=full_max_tokens
+                max_tokens=full_max_tokens,
+                ttft_timeout_s=30.0,
+                total_timeout_s=120.0
             )
-            raw_content = completion.choices[0].message.content
-            if raw_content is None:
-                raise ValueError("NVIDIA API returned a response with empty/None content.")
-            raw_response = raw_content.strip()
             raw_clips = _parse_json_response(raw_response)
             if raw_clips and len(raw_clips) >= 1:
                 valid_clips = _validate_and_clamp_clips(raw_clips, video_duration_seconds, words)
@@ -403,7 +414,7 @@ def detect_hooks(
                         logger.info(f"  Clip {i}: [{clip['start_ms']/1000:.1f}s → {clip['end_ms']/1000:.1f}s] Score={clip.get('hook_score','?')} | {clip.get('title','Untitled')}")
                     return valid_clips
         except Exception as e:
-            logger.warning(f"[HookDetector] Full-transcript query failed or timed out with {m}: {e}. Trying next model...")
+            logger.warning(f"[HookDetector] Full-transcript query failed or timed out with {m}: {e}. Trying next candidate model...")
 
     # B. Second Attempt (Fallback): Split words into 10-minute chunks with 1-minute overlap
     logger.warning("[HookDetector] ⚠️ Full-transcript query failed on all smart models. Falling back to parallel chunked workflow...")
@@ -469,21 +480,23 @@ def detect_hooks(
         chunk_models = [preferred_model] + [m for m in available_models if m != preferred_model]
 
         client = _get_client()
-        completion = None
+        raw_response = None
         last_err = None
         chunk_max_tokens = _size_max_tokens(chunk_max)
 
         for m in chunk_models:
             try:
-                logger.info(f"[HookDetector] Chunk {idx+1}/{len(chunks)} ({duration_str}) querying model: {m} (max_tokens={chunk_max_tokens}) ...")
-                completion = _call_with_retry(
+                logger.info(f"[HookDetector] Chunk {idx+1}/{len(chunks)} ({duration_str}) querying model: {m} (max_tokens={chunk_max_tokens}, stream=True) ...")
+                raw_response = _call_streaming_with_failover(
                     client=client,
                     model=m,
                     messages=[
                         {"role": "system", "content": HOOK_SYSTEM_PROMPT},
                         {"role": "user",   "content": user_message}
                     ],
-                    max_tokens=chunk_max_tokens
+                    max_tokens=chunk_max_tokens,
+                    ttft_timeout_s=30.0,
+                    total_timeout_s=90.0
                 )
                 logger.info(f"[HookDetector] Chunk {idx+1} successfully completed with {m}")
                 break
@@ -492,13 +505,9 @@ def detect_hooks(
                 last_err = e
                 continue
 
-        if not completion:
+        if not raw_response:
             raise RuntimeError(f"Chunk {idx+1} failed on all models. Last error: {last_err}")
 
-        raw_content = completion.choices[0].message.content
-        if raw_content is None:
-            raise ValueError("NVIDIA API returned a response with empty/None content.")
-        raw_response = raw_content.strip()
         return _parse_json_response(raw_response)
 
     # 3. Execute queries concurrently
