@@ -111,6 +111,14 @@ def render_clip(
         click_sfx_idx = input_idx
         input_idx += 1
 
+    avatar_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "assets", "avatars", "anime_presenter.png"))
+    has_avatar = os.path.exists(avatar_path)
+    avatar_input_idx = -1
+    if has_avatar and ai_inputs:
+        command += ["-i", avatar_path]
+        avatar_input_idx = input_idx
+        input_idx += 1
+
     filter_complex = []
     
     # ─── Video Cropping ───
@@ -153,7 +161,7 @@ def render_clip(
         if hook_ev:
             filter_complex.append(
                 f"[{v_split_tags[v_idx]}]trim=start=0:end=0.1,setpts=PTS-STARTPTS,"
-                f"tpad=stop_mode=clone:stop_duration={hook_ev['duration']:.3f}[v_seg_hook]"
+                f"tpad=stop_mode=clone:stop_duration={hook_ev['duration']:.3f},scale=1080:1920[v_seg_hook]"
             )
             v_segments.append("[v_seg_hook]")
             v_idx += 1
@@ -161,14 +169,15 @@ def render_clip(
             filter_complex.append(f"[{hook_ev['input_idx']}:a]asetpts=PTS-STARTPTS[a_seg_hook]")
             a_segments.append("[a_seg_hook]")
 
-        # 2. Source Speech and Mid-Clip Commentary Segments
+        # 2. Source Speech and Mid-Clip Commentary Segments (Anime Presenter Explains)
         last_src_t = 0.0
         for c_idx, cev in enumerate(comm_events):
             t_insert = min(duration_s, max(last_src_t + 0.1, cev.get("source_time", duration_s * 0.4)))
+            comm_dur = cev["duration"]
             
             # Source speech segment before commentary (Host speaks at full volume, AI is silent)
             filter_complex.append(
-                f"[{v_split_tags[v_idx]}]trim=start={last_src_t:.3f}:end={t_insert:.3f},setpts=PTS-STARTPTS[v_src_{c_idx}]"
+                f"[{v_split_tags[v_idx]}]trim=start={last_src_t:.3f}:end={t_insert:.3f},setpts=PTS-STARTPTS,scale=1080:1920[v_src_{c_idx}]"
             )
             v_segments.append(f"[v_src_{c_idx}]")
             v_idx += 1
@@ -179,12 +188,49 @@ def render_clip(
             a_segments.append(f"[a_src_{c_idx}]")
             a_idx += 1
             
-            # Freeze-frame pause during commentary (Host is 100% silent, AI explains concept)
+            # Freeze-frame pause during commentary:
+            # Whole background clip blurs, and Anime Girl slides up smoothly, floats, and slides down
             freeze_start = max(0.0, t_insert - 0.05)
-            filter_complex.append(
-                f"[{v_split_tags[v_idx]}]trim=start={freeze_start:.3f}:end={t_insert:.3f},setpts=PTS-STARTPTS,"
-                f"tpad=stop_mode=clone:stop_duration={cev['duration']:.3f}[v_frz_{c_idx}]"
-            )
+            
+            if has_avatar and avatar_input_idx >= 0:
+                t_in = 0.45
+                t_out = 0.45
+                t_exit = max(t_in + 0.1, comm_dur - t_out)
+                
+                w_av = 932
+                h_av = 1400
+                x_pos = (1080 - w_av) // 2
+                y_rest = 1920 - h_av + 100
+                y_off = 1920
+                travel = y_off - y_rest
+                
+                y_expr = (
+                    f"if(lt(t,{t_in:.3f}), "
+                    f"{y_off} - {travel} * sin(t/{t_in:.3f}*1.570796), "
+                    f"if(lt(t,{t_exit:.3f}), "
+                    f"{y_rest} + 16 * sin(4.712389*(t-{t_in:.3f})), "
+                    f"{y_rest} + {travel} * (1 - cos((t-{t_exit:.3f})/{t_out:.3f}*1.570796))"
+                    f"))"
+                )
+                
+                filter_complex.append(
+                    f"[{v_split_tags[v_idx]}]trim=start={freeze_start:.3f}:end={t_insert:.3f},setpts=PTS-STARTPTS,"
+                    f"tpad=stop_mode=clone:stop_duration={comm_dur:.3f},scale=1080:1920[v_frz_raw_{c_idx}]"
+                )
+                filter_complex.append(
+                    f"[v_frz_raw_{c_idx}]boxblur=20:5,eq=brightness=-0.08:contrast=1.05[v_frz_bg_{c_idx}]"
+                )
+                filter_complex.append(
+                    f"[{avatar_input_idx}:v]scale={w_av}:{h_av}:flags=lanczos[v_avatar_{c_idx}]"
+                )
+                filter_complex.append(
+                    f"[v_frz_bg_{c_idx}][v_avatar_{c_idx}]overlay=x={x_pos}:y='{y_expr}':eval=frame[v_frz_{c_idx}]"
+                )
+            else:
+                filter_complex.append(
+                    f"[{v_split_tags[v_idx]}]trim=start={freeze_start:.3f}:end={t_insert:.3f},setpts=PTS-STARTPTS,"
+                    f"tpad=stop_mode=clone:stop_duration={comm_dur:.3f},scale=1080:1920[v_frz_{c_idx}]"
+                )
             v_segments.append(f"[v_frz_{c_idx}]")
             v_idx += 1
             
@@ -203,7 +249,7 @@ def render_clip(
         # 3. Final Source Speech segment to end of clip
         if last_src_t < duration_s and v_idx < num_v_splits and a_idx < num_a_splits:
             filter_complex.append(
-                f"[{v_split_tags[v_idx]}]trim=start={last_src_t:.3f}:end={duration_s:.3f},setpts=PTS-STARTPTS[v_src_tail]"
+                f"[{v_split_tags[v_idx]}]trim=start={last_src_t:.3f}:end={duration_s:.3f},setpts=PTS-STARTPTS,scale=1080:1920[v_src_tail]"
             )
             v_segments.append("[v_src_tail]")
             

@@ -294,39 +294,6 @@ def _write_ass(
     """
     lines = [_get_ass_header(preset_name, font_name, font_size, primary_color, outline_color)]
 
-    # Add permanent title banner at the top of the viewport
-    if clip_title and clip_title.strip() and groups:
-        total_end = groups[-1]["end"]
-        start_ts = _seconds_to_ass_time(0.0)
-        end_ts   = _seconds_to_ass_time(total_end)
-        clean_title = _sanitize_word(clip_title.strip()).upper()
-        fade_ms = min(200, max(50, int(total_end * 500)))
-        lines.append(f"Dialogue: 0,{start_ts},{end_ts},TitleStyle,,0,0,0,,{{\\fad({fade_ms},{fade_ms})}}{clean_title}")
-
-    # Add viral context / pause badges during AI voiceover segments
-    if ai_audio_events:
-        for ev in ai_audio_events:
-            ev_start_ts = _seconds_to_ass_time(ev.get("start_s", 0.0))
-            ev_end_ts   = _seconds_to_ass_time(ev.get("end_s", 0.0))
-            ev_type     = ev.get("type", "commentary")
-            
-            if ev_type == "hook":
-                badge_text = "⚡ HOOK INTRO"
-                badge_color = "00FFFF" # Neon Yellow
-            elif ev_type == "takeaway":
-                badge_text = "💡 KEY TAKEAWAY"
-                badge_color = "00FF00" # Emerald Green
-            else:
-                badge_text = "⏸ EXPLANATION"
-                badge_color = "00D7FF" # Warm Gold
-                
-            badge_line = (
-                f"Dialogue: 2,{ev_start_ts},{ev_end_ts},Kinetic,,0,0,0,,"
-                f"{{\\an8\\pos(540,240)\\fs46\\b1\\c&H{badge_color}&\\3c&H000000&\\bord5\\shad3"
-                f"\\t(0,120,\\fscx115\\fscy115)\\t(120,240,\\fscx100\\fscy100)}}{badge_text}"
-            )
-            lines.append(badge_line)
-
     for group in groups:
         group_start = group["start"]
         group_end   = group["end"]
