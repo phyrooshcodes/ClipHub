@@ -213,11 +213,9 @@ def render_clip(
             if has_avatar and avatar_input_idx >= 0:
                 hook_x_expr, hook_y_expr = make_balloon_floating_expr(hook_dur)
                 filter_complex.append(
-                    f"[{v_split_tags[v_idx]}]trim=start=0:end=0.05,setpts=PTS-STARTPTS,"
-                    f"tpad=stop_mode=clone:stop_duration={hook_dur:.3f},trim=start=0:end={hook_dur:.3f},scale=1080:1920,fps=60,setpts=PTS-STARTPTS[v_hook_raw]"
-                )
-                filter_complex.append(
-                    f"[v_hook_raw]boxblur=20:5,eq=brightness=-0.08:contrast=1.05[v_hook_bg]"
+                    f"[{v_split_tags[v_idx]}]trim=start=0:end=0.04,setpts=PTS-STARTPTS,scale=1080:1920,"
+                    f"boxblur=15:3,eq=brightness=-0.08:contrast=1.05,"
+                    f"tpad=stop_mode=clone:stop_duration={hook_dur:.3f},trim=start=0:end={hook_dur:.3f},fps=60,setpts=PTS-STARTPTS[v_hook_bg]"
                 )
                 filter_complex.append(
                     f"[v_hook_bg][av_sp_{avatar_branch_idx}]overlay=x='{hook_x_expr}':y='{hook_y_expr}':eval=frame,fps=60,setpts=PTS-STARTPTS[v_seg_hook]"
@@ -225,7 +223,7 @@ def render_clip(
                 avatar_branch_idx += 1
             else:
                 filter_complex.append(
-                    f"[{v_split_tags[v_idx]}]trim=start=0:end=0.05,setpts=PTS-STARTPTS,"
+                    f"[{v_split_tags[v_idx]}]trim=start=0:end=0.04,setpts=PTS-STARTPTS,"
                     f"tpad=stop_mode=clone:stop_duration={hook_dur:.3f},trim=start=0:end={hook_dur:.3f},scale=1080:1920,fps=60,setpts=PTS-STARTPTS[v_seg_hook]"
                 )
             v_segments.append("[v_seg_hook]")
@@ -266,11 +264,9 @@ def render_clip(
             if has_avatar and avatar_input_idx >= 0:
                 comm_x_expr, comm_y_expr = make_balloon_floating_expr(comm_dur)
                 filter_complex.append(
-                    f"[{v_split_tags[v_idx]}]trim=start={freeze_start:.3f}:end={t_insert:.3f},setpts=PTS-STARTPTS,"
-                    f"tpad=stop_mode=clone:stop_duration={comm_dur:.3f},trim=start=0:end={comm_dur:.3f},scale=1080:1920,fps=60,setpts=PTS-STARTPTS[v_frz_raw_{c_idx}]"
-                )
-                filter_complex.append(
-                    f"[v_frz_raw_{c_idx}]boxblur=20:5,eq=brightness=-0.08:contrast=1.05[v_frz_bg_{c_idx}]"
+                    f"[{v_split_tags[v_idx]}]trim=start={freeze_start:.3f}:end={t_insert:.3f},setpts=PTS-STARTPTS,scale=1080:1920,"
+                    f"boxblur=15:3,eq=brightness=-0.08:contrast=1.05,"
+                    f"tpad=stop_mode=clone:stop_duration={comm_dur:.3f},trim=start=0:end={comm_dur:.3f},fps=60,setpts=PTS-STARTPTS[v_frz_bg_{c_idx}]"
                 )
                 filter_complex.append(
                     f"[v_frz_bg_{c_idx}][av_sp_{avatar_branch_idx}]overlay=x='{comm_x_expr}':y='{comm_y_expr}':eval=frame,fps=60,setpts=PTS-STARTPTS[v_frz_{c_idx}]"
