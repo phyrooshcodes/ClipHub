@@ -38,7 +38,7 @@ Get the project up and running in minutes!
    - 🪟 **Windows:** Double-click `run_windows.bat`
    - 🐧 **Linux / Mac:** Run `./run_linux.sh`
 
-*That's it! The Web UI will automatically compile the Rust backend on first boot and open directly in your browser at **`http://localhost:7842`**. You can paste your NVIDIA key directly into the UI Settings.*
+*That's it! The UI will automatically compile the Rust backend on first boot and open directly. You can paste your NVIDIA key directly into the UI Settings.*
 
 ---
 
