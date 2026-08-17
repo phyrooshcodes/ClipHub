@@ -2,125 +2,166 @@
 
   <h1>✦ ClipHub ✦</h1>
   
-  <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=600&size=24&pause=1000&color=FF9900&center=true&vCenter=true&width=600&height=60&lines=Zero-Strain+Local-Hybrid+AI+Clipper;GPU-Accelerated+%26+Thermally+Optimized;Powered+by+Rust+%26+NVIDIA+NIM;Fully+Automated+Social+Pipeline" alt="Typing SVG" />
+  <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=600&size=24&pause=1000&color=FF9900&center=true&vCenter=true&width=700&height=60&lines=AI+Viral+Clip+Extraction+%26+Social+Automation;Animated+Explainer+Presenter+with+2D+Balloon+Drift;High-Performance+Segmented+NVENC+Rendering;Powered+by+Llama+3.3+70B+%26+Kokoro+TTS" alt="Typing SVG" />
   
-  <p><b>An advanced AI video pipeline that extracts viral clips, tracks faces, and automates YouTube & Instagram uploads.</b></p>
+  <p><b>An enterprise-grade, GPU-accelerated AI video engine that transforms long-form videos into viral vertical explainer clips with animated presenters, dynamic face tracking, kinetic subtitles, and automated social publishing.</b></p>
 
-  [![Python](https://img.shields.io/badge/Python-3.12-blue.svg?style=for-the-badge&logo=python)](https://python.org)
-  [![Rust](https://img.shields.io/badge/Rust-Blazing_Fast-orange.svg?style=for-the-badge&logo=rust)](https://rust-lang.org)
-  [![CUDA](https://img.shields.io/badge/CUDA-Accelerated-76B900.svg?style=for-the-badge&logo=nvidia)](https://developer.nvidia.com/cuda-toolkit)
+  [![Python](https://img.shields.io/badge/Python-3.12-3776AB.svg?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
+  [![NVIDIA](https://img.shields.io/badge/CUDA_%26_NVENC-Accelerated-76B900.svg?style=for-the-badge&logo=nvidia&logoColor=white)](https://developer.nvidia.com/cuda-toolkit)
+  [![FastAPI](https://img.shields.io/badge/FastAPI-009688.svg?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+  [![FFmpeg](https://img.shields.io/badge/FFmpeg-60fps_CFR-007808.svg?style=for-the-badge&logo=ffmpeg&logoColor=white)](https://ffmpeg.org)
 
 </div>
 
 <br/>
 
+---
+
+## 🌟 What Makes ClipHub Unique?
+
+ClipHub goes beyond basic clipping. It creates **Viral Explainer Videos** engineered for maximum viewer retention on Instagram Reels, TikTok, and YouTube Shorts:
+
+1. 👩‍🏫 **Animated Explainer Presenter**
+   - Introduces the problem/insight during the opening hook ($t=0.0$).
+   - Re-appears during a freeze-frame pause mid-clip to break down complex concepts into simple terms.
+   - Smooth sinusoidal slide-in/out easing ($0.45\text{s}$) with gentle mouse-click sound effects.
+   - Half-speed organic **2D balloon floating drift** in all directions over a beautifully blurred background.
+2. 🎙️ **Kokoro-82M Local Neural TTS**
+   - High-fidelity natural voiceover (`af_sarah`, `am_adam`) powered by ONNX Runtime.
+   - Zero voice collisions: host and presenter audio are sequenced with mathematical precision.
+3. 👁️ **DNN Face Tracking (YuNet & MediaPipe)**
+   - Automatically tracks the active speaker and crops 16:9 landscape video into pristine 9:16 vertical video using 1-Euro smoothing filters.
+4. 💬 **Kinetic Word-Level Subtitles**
+   - Rapid-fire word highlighting in popular styles: *TikTok Bold, Alex Hormozi, Developer Cyan, Minimal, Cyberpunk*.
+   - Dynamic timeline shifting guarantees captions display continuously from second 0 to the very last millisecond.
+5. ⚡ **High-Speed Segmented NVENC Engine**
+   - Slices video into independent micro-segments rendered at **400+ FPS** via hardware NVENC.
+   - Strict **9:16 vertical resolution**, **Square Pixels (`SAR 1:1`)**, **60 FPS Constant Frame Rate (`CFR`)**, and **48,000 Hz Stereo Audio**.
+   - Zero memory leaks: RAM consumption is locked under **30 MB** even during hours-long batch operations.
+
+---
+
+<br/>
+
 ## 🚀 Quickstart: Install & Run
 
-Get the project up and running in minutes!
-
 ### Prerequisites
-1. **FFmpeg**: Download from [ffmpeg.org](https://ffmpeg.org/download.html) and add it to your system `PATH`.
-2. **NVIDIA GPU Drivers**: Ensure your drivers are updated for CUDA/NVENC support.
-3. **Rust Compiler**: Install Rust via [rustup.rs](https://rustup.rs/) (required for native engine).
-4. **NVIDIA NIM API Key**: Sign up at [build.nvidia.com](https://build.nvidia.com/) for a free key.
+1. **FFmpeg**: Download from [ffmpeg.org](https://ffmpeg.org/download.html) and add to system `PATH`.
+2. **NVIDIA GPU**: RTX / GTX series GPU with updated drivers for CUDA & NVENC acceleration.
+3. **NVIDIA NIM API Key**: Free API key from [build.nvidia.com](https://build.nvidia.com/) (for Llama 3.3 70B viral hook detection).
 
-### Installation & Launch
+### One-Click Launch
 
-> ⚡ **Zero-Click Installation!** The provided scripts automatically clone your `.env` file, build your virtual environment, fetch Playwright chromium dependencies, and compile the native Rust backend engine completely out-of-the-box.
+- 🪟 **Windows**: Double-click `run_windows.bat`
+- 🐧 **Linux / macOS**: Run `./run_linux.sh`
 
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/phyrooshcodes/ClipHub.git
-   cd ClipHub
-   ```
-
-2. **Launch the Engine**
-   - 🪟 **Windows:** Double-click `run_windows.bat`
-   - 🐧 **Linux / Mac:** Run `./run_linux.sh`
-
-*That's it! The UI will automatically compile the Rust backend on first boot and open directly. You can paste your NVIDIA key directly into the UI Settings.*
+*The Web Dashboard will launch automatically at **`http://localhost:7842`**.*
 
 ---
 
 <br/>
 
-## 🛠️ Technical Details & Features
+## 🛠️ Architecture & Pipeline Overview
 
-### What It Does
-ClipHub takes any long-form video (such as podcasts, interviews, or lectures) and automatically produces viral-ready **9:16 vertical clips** with:
-
-- 🎙️ **GPU AI Transcription** — `faster-whisper` (runs on CUDA with float16 fallback to CPU INT8)
-- 🧠 **Viral Hook Detection** — Llama 3.3 70B (with Llama 3.1 405B fallback) via NVIDIA NIM cloud API (evaluates transcription chunks, finds standalone viral loops, and outputs **Amazon Product Recommendations**)
-- 👁️ **Face-Tracked Cropping** — OpenCV Haar Cascades (keeps the speaker centered in the 9:16 crop)
-- 💬 **Kinetic Subtitles** — TikTok-style word-sliding opacity animation
-- 🎵 **Curated Background Music** — Intelligent ambient/lofi/synth music selection with automated speech-ducking sidechain compression
-- 🚀 **NVENC GPU Encoding** — Offloads video rendering completely to the RTX GPU hardware encoding block
-
-<br/>
-
-### ⚙️ Hardware & System Targeting
-> We meticulously optimized the architecture to map specific workloads to your machine's ideal hardware blocks, preventing thermal throttling during massive batch operations.
-
-| Stage | Hardware Target | Details |
-| :--- | :--- | :--- |
-| **Audio Demux** | `CPU (Disk I/O)` | Extremely fast audio extraction via FFmpeg |
-| **ASR Transcription** | `GPU (CUDA)` | Uses `faster-whisper` with local CUDA DLL runtime injection |
-| **Hook Detection** | `☁️ NVIDIA NIM` | Llama 3.3 70B runs in the cloud to select premium clips |
-| **Face Tracking** | `CPU (MediaPipe)` | Auto-tracks speaker movement to keep them centered |
-| **Heavy Math** | `🦀 Rust Native` | Core matrix processing and bounding boxes processed in Rust (`clip_engine_core`) |
-| **Final Render** | `GPU (NVENC)` | Hardware-accelerated video encoding (100+ FPS, keeps shaders cool) |
-
-<br/>
-
-### 📱 Automated Social Publishing
-ClipHub features an entirely automated publish pipeline for YouTube and Instagram:
-- **Instagram Reels**: Uses an automated Playwright session tied to your local browser. It manages a persistent local login without needing the Meta Graph API or Business Accounts.
-- **YouTube Shorts**: Automates posting to YouTube via standard uploads or authenticated browser sessions.
-- **Queue System**: Uploads are queued via SQLite. Errors, duplicates, and terminal rejects are handled cleanly in the background while video generation continues unaffected.
-- **Auto-Publish Mode**: Turn this on in settings, and clips will be uploaded automatically as soon as NVENC finishes rendering.
-
----
-
-<br/>
-
-## 💻 Advanced Command Line Usage
-If you prefer to run it via CLI without the UI:
-```bash
-# Basic run (takes defaults: small Whisper model, max 10 clips)
-python local_clipping_pipeline.py --input video.mp4
-
-# Run with custom max clips and ambient background music
-python local_clipping_pipeline.py --input video.mp4 --max-clips 15 --music lofi
+```text
+[ Long Video (16:9) ]
+         │
+         ▼
+[ Stage 1: Audio Demux ] ──> Fast stream copy via FFmpeg
+         │
+         ▼
+[ Stage 2: GPU Transcription ] ──> faster-whisper (CUDA float16)
+         │
+         ▼
+[ Stage 3: AI Viral Hook & Script Gen ] ──> Llama 3.3 70B (NVIDIA NIM)
+         │                                   ├── Hook problem statement
+         │                                   └── Mid-clip plain-English breakdown
+         ▼
+[ Stage 4: Face Tracking & Cropping ] ──> OpenCV YuNet DNN (9:16 vertical)
+         │
+         ▼
+[ Stage 4.5: Local Neural TTS & Timeline Alignment ] ──> Kokoro-82M ONNX
+         │                                               ├── Hook WAV & Transcripts
+         │                                               └── Commentary WAV & Transcripts
+         ▼
+[ Stage 5: Kinetic Subtitle Generation ] ──> Advanced ASS formatting with dynamic shift
+         │
+         ▼
+[ Stage 6: Segmented NVENC Video Render ] ──> Multi-segment 60fps CFR render & assembly
+         │
+         ▼
+[ Final Viral Clip (9:16 Vertical HD) ]
 ```
 
-**CLI Flags:**
-| Flag | Default | Description |
+---
+
+<br/>
+
+## 💻 CLI Usage
+
+You can also run the full pipeline or individual phases directly from the terminal:
+
+```bash
+# End-to-end processing with AI Commentary & Anime Presenter
+python local_clipping_pipeline.py --input "path/to/podcast.mp4" --output-dir "output/my_clips"
+
+# Run with custom caption style and voice
+python local_clipping_pipeline.py --input "video.mp4" --caption-style hormozi --commentary-voice af_sarah
+
+# Two-Phase Workflow:
+# Phase 1: Transcribe & generate AI scripts without rendering video
+python local_clipping_pipeline.py --input "video.mp4" --output-dir "output/run1" --phase 1
+
+# Phase 2: Render clips using cached Phase 1 metadata
+python local_clipping_pipeline.py --input "video.mp4" --output-dir "output/run1" --phase 2
+```
+
+### CLI Options
+
+| Argument | Default | Description |
 | :--- | :--- | :--- |
-| `--input` / `-i` | *(required)* | Path to input video |
-| `--output-dir` / `-o` | `output/` | Where rendered clips are saved |
-| `--model` / `-m` | `small` | Whisper model: `tiny`, `base`, `small` (default) |
-| `--max-clips` | `10` | Max number of clips to generate (1-30) |
-| `--music` | `none` | Music vibe: `none`, `auto`, `ambient`, `lofi`, `focus` |
+| `--input`, `-i` | *(required)* | Path to the source video file |
+| `--output-dir`, `-o` | `output/` | Directory where rendered MP4 clips are saved |
+| `--phase` | `all` | Execution phase: `all`, `1` (analysis only), `2` (render only) |
+| `--caption-style` | `tiktok` | Subtitle preset: `tiktok`, `hormozi`, `dev`, `minimal`, `neon` |
+| `--commentary-voice` | `af_sarah` | Kokoro voice: `af_sarah` (female), `am_adam` (male) |
+| `--commentary-mode` | `auto` | Explainer insertion: `auto`, `hook_only`, `breakdown_only`, `off` |
+| `--max-clips` | `10` | Maximum number of viral clips to extract |
+| `--music` | `none` | Background music vibe: `none`, `ambient`, `lofi`, `focus` |
 
 ---
 
 <br/>
 
-## 📁 Project Structure
+## 📁 Repository Structure
 
 ```text
 ClipHub/
-├── run_windows.bat          ← Double click to run the app
-├── clip_engine_core/        ← Rust Native Acceleration backend
-├── api/                     ← FastAPI backend routers (Jobs, Social)
-├── ui/                      ← Vanilla JS & CSS Frontend (Web Dashboard)
+├── run_windows.bat                  ← One-click Windows runner
+├── local_clipping_pipeline.py       ← Core standalone execution pipeline
+├── server.py                        ← FastAPI REST API & WebSocket server
+├── assets/
+│   ├── avatars/                     ← Presenter character graphics (PNG cutouts)
+│   ├── sfx/                         ← Transition sound effects (mouse clicks, whooshes)
+│   └── music/                       ← Curated background audio tracks
 ├── modules/
-│   ├── audio_demux.py       ← Stage 1: Demux audio
-│   ├── transcriber.py       ← Stage 2: GPU/CPU Whisper Transcription
-│   ├── hook_detector.py     ← Stage 3: Llama & Qwen NIM Hook Detection
-│   ├── face_tracker.py      ← Stage 4: OpenCV face tracking
-│   ├── subtitle_engine.py   ← Stage 5: Kinetic TikTok subtitle generation
-│   └── renderer.py          ← Stage 6: FFmpeg NVENC render
-├── output/                  ← Final clips saved here
-└── temp/                    ← Temporary caches (auto-cleaned)
+│   ├── audio_demux.py               ← FFmpeg audio extraction
+│   ├── transcriber.py               ← GPU Whisper ASR
+│   ├── hook_detector.py             ← Llama 3.3 70B viral clip selector
+│   ├── face_tracker.py              ← OpenCV YuNet DNN face detection
+│   ├── kokoro_tts.py                ← Local Kokoro-82M neural TTS
+│   ├── editorial_compositor.py      ← Plain-English script alignment
+│   ├── subtitle_engine.py           ← Kinetic ASS subtitle generator
+│   └── renderer.py                  ← Segmented NVENC video rendering engine
+├── ui/                              ← Interactive Web Dashboard
+└── output/                          ← Rendered MP4 viral explainer clips
 ```
+
+---
+
+<br/>
+
+## 📜 License & Credits
+
+- Built with ❤️ for content creators and educators.
+- Powered by [Faster Whisper](https://github.com/SYSTRAN/faster-whisper), [Kokoro TTS](https://huggingface.co/hexgrad/Kokoro-82M), [NVIDIA NIM](https://build.nvidia.com/), and [FFmpeg](https://ffmpeg.org/).
