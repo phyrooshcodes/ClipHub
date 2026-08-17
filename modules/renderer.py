@@ -54,6 +54,8 @@ def render_clip(
     dynamic_crop_x = crop_coords.get("dynamic_crop_x", [])
     fps = crop_coords.get("fps", 30.0)
     use_dynamic = len(dynamic_crop_x) > 0
+    use_nvenc = check_nvenc_available() if encoder == "auto" else (encoder == "h264_nvenc")
+    enc_args = ["-c:v", "h264_nvenc", "-preset", NVENC_PRESET, "-cq", NVENC_CQ, "-r", "60", "-fps_mode", "cfr"] if use_nvenc else ["-c:v", "libx264", "-preset", "fast", "-crf", "23", "-r", "60", "-fps_mode", "cfr"]
 
     safe_sub_path = None
     if subtitle_path and os.path.exists(subtitle_path):
@@ -62,78 +64,11 @@ def render_clip(
             rel_sub = re.sub(r'^([A-Za-z]):', r'\1\\:', rel_sub)
         safe_sub_path = rel_sub.replace("'", "'\\''")
 
-    command = ["ffmpeg", "-y", "-ss", f"{start_s:.3f}", "-t", f"{duration_s:.3f}", "-i", input_video]
-    input_idx = 1
-    
-    import av
-    has_audio = False
-    try:
-        with av.open(input_video) as container:
-            has_audio = len(container.streams.audio) > 0
-    except Exception:
-        pass
-
-    silent_audio_idx = -1
-    if not has_audio:
-        command += ["-f", "lavfi", "-i", f"anullsrc=r=48000:cl=stereo:d={duration_s:.3f}"]
-        silent_audio_idx = input_idx
-        input_idx += 1
-
-    # Video Canvas Input (if dynamic crop)
-    canvas_idx = -1
-    if use_dynamic:
-        command += ["-f", "lavfi", "-i", f"color=c=black:s={crop_w}x{crop_h}:r={fps}:d={duration_s:.3f}"]
-        canvas_idx = input_idx
-        input_idx += 1
-        
-        sendcmd_path = output_path + ".sendcmd.txt"
-        with open(sendcmd_path, "w") as f:
-            for i, cx in enumerate(dynamic_crop_x):
-                f.write(f"{i/fps:.3f}-{(i+1)/fps:.3f} [enter] overlay x {-cx};\n")
-        sendcmd_ffmpeg = sendcmd_path.replace("\\", "/")
-        if platform.system() == "Windows":
-            sendcmd_ffmpeg = re.sub(r'^([A-Za-z]):', r'\1\\:', sendcmd_ffmpeg)
-
-    # AI Audio Inputs & Mouse Click SFX
-    ai_inputs = []
-    for ev in ai_audio_events:
-        if os.path.exists(ev["audio_path"]):
-            command += ["-i", ev["audio_path"]]
-            ev["input_idx"] = input_idx
-            ai_inputs.append(ev)
-            input_idx += 1
-
     click_sfx_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "assets", "sfx", "mouse_click.mp3"))
     has_click_sfx = os.path.exists(click_sfx_path)
-    click_sfx_idx = -1
-    if has_click_sfx and ai_inputs:
-        command += ["-i", click_sfx_path]
-        click_sfx_idx = input_idx
-        input_idx += 1
 
     avatar_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "assets", "avatars", "anime_presenter.png"))
     has_avatar = os.path.exists(avatar_path)
-    avatar_input_idx = -1
-    if has_avatar and ai_inputs:
-        command += ["-i", avatar_path]
-        avatar_input_idx = input_idx
-        input_idx += 1
-
-    filter_complex = []
-    
-    # ─── Video Cropping ───
-    v_head = "0:v"
-    if use_dynamic:
-        filter_complex.append(f"[{canvas_idx}:v]sendcmd=f='{sendcmd_ffmpeg}'[v_cmd]")
-        filter_complex.append(f"[v_cmd][0:v]overlay[over_out]")
-        v_head = "over_out"
-    else:
-        crop_x = crop_coords.get("crop_x", 0)
-        crop_y = 0
-        filter_complex.append(f"[0:v]crop={crop_w}:{crop_h}:{crop_x}:{crop_y}[crop_out]")
-        v_head = "crop_out"
-
-    a_head = f"{silent_audio_idx}:a" if not has_audio else "0:a"
 
     # Helper to generate smooth 2D balloon floating drift expressions
     def make_balloon_floating_expr(duration: float, w_av: int = 932, h_av: int = 1400):
@@ -163,174 +98,222 @@ def render_clip(
         )
         return x_expr, y_expr
 
-    # ─── Explainer Video & Audio Splicing (Strictly Sequential - ZERO Voice Overlap) ───
-    if ai_inputs:
-        v_segments = []
-        a_segments = []
-        
-        hook_ev = next((ev for ev in ai_inputs if ev.get("type") == "hook"), None)
-        comm_events = [ev for ev in ai_inputs if ev.get("type") == "commentary"]
+    # If Explainer AI Events present, use High-Performance Segmented Render
+    if ai_audio_events:
+        temp_segs_dir = os.path.join(os.path.dirname(output_path), f"temp_segs_{start_ms}")
+        os.makedirs(temp_segs_dir, exist_ok=True)
+        segment_files = []
+        seg_idx = 0
+
+        hook_ev = next((ev for ev in ai_audio_events if ev.get("type") == "hook"), None)
+        comm_events = [ev for ev in ai_audio_events if ev.get("type") == "commentary"]
         comm_events.sort(key=lambda x: x.get("source_time", 0.0))
-        
-        # Calculate branches needed for video and audio splits
-        num_v_splits = (1 if hook_ev else 0) + (len(comm_events) * 2) + 1
-        num_a_splits = len(comm_events) + 1
-        
-        v_split_tags = [f"v_sp_{i}" for i in range(num_v_splits)]
-        a_split_tags = [f"a_sp_{i}" for i in range(num_a_splits)]
-        
-        filter_complex.append(f"[{v_head}]split={num_v_splits}{''.join(f'[{tag}]' for tag in v_split_tags)}")
-        filter_complex.append(f"[{a_head}]asplit={num_a_splits}{''.join(f'[{tag}]' for tag in a_split_tags)}")
-        
-        # Prepare avatar splits if avatar is present
-        avatar_branch_idx = 0
-        if has_avatar and avatar_input_idx >= 0:
-            num_avatar_splits = (1 if hook_ev else 0) + len(comm_events)
-            w_av = 932
-            h_av = 1400
-            if num_avatar_splits > 1:
-                av_tags = "".join(f"[av_sp_{i}]" for i in range(num_avatar_splits))
-                filter_complex.append(f"[{avatar_input_idx}:v]scale={w_av}:{h_av}:flags=lanczos,split={num_avatar_splits}{av_tags}")
-            else:
-                filter_complex.append(f"[{avatar_input_idx}:v]scale={w_av}:{h_av}:flags=lanczos[av_sp_0]")
 
-        # Prepare click SFX splits if present
-        click_branch_idx = 0
-        if has_click_sfx and click_sfx_idx >= 0:
-            num_click_splits = (1 if hook_ev else 0) + len(comm_events)
-            if num_click_splits > 1:
-                clk_tags = "".join(f"[clk_sp_{i}]" for i in range(num_click_splits))
-                filter_complex.append(f"[{click_sfx_idx}:a]volume=0.30,asplit={num_click_splits}{clk_tags}")
+        # Helper to render cropped host segment
+        def render_host_segment(t_from: float, t_to: float, out_file: str):
+            seg_dur = t_to - t_from
+            if seg_dur <= 0.01:
+                return
+            cmd = ["ffmpeg", "-y", "-ss", f"{start_s + t_from:.3f}", "-t", f"{seg_dur:.3f}", "-i", input_video]
+            if use_dynamic:
+                cmd += ["-f", "lavfi", "-i", f"color=c=black:s={crop_w}x{crop_h}:r={fps}:d={seg_dur:.3f}"]
+                from_idx = int(t_from * fps)
+                to_idx = int(t_to * fps)
+                sub_cx = dynamic_crop_x[from_idx:to_idx+1]
+                sub_cmd_path = out_file + ".sendcmd.txt"
+                with open(sub_cmd_path, "w") as f:
+                    for k, cx in enumerate(sub_cx):
+                        f.write(f"{k/fps:.3f}-{(k+1)/fps:.3f} [enter] overlay x {-cx};\n")
+                sub_cmd_ffmpeg = sub_cmd_path.replace("\\", "/")
+                if platform.system() == "Windows":
+                    sub_cmd_ffmpeg = re.sub(r'^([A-Za-z]):', r'\1\\:', sub_cmd_ffmpeg)
+                filter_str = (
+                    f"[1:v]sendcmd=f='{sub_cmd_ffmpeg}'[v_cmd];"
+                    f"[v_cmd][0:v]overlay,scale=1080:1920,fps=60,setpts=PTS-STARTPTS[v];"
+                    f"[0:a]aresample=48000,asetpts=PTS-STARTPTS[a]"
+                )
             else:
-                filter_complex.append(f"[{click_sfx_idx}:a]volume=0.30[clk_sp_0]")
+                crop_x = crop_coords.get("crop_x", 0)
+                filter_str = (
+                    f"[0:v]crop={crop_w}:{crop_h}:{crop_x}:0,scale=1080:1920,fps=60,setpts=PTS-STARTPTS[v];"
+                    f"[0:a]aresample=48000,asetpts=PTS-STARTPTS[a]"
+                )
+            cmd += [
+                "-filter_complex", filter_str,
+                "-map", "[v]", "-map", "[a]",
+            ] + enc_args + [
+                "-c:a", "aac", "-b:a", AUDIO_BITRATE, "-pix_fmt", "yuv420p", out_file
+            ]
+            _run_ffmpeg(cmd)
+            if use_dynamic and 'sub_cmd_path' in locals() and os.path.exists(sub_cmd_path):
+                try:
+                    os.remove(sub_cmd_path)
+                except Exception:
+                    pass
 
-        v_idx = 0
-        a_idx = 0
-        
-        # 1. AI Intro Hook (Anime Presenter on blurred background with gentle click)
-        if hook_ev:
-            hook_dur = hook_ev["duration"]
-            if has_avatar and avatar_input_idx >= 0:
-                hook_x_expr, hook_y_expr = make_balloon_floating_expr(hook_dur)
-                filter_complex.append(
-                    f"[{v_split_tags[v_idx]}]trim=start=0:end=0.04,setpts=PTS-STARTPTS,scale=1080:1920,"
-                    f"boxblur=15:3,eq=brightness=-0.08:contrast=1.05,"
-                    f"tpad=stop_mode=clone:stop_duration={hook_dur:.3f},trim=start=0:end={hook_dur:.3f},fps=60,setpts=PTS-STARTPTS[v_hook_bg]"
-                )
-                filter_complex.append(
-                    f"[v_hook_bg][av_sp_{avatar_branch_idx}]overlay=x='{hook_x_expr}':y='{hook_y_expr}':eval=frame,fps=60,setpts=PTS-STARTPTS[v_seg_hook]"
-                )
-                avatar_branch_idx += 1
-            else:
-                filter_complex.append(
-                    f"[{v_split_tags[v_idx]}]trim=start=0:end=0.04,setpts=PTS-STARTPTS,"
-                    f"tpad=stop_mode=clone:stop_duration={hook_dur:.3f},trim=start=0:end={hook_dur:.3f},scale=1080:1920,fps=60,setpts=PTS-STARTPTS[v_seg_hook]"
-                )
-            v_segments.append("[v_seg_hook]")
-            v_idx += 1
+        # Helper to render avatar freeze segment
+        def render_avatar_segment(freeze_t: float, audio_path: str, duration: float, out_file: str):
+            cmd = ["ffmpeg", "-y", "-ss", f"{start_s + freeze_t:.3f}", "-i", input_video, "-i", audio_path]
+            clk_idx = -1
+            av_idx = -1
+            inp_cnt = 2
+            if has_click_sfx:
+                cmd += ["-i", click_sfx_path]
+                clk_idx = inp_cnt
+                inp_cnt += 1
+            if has_avatar:
+                cmd += ["-i", avatar_path]
+                av_idx = inp_cnt
+                inp_cnt += 1
             
-            if has_click_sfx and click_sfx_idx >= 0:
-                filter_complex.append(
-                    f"[{hook_ev['input_idx']}:a][clk_sp_{click_branch_idx}]amix=inputs=2:duration=first:dropout_transition=0,asetpts=PTS-STARTPTS,aresample=48000[a_seg_hook]"
-                )
-                click_branch_idx += 1
+            x_expr, y_expr = make_balloon_floating_expr(duration)
+            fc = [
+                f"[0:v]trim=start=0:end=0.04,setpts=PTS-STARTPTS,scale=1080:1920,boxblur=15:3,eq=brightness=-0.08:contrast=1.05,tpad=stop_mode=clone:stop_duration={duration:.3f},trim=start=0:end={duration:.3f},fps=60,setpts=PTS-STARTPTS[bg]"
+            ]
+            if has_avatar and av_idx >= 0:
+                fc.append(f"[{av_idx}:v]scale=932:1400:flags=lanczos[av]")
+                fc.append(f"[bg][av]overlay=x='{x_expr}':y='{y_expr}':eval=frame,fps=60,setpts=PTS-STARTPTS[v]")
             else:
-                filter_complex.append(f"[{hook_ev['input_idx']}:a]asetpts=PTS-STARTPTS,aresample=48000[a_seg_hook]")
-            a_segments.append("[a_seg_hook]")
+                fc.append(f"[bg]null,fps=60,setpts=PTS-STARTPTS[v]")
 
-        # 2. Source Speech and Mid-Clip Commentary Segments (Anime Presenter Explains)
-        last_src_t = 0.0
+            if has_click_sfx and clk_idx >= 0:
+                fc.append(f"[{clk_idx}:a]volume=0.30[clk]")
+                fc.append(f"[1:a][clk]amix=inputs=2:duration=first:dropout_transition=0,aresample=48000,asetpts=PTS-STARTPTS[a]")
+            else:
+                fc.append(f"[1:a]aresample=48000,asetpts=PTS-STARTPTS[a]")
+
+            cmd += [
+                "-filter_complex", ";".join(fc),
+                "-map", "[v]", "-map", "[a]",
+            ] + enc_args + [
+                "-c:a", "aac", "-b:a", AUDIO_BITRATE, "-pix_fmt", "yuv420p", out_file
+            ]
+            _run_ffmpeg(cmd)
+
+        logger.info(f"[Renderer] Rendering {len(ai_audio_events)} explainer segments (NVENC={use_nvenc}) ...")
+        # 1. Render Hook
+        if hook_ev and os.path.exists(hook_ev["audio_path"]):
+            hook_file = os.path.join(temp_segs_dir, f"seg_{seg_idx:02d}_hook.mp4")
+            render_avatar_segment(0.0, hook_ev["audio_path"], hook_ev["duration"], hook_file)
+            segment_files.append(hook_file)
+            seg_idx += 1
+
+        # 2. Render Commentary Segments
+        last_t = 0.0
         for c_idx, cev in enumerate(comm_events):
-            t_insert = min(duration_s, max(last_src_t + 0.1, cev.get("source_time", duration_s * 0.4)))
-            comm_dur = cev["duration"]
-            
-            # Source speech segment before commentary (Host speaks at full volume, AI is silent)
-            filter_complex.append(
-                f"[{v_split_tags[v_idx]}]trim=start={last_src_t:.3f}:end={t_insert:.3f},scale=1080:1920,fps=60,setpts=PTS-STARTPTS[v_src_{c_idx}]"
-            )
-            v_segments.append(f"[v_src_{c_idx}]")
-            v_idx += 1
-            
-            filter_complex.append(
-                f"[{a_split_tags[a_idx]}]atrim=start={last_src_t:.3f}:end={t_insert:.3f},asetpts=PTS-STARTPTS,aresample=48000[a_src_{c_idx}]"
-            )
-            a_segments.append(f"[a_src_{c_idx}]")
-            a_idx += 1
-            
-            # Freeze-frame pause during commentary:
-            # Whole background clip blurs, and Anime Girl slides up smoothly, floats in 2D balloon drift, and slides down
-            freeze_start = max(0.0, t_insert - 0.05)
-            
-            if has_avatar and avatar_input_idx >= 0:
-                comm_x_expr, comm_y_expr = make_balloon_floating_expr(comm_dur)
-                filter_complex.append(
-                    f"[{v_split_tags[v_idx]}]trim=start={freeze_start:.3f}:end={t_insert:.3f},setpts=PTS-STARTPTS,scale=1080:1920,"
-                    f"boxblur=15:3,eq=brightness=-0.08:contrast=1.05,"
-                    f"tpad=stop_mode=clone:stop_duration={comm_dur:.3f},trim=start=0:end={comm_dur:.3f},fps=60,setpts=PTS-STARTPTS[v_frz_bg_{c_idx}]"
-                )
-                filter_complex.append(
-                    f"[v_frz_bg_{c_idx}][av_sp_{avatar_branch_idx}]overlay=x='{comm_x_expr}':y='{comm_y_expr}':eval=frame,fps=60,setpts=PTS-STARTPTS[v_frz_{c_idx}]"
-                )
-                avatar_branch_idx += 1
-            else:
-                filter_complex.append(
-                    f"[{v_split_tags[v_idx]}]trim=start={freeze_start:.3f}:end={t_insert:.3f},setpts=PTS-STARTPTS,"
-                    f"tpad=stop_mode=clone:stop_duration={comm_dur:.3f},trim=start=0:end={comm_dur:.3f},scale=1080:1920,fps=60,setpts=PTS-STARTPTS[v_frz_{c_idx}]"
-                )
-            v_segments.append(f"[v_frz_{c_idx}]")
-            v_idx += 1
-            
-            # Play gentle mouse click right as the pause triggers
-            if has_click_sfx and click_sfx_idx >= 0:
-                filter_complex.append(
-                    f"[{cev['input_idx']}:a][clk_sp_{click_branch_idx}]amix=inputs=2:duration=first:dropout_transition=0,asetpts=PTS-STARTPTS,aresample=48000[a_comm_{c_idx}]"
-                )
-                click_branch_idx += 1
-            else:
-                filter_complex.append(f"[{cev['input_idx']}:a]asetpts=PTS-STARTPTS,aresample=48000[a_comm_{c_idx}]")
-            a_segments.append(f"[a_comm_{c_idx}]")
-            
-            last_src_t = t_insert
-            
-        # 3. Final Source Speech segment to end of clip
-        if last_src_t < duration_s and v_idx < num_v_splits and a_idx < num_a_splits:
-            filter_complex.append(
-                f"[{v_split_tags[v_idx]}]trim=start={last_src_t:.3f}:end={duration_s:.3f},scale=1080:1920,fps=60,setpts=PTS-STARTPTS[v_src_tail]"
-            )
-            v_segments.append("[v_src_tail]")
-            
-            filter_complex.append(
-                f"[{a_split_tags[a_idx]}]atrim=start={last_src_t:.3f}:end={duration_s:.3f},asetpts=PTS-STARTPTS,aresample=48000[a_src_tail]"
-            )
-            a_segments.append("[a_src_tail]")
-            
-        if len(v_segments) > 1:
-            filter_complex.append(f"{''.join(v_segments)}concat=n={len(v_segments)}:v=1:a=0[v_sequenced]")
-            v_head = "v_sequenced"
-        elif len(v_segments) == 1:
-            v_head = v_segments[0].strip("[]")
-            
-        if len(a_segments) > 1:
-            filter_complex.append(f"{''.join(a_segments)}concat=n={len(a_segments)}:v=0:a=1,loudnorm=I=-14:LRA=7:TP=-1.5,alimiter=limit=0.95[final_audio]")
-            a_head = "final_audio"
-        elif len(a_segments) == 1:
-            filter_complex.append(f"{a_segments[0]}loudnorm=I=-14:LRA=7:TP=-1.5,alimiter=limit=0.95[final_audio]")
-            a_head = "final_audio"
-    elif has_audio:
+            t_ins = min(duration_s, max(last_t + 0.1, cev.get("source_time", duration_s * 0.4)))
+            # Host Part
+            host_file = os.path.join(temp_segs_dir, f"seg_{seg_idx:02d}_host.mp4")
+            render_host_segment(last_t, t_ins, host_file)
+            if os.path.exists(host_file):
+                segment_files.append(host_file)
+                seg_idx += 1
+            # Commentary Part
+            if os.path.exists(cev["audio_path"]):
+                comm_file = os.path.join(temp_segs_dir, f"seg_{seg_idx:02d}_comm.mp4")
+                freeze_t = max(0.0, t_ins - 0.05)
+                render_avatar_segment(freeze_t, cev["audio_path"], cev["duration"], comm_file)
+                segment_files.append(comm_file)
+                seg_idx += 1
+            last_t = t_ins
+
+        # 3. Render Host Tail
+        if last_t < duration_s:
+            tail_file = os.path.join(temp_segs_dir, f"seg_{seg_idx:02d}_tail.mp4")
+            render_host_segment(last_t, duration_s, tail_file)
+            if os.path.exists(tail_file):
+                segment_files.append(tail_file)
+                seg_idx += 1
+
+        # 4. Concat all segments and apply subtitles
+        list_file = os.path.join(temp_segs_dir, "concat_list.txt")
+        with open(list_file, "w", encoding="utf-8") as f:
+            for sfile in segment_files:
+                clean_sfile = os.path.abspath(sfile).replace("\\", "/")
+                f.write(f"file '{clean_sfile}'\n")
+
+        logger.info(f"[Renderer] Assembling {len(segment_files)} segments with subtitles -> {output_path}")
+        concat_cmd = ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", list_file]
+        if safe_sub_path:
+            concat_cmd += [
+                "-vf", f"ass='{safe_sub_path}'",
+            ] + enc_args + [
+                "-c:a", "copy", "-movflags", "+faststart", output_path
+            ]
+        else:
+            concat_cmd += [
+                "-c", "copy", "-movflags", "+faststart", output_path
+            ]
+        _run_ffmpeg(concat_cmd)
+
+        # Cleanup segments
+        try:
+            for sfile in segment_files:
+                if os.path.exists(sfile):
+                    os.remove(sfile)
+            if os.path.exists(list_file):
+                os.remove(list_file)
+            os.rmdir(temp_segs_dir)
+        except Exception:
+            pass
+
+        logger.info(f"[Renderer] ✅ Explainer Clip {clip_index + 1} rendered successfully → {output_path}")
+        return output_path
+
+    # Standard single-pass render (for clips without AI events)
+    command = ["ffmpeg", "-y", "-ss", f"{start_s:.3f}", "-t", f"{duration_s:.3f}", "-i", input_video]
+    input_idx = 1
+    
+    import av
+    has_audio = False
+    try:
+        with av.open(input_video) as container:
+            has_audio = len(container.streams.audio) > 0
+    except Exception:
+        pass
+
+    silent_audio_idx = -1
+    if not has_audio:
+        command += ["-f", "lavfi", "-i", f"anullsrc=r=48000:cl=stereo:d={duration_s:.3f}"]
+        silent_audio_idx = input_idx
+        input_idx += 1
+
+    canvas_idx = -1
+    if use_dynamic:
+        command += ["-f", "lavfi", "-i", f"color=c=black:s={crop_w}x{crop_h}:r={fps}:d={duration_s:.3f}"]
+        canvas_idx = input_idx
+        input_idx += 1
+        
+        sendcmd_path = output_path + ".sendcmd.txt"
+        with open(sendcmd_path, "w") as f:
+            for i, cx in enumerate(dynamic_crop_x):
+                f.write(f"{i/fps:.3f}-{(i+1)/fps:.3f} [enter] overlay x {-cx};\n")
+        sendcmd_ffmpeg = sendcmd_path.replace("\\", "/")
+        if platform.system() == "Windows":
+            sendcmd_ffmpeg = re.sub(r'^([A-Za-z]):', r'\1\\:', sendcmd_ffmpeg)
+
+    filter_complex = []
+    v_head = "0:v"
+    if use_dynamic:
+        filter_complex.append(f"[{canvas_idx}:v]sendcmd=f='{sendcmd_ffmpeg}'[v_cmd]")
+        filter_complex.append(f"[v_cmd][0:v]overlay[over_out]")
+        v_head = "over_out"
+    else:
+        crop_x = crop_coords.get("crop_x", 0)
+        filter_complex.append(f"[0:v]crop={crop_w}:{crop_h}:{crop_x}:0[crop_out]")
+        v_head = "crop_out"
+
+    a_head = f"{silent_audio_idx}:a" if not has_audio else "0:a"
+    if has_audio:
         filter_complex.append(f"[{a_head}]loudnorm=I=-14:LRA=7:TP=-1.5,alimiter=limit=0.95[final_audio]")
         a_head = "final_audio"
 
-    # Scale and Subtitles (Always 100% crisp HD, zero random blur)
     if safe_sub_path:
         filter_complex.append(f"[{v_head}]scale=1080:1920,ass='{safe_sub_path}'[v_final]")
     else:
         filter_complex.append(f"[{v_head}]scale=1080:1920[v_final]")
 
     filter_str = ";".join(filter_complex)
-    
-    use_nvenc = check_nvenc_available() if encoder == "auto" else (encoder == "h264_nvenc")
-    enc_args = ["-c:v", "h264_nvenc", "-preset", NVENC_PRESET, "-cq", NVENC_CQ, "-r", "60", "-fps_mode", "cfr"] if use_nvenc else ["-c:v", "libx264", "-preset", "fast", "-crf", "23", "-r", "60", "-fps_mode", "cfr"]
-
     is_direct_stream = (a_head == "0:a" or a_head == f"{silent_audio_idx}:a")
     mapped_audio = a_head if is_direct_stream else f"[{a_head}]"
 
