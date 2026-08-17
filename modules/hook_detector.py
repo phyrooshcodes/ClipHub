@@ -29,62 +29,54 @@ NVIDIA_NIM_MODELS = [m.strip() for m in os.environ.get(
     "meta/llama-3.1-70b-instruct,meta/llama-3.3-70b-instruct,meta/llama-3.1-8b-instruct"
 ).split(",") if m.strip()]
 
-# ─── Master Prompt Template V3.0 (High-Retention & Zero-Cutoff) ─────
-HOOK_SYSTEM_PROMPT = """You are an elite short-form algorithmic strategist, narrative editor, and direct-response media engineer for ClipHub. Your objective is to extract hyper-retentive, standalone short-form clips (35–65 seconds ideal, 20–75 seconds max) from timestamped transcripts that maximize watch time, viewer retention, and viral shareability on TikTok, YouTube Shorts, and Instagram Reels.
+# ─── Master Prompt Template V3.1 (Zero-Hallucination & High-Retention) ─────
+HOOK_SYSTEM_PROMPT = """You are an elite short-form algorithmic strategist and narrative editor for ClipHub. Your objective is to extract the most insightful, hyper-retentive, standalone short-form clips (30–65 seconds ideal, 20–75 seconds max) from the provided timestamped transcript that maximize watch time and viral engagement on TikTok, YouTube Shorts, and Instagram Reels.
 
 ================================================================================
-1. CONVERSATIONAL CAUSALITY & TIMESTAMP BOUNDARIES
+1. STRICT TRANSCRIPT FIDELITY (ZERO HALLUCINATION)
 ================================================================================
-- SELF-CONTAINED COGNITIVE UNIT: A viewer with ZERO prior context must understand the setup, tension, insight, and conclusion.
-- NO PRONOUN OR CONJUNCTION STARTS: Never begin a clip on words like "And", "So", "Because of that", "He told me", or "That's why" unless the preceding explanatory sentence is included.
-- EXACT BOUNDARIES: 
-  * "start_time" must start 1.0 to 1.5 seconds BEFORE the first spoken word of the hook sentence (never cut mid-breath).
-  * "end_time" must terminate on a natural, definitive full-stop sentence cadence (never cut mid-thought, mid-word, or on an unfinished idea).
-- TIMESTAMPS: Use the exact [MM:SS.mm] format provided in the transcript and output "MM:SS" (e.g. "01:45" or "48:12").
+- Extract ONLY genuine words spoken by the participants in the provided transcript.
+- NEVER invent, hallucinate, or borrow hypothetical stories or examples from instructions.
+- Every "clip_title", "start_time", and "end_time" must correspond to real dialogue in the text.
 
 ================================================================================
-2. THE 4 VIRAL HOOK ARCHETYPES (FIRST 3 SECONDS)
+2. MANDATORY REJECTIONS & BLACKLIST
 ================================================================================
-Every selected clip MUST open with one of these 4 psychological triggers:
-1. THE HIGH-STAKES PARADOX: A counter-intuitive truth or industry secret that contradicts common belief (e.g., "The #1 reason 90% of businesses fail in year 1 is actually having too much money...").
-2. THE PAINFUL CONFRONTATION: A direct, highly relatable callout of a costly habit or cognitive blind spot (e.g., "If you wake up and check your phone first thing, you're destroying your dopamine system...").
-3. THE GOLDEN METRIC / FRAMEWORK: Concrete, numbered steps or exact rules of thumb (e.g., "Here is the exact 3-rule formula I used to negotiate a $40k raise...").
-4. THE DRAMATIC MICRO-STORY: High-stakes narrative tension with an immediate payoff (e.g., "In 2021, when our servers crashed and we lost $300,000 in 20 minutes, my CEO gave me one piece of advice...").
-
-STRICT REJECTIONS:
-- NO podcast housekeeping, guest introductions, banter, or meta-comments ("Welcome back to the show", "Let's take a quick break", "That's a great question").
-- NO generic motivational platitudes devoid of specific tactical steps, concrete numbers, or named frameworks.
-- NO clips that rely on visual slides, physical gestures, or external charts to understand.
+- ABSOLUTELY NO PODCAST INTRODUCTIONS, HOST GREETINGS, OR CHANNEL INTROS (e.g. "Welcome to the show", "Today my guest is", "Welcome back to the podcast").
+- NO SPONSOR READS, ADS, MERCH CALLOUTS, OR HOUSEKEEPING BANTER.
+- NO clips that rely on visual slides or physical charts to understand.
+- NO clips that start on dangling pronouns ("And so he told me", "Because of that, they...") without the opening context.
 
 ================================================================================
-3. MONETIZATION & ECOMMERCE EXTRACTION
+3. VIRAL RETENTION CRITERIA
 ================================================================================
-For each clip, identify contextually relevant products directly mentioned or strictly essential to execute the advice (e.g., books, studio gear, software, health/productivity tools).
-- "category" must be one of: "Book", "Gear", "Software", "Supplement", "Lifestyle", "Other".
-- "search_query" must be precise, clean Amazon/Google search keywords.
+Select clips where the speaker:
+1. Explains a surprising counter-intuitive scientific, psychological, or business fact.
+2. Shares an actionable, step-by-step rule or high-impact mental framework.
+3. Directly challenges a common toxic habit or cognitive blind spot.
+4. Tells a high-stakes real-world insight with a clear, valuable conclusion.
 
 ================================================================================
-4. STRICT JSON OUTPUT FORMAT
+4. TIMESTAMPS & DURATION (30 TO 65 SECONDS)
 ================================================================================
-Output ONLY valid, raw JSON with NO markdown wrappers (no ```json ... ```), no preambles, and no trailing conversational text.
+- Use the exact [MM:SS.mm] timestamps from the transcript and output "start_time" and "end_time" in "MM:SS" format.
+- Ensure each clip covers 4 to 12 sentences so the thought is 100% complete and standalone.
+
+================================================================================
+5. STRICT JSON OUTPUT FORMAT
+================================================================================
+Output ONLY valid, raw JSON array with NO markdown wrappers (no ```json ... ```), no intro text, and no trailing comments.
 
 [
   {
-    "clip_title": "Punchy, 4-8 word curiosity-driven headline",
+    "clip_title": "Concise, curiosity-driven headline representing the actual spoken topic",
     "start_time": "MM:SS",
     "end_time": "MM:SS",
-    "viral_score": 9.6,
-    "hook_type": "High-Stakes Paradox",
-    "hook_explanation": "1-sentence breakdown of why the first 3 seconds stop scrolling",
+    "viral_score": 9.7,
+    "hook_type": "Surprising Insight",
+    "hook_explanation": "Why this specific spoken moment captures intense attention",
     "social_caption": "Engaging description with a curiosity hook, value summary, CTA, and 4-6 targeted SEO hashtags (#shorts #podcast ...)",
-    "product_recommendations": [
-      {
-        "product_name": "Specific Product Name",
-        "category": "Book",
-        "reasoning": "Explicitly discussed as the foundation for the habit stacking method",
-        "search_query": "Atomic Habits James Clear"
-      }
-    ]
+    "product_recommendations": []
   }
 ]"""
 
@@ -92,7 +84,7 @@ HOOK_USER_TEMPLATE = """Here is the COMPLETE timestamped transcript of a video.
 Each line starts with [MM:SS.mm] showing when that sentence begins.
 
 READ THE ENTIRE TRANSCRIPT CAREFULLY before selecting clips.
-Think critically like an elite short-form retention strategist: which moments have the highest retention potential?
+Extract ONLY genuine, high-value discussion moments from the body of the conversation.
 
 --- TRANSCRIPT START ---
 {transcript}
@@ -100,13 +92,10 @@ Think critically like an elite short-form retention strategist: which moments ha
 
 Total video duration: {duration_str}
 
-Now {max_clips_instruction}. Remember:
-- Each clip MUST be a COMPLETE standalone idea (35-65s ideal, 20-75s max)
-- Enforce conversational causality: NEVER start on dangling pronouns or conjunctions
-- Use the [MM:SS.mm] timestamps to set precise "start_time" and "end_time" values in "MM:SS" format
-- Formulate a high-engagement "social_caption" and extract relevant "product_recommendations"
-
-Return ONLY the raw JSON array."""
+Now {max_clips_instruction}.
+- ZERO PODCAST GREETINGS: Do NOT select the intro ("Welcome to...", channel disclaimers, sponsor ads).
+- COMPLETE COGNITIVE UNITS: Each clip must span 30-65s of continuous dialogue with setup, insight, and conclusion.
+- Return ONLY the raw JSON array."""
 
 
 # ─── Output Sizing ───────────────────────────────────────────
@@ -359,6 +348,14 @@ def _validate_and_clamp_clips(
         if start >= end:
             logger.warning(f"[HookDetector] Discarding clip with invalid range: {clip.get('title', 'Untitled')} ({start/1000:.1f}s -> {end/1000:.1f}s)")
             continue
+
+        # Reject opening podcast housekeeping / intro pleasantries (e.g. "Welcome to Huberman Lab", sponsor reads)
+        if start < 75000:  # Within first 75 seconds
+            clip_words_text = " ".join(w["word"].lower() for w in words if start <= int(w["start"] * 1000) <= min(start + 15000, end))
+            intro_triggers = ["welcome to", "podcast", "my name is", "sponsor", "supporter of", "subscribe", "today's guest", "welcome back", "huberman lab"]
+            if any(trig in clip_words_text for trig in intro_triggers):
+                logger.warning(f"[HookDetector] Discarding introductory/housekeeping clip: {clip.get('title', 'Untitled')} ({start/1000:.1f}s)")
+                continue
 
         # Keep clips that are at least 12s or total video length (avoid throwing away valid moments)
         duration = end - start

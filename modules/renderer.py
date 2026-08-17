@@ -115,24 +115,13 @@ def render_clip(
         filter_complex.append(f"[0:v]crop={crop_w}:{crop_h}:{crop_x}:{crop_y}[crop_out]")
         v_head = "crop_out"
 
-    # AI Visuals (Blur + Dim)
-    if ai_audio_events:
-        enable_exprs = []
-        for ev in ai_audio_events:
-            enable_exprs.append(f"between(t,{ev['start_s']:.3f},{ev['end_s']:.3f})")
-        enable_str = "+".join(enable_exprs)
-        
-        filter_complex.append(f"[{v_head}]boxblur=25:5:enable='{enable_str}'[v_blur]")
-        filter_complex.append(f"[v_blur]colorchannelmixer=rr=0.7:gg=0.7:bb=0.7:enable='{enable_str}'[v_dim]")
-        v_head = "v_dim"
-
-    # Scale and Subtitles
+    # Scale and Subtitles (Always 100% crisp HD, zero random blur)
     if safe_sub_path:
         filter_complex.append(f"[{v_head}]scale=1080:1920,ass='{safe_sub_path}'[v_final]")
     else:
         filter_complex.append(f"[{v_head}]scale=1080:1920[v_final]")
     
-    # ─── Audio Chain ───
+    # ─── Audio Chain (Crystal-Clear Voiceover & Source Mixing) ───
     a_head = f"{silent_audio_idx}:a" if not has_audio else "0:a"
     
     if ai_inputs:
@@ -142,18 +131,18 @@ def render_clip(
             filter_complex.append(f"[{ai['idx']}:a]adelay={ai['start_ms']}|{ai['start_ms']}[ai_{ai['idx']}]")
             ai_delayed.append(f"[ai_{ai['idx']}]")
             
-        # Mix AI tracks
+        # Mix AI voice tracks with boost
         if len(ai_delayed) > 1:
             inputs_str = "".join(ai_delayed)
-            filter_complex.append(f"{inputs_str}amix=inputs={len(ai_delayed)}:dropout_transition=0:normalize=0[ai_mix]")
+            filter_complex.append(f"{inputs_str}amix=inputs={len(ai_delayed)}:dropout_transition=0:normalize=0,volume=1.4[ai_mix]")
         else:
-            filter_complex.append(f"{ai_delayed[0]}anull[ai_mix]")
+            filter_complex.append(f"{ai_delayed[0]}volume=1.4[ai_mix]")
             
-        # Duck source audio under AI audio
-        filter_complex.append(f"[{a_head}][ai_mix]sidechaincompress=threshold=0.015:ratio=15:attack=10:release=300[ducked_source]")
+        # Gently lower source background audio so AI voice is 100% intelligible
+        filter_complex.append(f"[{a_head}]volume=0.65[bg_audio]")
         
-        # Mix ducked source with AI mix and apply EBU R128 normalization & peak limiter
-        filter_complex.append(f"[ducked_source][ai_mix]amix=inputs=2:duration=first:normalize=0,loudnorm=I=-14:LRA=7:TP=-1.5,alimiter=limit=0.95[final_audio]")
+        # Mix background audio and AI voice track cleanly, then apply EBU R128 broadcast normalization
+        filter_complex.append(f"[bg_audio][ai_mix]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,loudnorm=I=-14:LRA=7:TP=-1.5,alimiter=limit=0.95[final_audio]")
         a_head = "final_audio"
     elif has_audio:
         filter_complex.append(f"[{a_head}]loudnorm=I=-14:LRA=7:TP=-1.5,alimiter=limit=0.95[final_audio]")
