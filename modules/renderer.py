@@ -116,40 +116,25 @@ def render_clip(
                 return
             cmd = ["ffmpeg", "-y", "-ss", f"{start_s + t_from:.3f}", "-t", f"{seg_dur:.3f}", "-i", input_video]
             if use_dynamic:
-                cmd += ["-f", "lavfi", "-i", f"color=c=black:s={crop_w}x{crop_h}:r={fps}:d={seg_dur:.3f}"]
                 from_idx = int(t_from * fps)
                 to_idx = int(t_to * fps)
                 sub_cx = dynamic_crop_x[from_idx:to_idx+1]
-                sub_cmd_path = out_file + ".sendcmd.txt"
-                with open(sub_cmd_path, "w") as f:
-                    for k, cx in enumerate(sub_cx):
-                        f.write(f"{k/fps:.3f}-{(k+1)/fps:.3f} [enter] overlay x {-cx};\n")
-                sub_cmd_ffmpeg = sub_cmd_path.replace("\\", "/")
-                if platform.system() == "Windows":
-                    sub_cmd_ffmpeg = re.sub(r'^([A-Za-z]):', r'\1\\:', sub_cmd_ffmpeg)
-                filter_str = (
-                    f"[1:v]sendcmd=f='{sub_cmd_ffmpeg}'[v_cmd];"
-                    f"[v_cmd][0:v]overlay,scale=1080:1920,fps=60,setpts=PTS-STARTPTS[v];"
-                    f"[0:a]aresample=48000,asetpts=PTS-STARTPTS[a]"
-                )
+                crop_x = int(sum(sub_cx) / len(sub_cx)) if sub_cx else crop_coords.get("crop_x", 0)
             else:
                 crop_x = crop_coords.get("crop_x", 0)
-                filter_str = (
-                    f"[0:v]crop={crop_w}:{crop_h}:{crop_x}:0,scale=1080:1920,fps=60,setpts=PTS-STARTPTS[v];"
-                    f"[0:a]aresample=48000,asetpts=PTS-STARTPTS[a]"
-                )
+                
+            filter_str = (
+                f"[0:v]crop={crop_w}:{crop_h}:{crop_x}:0,scale=1080:1920,fps=60,setpts=PTS-STARTPTS[v];"
+                f"[0:a]aresample=48000,asetpts=PTS-STARTPTS[a]"
+            )
             cmd += [
                 "-filter_complex", filter_str,
                 "-map", "[v]", "-map", "[a]",
             ] + enc_args + [
+                "-t", f"{seg_dur:.3f}",
                 "-c:a", "aac", "-b:a", AUDIO_BITRATE, "-pix_fmt", "yuv420p", out_file
             ]
             _run_ffmpeg(cmd)
-            if use_dynamic and 'sub_cmd_path' in locals() and os.path.exists(sub_cmd_path):
-                try:
-                    os.remove(sub_cmd_path)
-                except Exception:
-                    pass
 
         # Helper to render avatar freeze segment
         def render_avatar_segment(freeze_t: float, audio_path: str, duration: float, out_file: str):
@@ -186,6 +171,7 @@ def render_clip(
                 "-filter_complex", ";".join(fc),
                 "-map", "[v]", "-map", "[a]",
             ] + enc_args + [
+                "-t", f"{duration:.3f}",
                 "-c:a", "aac", "-b:a", AUDIO_BITRATE, "-pix_fmt", "yuv420p", out_file
             ]
             _run_ffmpeg(cmd)
