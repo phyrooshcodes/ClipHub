@@ -157,12 +157,16 @@ def generate_ass_subtitles(
     if str(parent) not in ("", "."):
         parent.mkdir(parents=True, exist_ok=True)
 
+    # Calculate total duration shift from AI events (hook + commentary) so words aren't prematurely clipped
+    total_shift = sum(ev.get("duration", 0.0) for ev in (ai_audio_events or []))
+    effective_clip_end_s = clip_end_s + total_shift
+
     # Filter and clamp words that fall within or intersect this clip's time window
     clip_words = []
     for w in words:
-        if w["end"] > clip_start_s and w["start"] < clip_end_s:
+        if w["end"] > clip_start_s and w["start"] < effective_clip_end_s:
             w_start = max(clip_start_s, w["start"])
-            w_end = min(clip_end_s, w["end"])
+            w_end = min(effective_clip_end_s, w["end"])
             if w_end > w_start:
                 clip_words.append({
                     "word": w["word"],
@@ -173,7 +177,7 @@ def generate_ass_subtitles(
     if not clip_words:
         logger.warning(
             f"[SubtitleEngine] No words found in range "
-            f"[{clip_start_s:.2f}s → {clip_end_s:.2f}s]. "
+            f"[{clip_start_s:.2f}s → {effective_clip_end_s:.2f}s]. "
             "Creating empty subtitle file."
         )
         _write_ass(output_path, [], style_name, clip_title, preset_name, font_name, font_size, primary_color, outline_color, ai_audio_events)

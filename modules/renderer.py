@@ -213,31 +213,31 @@ def render_clip(
             if has_avatar and avatar_input_idx >= 0:
                 hook_x_expr, hook_y_expr = make_balloon_floating_expr(hook_dur)
                 filter_complex.append(
-                    f"[{v_split_tags[v_idx]}]trim=start=0:end=0.1,setpts=PTS-STARTPTS,"
-                    f"tpad=stop_mode=clone:stop_duration={hook_dur:.3f},scale=1080:1920[v_hook_raw]"
+                    f"[{v_split_tags[v_idx]}]trim=start=0:end=0.05,setpts=PTS-STARTPTS,"
+                    f"tpad=stop_mode=clone:stop_duration={hook_dur:.3f},trim=start=0:end={hook_dur:.3f},scale=1080:1920,fps=60,setpts=PTS-STARTPTS[v_hook_raw]"
                 )
                 filter_complex.append(
                     f"[v_hook_raw]boxblur=20:5,eq=brightness=-0.08:contrast=1.05[v_hook_bg]"
                 )
                 filter_complex.append(
-                    f"[v_hook_bg][av_sp_{avatar_branch_idx}]overlay=x='{hook_x_expr}':y='{hook_y_expr}':eval=frame[v_seg_hook]"
+                    f"[v_hook_bg][av_sp_{avatar_branch_idx}]overlay=x='{hook_x_expr}':y='{hook_y_expr}':eval=frame,fps=60,setpts=PTS-STARTPTS[v_seg_hook]"
                 )
                 avatar_branch_idx += 1
             else:
                 filter_complex.append(
-                    f"[{v_split_tags[v_idx]}]trim=start=0:end=0.1,setpts=PTS-STARTPTS,"
-                    f"tpad=stop_mode=clone:stop_duration={hook_dur:.3f},scale=1080:1920[v_seg_hook]"
+                    f"[{v_split_tags[v_idx]}]trim=start=0:end=0.05,setpts=PTS-STARTPTS,"
+                    f"tpad=stop_mode=clone:stop_duration={hook_dur:.3f},trim=start=0:end={hook_dur:.3f},scale=1080:1920,fps=60,setpts=PTS-STARTPTS[v_seg_hook]"
                 )
             v_segments.append("[v_seg_hook]")
             v_idx += 1
             
             if has_click_sfx and click_sfx_idx >= 0:
                 filter_complex.append(
-                    f"[{hook_ev['input_idx']}:a][clk_sp_{click_branch_idx}]amix=inputs=2:duration=first:dropout_transition=0,asetpts=PTS-STARTPTS[a_seg_hook]"
+                    f"[{hook_ev['input_idx']}:a][clk_sp_{click_branch_idx}]amix=inputs=2:duration=first:dropout_transition=0,asetpts=PTS-STARTPTS,aresample=48000[a_seg_hook]"
                 )
                 click_branch_idx += 1
             else:
-                filter_complex.append(f"[{hook_ev['input_idx']}:a]asetpts=PTS-STARTPTS[a_seg_hook]")
+                filter_complex.append(f"[{hook_ev['input_idx']}:a]asetpts=PTS-STARTPTS,aresample=48000[a_seg_hook]")
             a_segments.append("[a_seg_hook]")
 
         # 2. Source Speech and Mid-Clip Commentary Segments (Anime Presenter Explains)
@@ -248,13 +248,13 @@ def render_clip(
             
             # Source speech segment before commentary (Host speaks at full volume, AI is silent)
             filter_complex.append(
-                f"[{v_split_tags[v_idx]}]trim=start={last_src_t:.3f}:end={t_insert:.3f},setpts=PTS-STARTPTS,scale=1080:1920[v_src_{c_idx}]"
+                f"[{v_split_tags[v_idx]}]trim=start={last_src_t:.3f}:end={t_insert:.3f},scale=1080:1920,fps=60,setpts=PTS-STARTPTS[v_src_{c_idx}]"
             )
             v_segments.append(f"[v_src_{c_idx}]")
             v_idx += 1
             
             filter_complex.append(
-                f"[{a_split_tags[a_idx]}]atrim=start={last_src_t:.3f}:end={t_insert:.3f},asetpts=PTS-STARTPTS[a_src_{c_idx}]"
+                f"[{a_split_tags[a_idx]}]atrim=start={last_src_t:.3f}:end={t_insert:.3f},asetpts=PTS-STARTPTS,aresample=48000[a_src_{c_idx}]"
             )
             a_segments.append(f"[a_src_{c_idx}]")
             a_idx += 1
@@ -267,19 +267,19 @@ def render_clip(
                 comm_x_expr, comm_y_expr = make_balloon_floating_expr(comm_dur)
                 filter_complex.append(
                     f"[{v_split_tags[v_idx]}]trim=start={freeze_start:.3f}:end={t_insert:.3f},setpts=PTS-STARTPTS,"
-                    f"tpad=stop_mode=clone:stop_duration={comm_dur:.3f},scale=1080:1920[v_frz_raw_{c_idx}]"
+                    f"tpad=stop_mode=clone:stop_duration={comm_dur:.3f},trim=start=0:end={comm_dur:.3f},scale=1080:1920,fps=60,setpts=PTS-STARTPTS[v_frz_raw_{c_idx}]"
                 )
                 filter_complex.append(
                     f"[v_frz_raw_{c_idx}]boxblur=20:5,eq=brightness=-0.08:contrast=1.05[v_frz_bg_{c_idx}]"
                 )
                 filter_complex.append(
-                    f"[v_frz_bg_{c_idx}][av_sp_{avatar_branch_idx}]overlay=x='{comm_x_expr}':y='{comm_y_expr}':eval=frame[v_frz_{c_idx}]"
+                    f"[v_frz_bg_{c_idx}][av_sp_{avatar_branch_idx}]overlay=x='{comm_x_expr}':y='{comm_y_expr}':eval=frame,fps=60,setpts=PTS-STARTPTS[v_frz_{c_idx}]"
                 )
                 avatar_branch_idx += 1
             else:
                 filter_complex.append(
                     f"[{v_split_tags[v_idx]}]trim=start={freeze_start:.3f}:end={t_insert:.3f},setpts=PTS-STARTPTS,"
-                    f"tpad=stop_mode=clone:stop_duration={comm_dur:.3f},scale=1080:1920[v_frz_{c_idx}]"
+                    f"tpad=stop_mode=clone:stop_duration={comm_dur:.3f},trim=start=0:end={comm_dur:.3f},scale=1080:1920,fps=60,setpts=PTS-STARTPTS[v_frz_{c_idx}]"
                 )
             v_segments.append(f"[v_frz_{c_idx}]")
             v_idx += 1
@@ -287,11 +287,11 @@ def render_clip(
             # Play gentle mouse click right as the pause triggers
             if has_click_sfx and click_sfx_idx >= 0:
                 filter_complex.append(
-                    f"[{cev['input_idx']}:a][clk_sp_{click_branch_idx}]amix=inputs=2:duration=first:dropout_transition=0,asetpts=PTS-STARTPTS[a_comm_{c_idx}]"
+                    f"[{cev['input_idx']}:a][clk_sp_{click_branch_idx}]amix=inputs=2:duration=first:dropout_transition=0,asetpts=PTS-STARTPTS,aresample=48000[a_comm_{c_idx}]"
                 )
                 click_branch_idx += 1
             else:
-                filter_complex.append(f"[{cev['input_idx']}:a]asetpts=PTS-STARTPTS[a_comm_{c_idx}]")
+                filter_complex.append(f"[{cev['input_idx']}:a]asetpts=PTS-STARTPTS,aresample=48000[a_comm_{c_idx}]")
             a_segments.append(f"[a_comm_{c_idx}]")
             
             last_src_t = t_insert
@@ -299,12 +299,12 @@ def render_clip(
         # 3. Final Source Speech segment to end of clip
         if last_src_t < duration_s and v_idx < num_v_splits and a_idx < num_a_splits:
             filter_complex.append(
-                f"[{v_split_tags[v_idx]}]trim=start={last_src_t:.3f}:end={duration_s:.3f},setpts=PTS-STARTPTS,scale=1080:1920[v_src_tail]"
+                f"[{v_split_tags[v_idx]}]trim=start={last_src_t:.3f}:end={duration_s:.3f},scale=1080:1920,fps=60,setpts=PTS-STARTPTS[v_src_tail]"
             )
             v_segments.append("[v_src_tail]")
             
             filter_complex.append(
-                f"[{a_split_tags[a_idx]}]atrim=start={last_src_t:.3f}:end={duration_s:.3f},asetpts=PTS-STARTPTS[a_src_tail]"
+                f"[{a_split_tags[a_idx]}]atrim=start={last_src_t:.3f}:end={duration_s:.3f},asetpts=PTS-STARTPTS,aresample=48000[a_src_tail]"
             )
             a_segments.append("[a_src_tail]")
             
