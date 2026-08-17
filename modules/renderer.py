@@ -124,15 +124,15 @@ def render_clip(
                 crop_x = crop_coords.get("crop_x", 0)
                 
             filter_str = (
-                f"[0:v]crop={crop_w}:{crop_h}:{crop_x}:0,scale=1080:1920,fps=60,setpts=PTS-STARTPTS[v];"
-                f"[0:a]aresample=48000,asetpts=PTS-STARTPTS[a]"
+                f"[0:v]crop={crop_w}:{crop_h}:{crop_x}:0,scale=1080:1920:flags=lanczos,setsar=1,fps=60,setpts=PTS-STARTPTS[v];"
+                f"[0:a]aformat=channel_layouts=stereo:sample_rates=48000,asetpts=PTS-STARTPTS[a]"
             )
             cmd += [
                 "-filter_complex", filter_str,
                 "-map", "[v]", "-map", "[a]",
             ] + enc_args + [
                 "-t", f"{seg_dur:.3f}",
-                "-c:a", "aac", "-b:a", AUDIO_BITRATE, "-pix_fmt", "yuv420p", out_file
+                "-c:a", "aac", "-b:a", "192k", "-ac", "2", "-ar", "48000", "-pix_fmt", "yuv420p", out_file
             ]
             _run_ffmpeg(cmd)
 
@@ -153,26 +153,26 @@ def render_clip(
             
             x_expr, y_expr = make_balloon_floating_expr(duration)
             fc = [
-                f"[0:v]trim=start=0:end=0.04,setpts=PTS-STARTPTS,scale=1080:1920,boxblur=15:3,eq=brightness=-0.08:contrast=1.05,tpad=stop_mode=clone:stop_duration={duration:.3f},trim=start=0:end={duration:.3f},fps=60,setpts=PTS-STARTPTS[bg]"
+                f"[0:v]trim=start=0:end=0.04,scale=1080:1920:flags=lanczos,setsar=1,boxblur=15:3,eq=brightness=-0.08:contrast=1.05,tpad=stop_mode=clone:stop_duration={duration:.3f},trim=start=0:end={duration:.3f},fps=60,setpts=PTS-STARTPTS[bg]"
             ]
             if has_avatar and av_idx >= 0:
                 fc.append(f"[{av_idx}:v]scale=932:1400:flags=lanczos[av]")
-                fc.append(f"[bg][av]overlay=x='{x_expr}':y='{y_expr}':eval=frame,fps=60,setpts=PTS-STARTPTS[v]")
+                fc.append(f"[bg][av]overlay=x='{x_expr}':y='{y_expr}':eval=frame,scale=1080:1920:flags=lanczos,setsar=1,fps=60,setpts=PTS-STARTPTS[v]")
             else:
-                fc.append(f"[bg]null,fps=60,setpts=PTS-STARTPTS[v]")
+                fc.append(f"[bg]null,scale=1080:1920:flags=lanczos,setsar=1,fps=60,setpts=PTS-STARTPTS[v]")
 
             if has_click_sfx and clk_idx >= 0:
                 fc.append(f"[{clk_idx}:a]volume=0.30[clk]")
-                fc.append(f"[1:a][clk]amix=inputs=2:duration=first:dropout_transition=0,aresample=48000,asetpts=PTS-STARTPTS[a]")
+                fc.append(f"[1:a][clk]amix=inputs=2:duration=first:dropout_transition=0,aformat=channel_layouts=stereo:sample_rates=48000,asetpts=PTS-STARTPTS[a]")
             else:
-                fc.append(f"[1:a]aresample=48000,asetpts=PTS-STARTPTS[a]")
+                fc.append(f"[1:a]aformat=channel_layouts=stereo:sample_rates=48000,asetpts=PTS-STARTPTS[a]")
 
             cmd += [
                 "-filter_complex", ";".join(fc),
                 "-map", "[v]", "-map", "[a]",
             ] + enc_args + [
                 "-t", f"{duration:.3f}",
-                "-c:a", "aac", "-b:a", AUDIO_BITRATE, "-pix_fmt", "yuv420p", out_file
+                "-c:a", "aac", "-b:a", "192k", "-ac", "2", "-ar", "48000", "-pix_fmt", "yuv420p", out_file
             ]
             _run_ffmpeg(cmd)
 
@@ -224,7 +224,7 @@ def render_clip(
             concat_cmd += [
                 "-vf", f"ass='{safe_sub_path}'",
             ] + enc_args + [
-                "-c:a", "copy", "-movflags", "+faststart", output_path
+                "-c:a", "aac", "-b:a", "192k", "-ac", "2", "-ar", "48000", "-movflags", "+faststart", output_path
             ]
         else:
             concat_cmd += [
