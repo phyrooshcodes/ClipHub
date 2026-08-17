@@ -539,15 +539,19 @@ async def run_pipeline_ws(websocket: WebSocket, job_id: str):
         last_index = 0
         while True:
             events = registry.get_events(job_id)
-            if last_index < len(events):
+            while last_index < len(events):
                 event = events[last_index]
-                await websocket.send_json(event)
                 last_index += 1
-                if event.get("type") in ("done", "error"): break
-            elif job.done:
+                await websocket.send_json(event)
+                if event.get("type") in ("done", "error"):
+                    return
+            if job.done:
+                while last_index < len(events):
+                    event = events[last_index]
+                    last_index += 1
+                    await websocket.send_json(event)
                 break
-            else:
-                await asyncio.sleep(0.5)
+            await asyncio.sleep(0.05)
     except Exception as e:
         logger.error(f"WebSocket error for {job_id}: {e}")
     finally:
@@ -569,7 +573,6 @@ async def get_history():
         for d in OUTPUT_DIR.iterdir():
             if d.is_dir():
                 has_meta = (d / "metadata.json").exists()
-                has_clips_meta = (d / "clips_metadata.json").exists()
                 clips = _list_clips(job_id=d.name)
                 if clips:
                     meta = {"job_id": d.name, "created": d.stat().st_mtime}

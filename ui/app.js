@@ -1421,28 +1421,38 @@ document.addEventListener("DOMContentLoaded", () => {
       catch (e) { console.warn('Malformed WS message:', event.data); return; }
       if (data.type === 'ytdl_start') {
          appendLog(`<span class="log-info">[YT-DLP]</span> Downloading ${data.url}`);
-         updateProgress('step-demux', 'Starting Download...', 5, 0);
+         updateProgress('step-demux', 'Starting Download...', 0, 0);
       } else if (data.type === 'ytdl_log') {
          appendLog(data.raw);
       } else if (data.type === 'ytdl_progress') {
-         const pct = Math.max(0, Math.min(100, data.percent || 0));
-         updateProgress('step-demux', `Downloading Video (${Math.round(pct)}%)`, pct * 0.2, pct);
+         const pct = Math.max(0, Math.min(100, Number(data.percent) || 0));
+         const roundedPct = Math.round(pct);
+         const phaseLabel = data.phase === 'audio' ? 'Downloading Audio Stream' : (data.phase === 'merging' ? 'Merging Video & Audio' : 'Downloading Video');
+         
+         updateProgress('step-demux', `${phaseLabel} (${roundedPct}%)`, roundedPct, roundedPct);
          
          const procSpeed = document.getElementById('proc-speed');
-         if (procSpeed && data.speed) {
-           procSpeed.textContent = `Avg. Speed: ${data.speed} ${data.size ? '· ' + data.size : ''}`;
+         if (procSpeed) {
+           const speedText = data.speed ? `Avg. Speed: ${data.speed}` : '';
+           const sizeText = data.size ? ` · ${data.size}` : '';
+           procSpeed.textContent = (speedText + sizeText).trim() || 'Downloading...';
          }
          const procPercent = document.getElementById('proc-percent');
-         if (procPercent && data.eta) {
-           procPercent.textContent = `ETA: ${data.eta}`;
+         if (procPercent) {
+           const etaText = data.eta ? `ETA: ${data.eta} · ` : '';
+           procPercent.textContent = `${etaText}${roundedPct}%`;
          }
       } else if (data.type === 'ytdl_done') {
-         document.getElementById('proc-filename').textContent = data.filename;
-         appendLog(`<span class="log-highlight">[YT-DLP]</span> Completed! Connecting to Pipeline...`);
-         updateProgress('step-demux', 'Download Finished', 20, 100);
+         const fn = data.filename || 'Downloaded Video';
+         const pfn = document.getElementById('proc-filename');
+         if (pfn) pfn.textContent = fn;
+         appendLog(`<span class="log-highlight">[YT-DLP]</span> Download completed (${data.size_mb ? data.size_mb + ' MB' : '1080p Full HD'}). Connecting to AI pipeline...`);
+         updateProgress('step-demux', 'Download Finished', 100, 100);
          localStorage.removeItem('ytUrl');
-         currentWs.close();
-         connectPipelineWS(jobId);
+         if (currentWs) currentWs.close();
+         setTimeout(() => {
+           connectPipelineWS(jobId);
+         }, 300);
       } else if (data.type === 'error') {
          appendLog(`<span class="log-error">[Error]</span> ${data.message}`);
          updateProgress(null, "Error Occurred", 0);

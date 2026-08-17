@@ -32,8 +32,6 @@ class DownloadJob:
 
     def add_event(self, event: dict):
         self.events.append(event)
-        if len(self.events) > 200:
-            self.events = self.events[-200:]
 
 active_downloads: Dict[str, DownloadJob] = {}
 _downloads_lock = threading.Lock()
@@ -82,20 +80,47 @@ async def _run_ytdl(job: DownloadJob, python_exe: str, save_path: str):
                 *cmd_args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
                 env=env
             )
+            current_phase = "video"
+            saw_100 = False
             while True:
                 line_bytes = await process.stdout.readline()
                 if not line_bytes: break
                 text = line_bytes.decode("utf-8", errors="replace").rstrip()
                 if not text.strip(): continue
 
+                if "[Merger]" in text or "Merging formats" in text:
+                    current_phase = "merging"
+                    job.add_event({
+                        "type": "ytdl_progress", "percent": 99.0,
+                        "phase": "merging", "size": "Finalizing MP4",
+                        "speed": "Merging streams...", "eta": "00:01"
+                    })
+                    print(f"[YouTube Download] {text}", flush=True)
+                    continue
+
                 m = re.search(r"\[download\]\s+([\d.]+)%\s+of\s+([~\d.]+\w+)\s+at\s+([\d.]+\w+/s)\s+ETA\s+(\S+)", text)
                 if m:
+                    raw_pct = float(m.group(1))
+                    if raw_pct >= 99.0 and not saw_100:
+                        saw_100 = True
+                    elif saw_100 and raw_pct < 50.0:
+                        current_phase = "audio"
+                    
+                    if current_phase == "audio":
+                        scaled_pct = round(85.0 + (raw_pct * 0.14), 1)
+                    elif current_phase == "merging":
+                        scaled_pct = 99.0
+                    else:
+                        scaled_pct = round(raw_pct * 0.85, 1)
+
                     job.add_event({
-                        "type": "ytdl_progress", "percent": float(m.group(1)),
+                        "type": "ytdl_progress", "percent": scaled_pct,
+                        "raw_percent": raw_pct, "phase": current_phase,
                         "size": m.group(2), "speed": m.group(3), "eta": m.group(4),
                     })
                     print(f"[YouTube Download] {text}", flush=True)
                     continue
+
                 job.add_event({"type": "ytdl_log", "raw": text})
                 print(f"[YouTube Download] {text}", flush=True)
 
@@ -184,16 +209,19 @@ async def download_url_ws(websocket: WebSocket, job_id: str, url: str = ""):
     try:
         last_index = 0
         while True:
-            if last_index < len(job.events):
+            while last_index < len(job.events):
                 event = job.events[last_index]
-                await websocket.send_json(event)
                 last_index += 1
+                await websocket.send_json(event)
                 if event.get("type") in ("ytdl_done", "error"):
-                    break
-            elif job.done:
+                    return
+            if job.done:
+                while last_index < len(job.events):
+                    event = job.events[last_index]
+                    last_index += 1
+                    await websocket.send_json(event)
                 break
-            else:
-                await asyncio.sleep(0.2)
+            await asyncio.sleep(0.05)
     except Exception as e:
         try: await websocket.send_json({"type": "error", "message": str(e)})
         except: pass
