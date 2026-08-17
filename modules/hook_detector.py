@@ -26,7 +26,7 @@ NVIDIA_API_KEY  = os.environ.get("NVIDIA_API_KEY", "")
 NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1"
 NVIDIA_NIM_MODELS = [m.strip() for m in os.environ.get(
     "NVIDIA_NIM_MODELS",
-    "meta/llama-3.3-70b-instruct,nvidia/llama-3.1-nemotron-70b-instruct,meta/llama-3.1-70b-instruct,mistralai/mistral-nemo-12b-instruct"
+    "meta/llama-3.1-70b-instruct,meta/llama-3.3-70b-instruct,meta/llama-3.1-8b-instruct"
 ).split(",") if m.strip()]
 
 # ─── Master Prompt Template V3.0 (High-Retention & Zero-Cutoff) ─────
@@ -149,20 +149,23 @@ def _call_streaming_with_failover(
     model: str,
     messages: list,
     max_tokens: int,
-    ttft_timeout_s: float = 25.0,
-    total_timeout_s: float = 120.0
+    ttft_timeout_s: float = 45.0,
+    idle_chunk_timeout_s: float = 45.0,
+    max_total_timeout_s: float = 600.0
 ) -> str:
     """
     Execute streaming completion on model.
-    If TTFT (Time-To-First-Token) exceeds ttft_timeout_s or network stalls,
-    raises TimeoutError so caller can immediately fail over to the next candidate model.
+    If TTFT (Time-To-First-Token) exceeds ttft_timeout_s or tokens stall for > idle_chunk_timeout_s,
+    raises TimeoutError so caller can failover.
+    Crucially, as long as tokens are streaming, the query is NEVER interrupted by an arbitrary total timeout.
     """
     import time
-    from openai import APIConnectionError, APITimeoutError, RateLimitError, InternalServerError, APIStatusError
 
     start_time = time.time()
+    last_token_time = start_time
     chunks = []
     first_token_received = False
+    token_count = 0
 
     stream = client.chat.completions.create(
         model=model,
@@ -175,8 +178,14 @@ def _call_streaming_with_failover(
     )
 
     for chunk in stream:
-        if time.time() - start_time > total_timeout_s:
-            raise TimeoutError(f"Streaming generation exceeded maximum total timeout of {total_timeout_s}s")
+        now = time.time()
+        # Per-token stall check (only fail if network drops and no token arrives for > idle_chunk_timeout_s)
+        if first_token_received and (now - last_token_time > idle_chunk_timeout_s):
+            raise TimeoutError(f"Streaming stalled: No token received for {idle_chunk_timeout_s}s from {model}")
+
+        # Generous 10-minute overall safety ceiling
+        if now - start_time > max_total_timeout_s:
+            raise TimeoutError(f"Streaming generation exceeded safety limit of {max_total_timeout_s}s")
 
         if chunk.choices and len(chunk.choices) > 0:
             delta = chunk.choices[0].delta
@@ -184,12 +193,17 @@ def _call_streaming_with_failover(
             if content:
                 if not first_token_received:
                     first_token_received = True
-                    logger.info(f"[HookDetector] ⚡ First token received from {model} in {time.time() - start_time:.2f}s! Streaming generation...")
+                    logger.info(f"[HookDetector] ⚡ First token received from {model} in {now - start_time:.2f}s! Streaming generation...")
                 chunks.append(content)
+                token_count += 1
+                last_token_time = now
+                if token_count % 300 == 0:
+                    logger.info(f"[HookDetector] ⚡ Streaming generation in progress: {token_count} tokens generated ({now - start_time:.1f}s elapsed)...")
 
     full_text = "".join(chunks).strip()
     if not full_text:
         raise ValueError(f"Model {model} returned an empty streaming response.")
+    logger.info(f"[HookDetector] ✅ Single model {model} completed full transcript analysis ({token_count} tokens in {time.time() - start_time:.1f}s)")
     return full_text
 
 
@@ -397,8 +411,9 @@ def detect_hooks(
                     {"role": "user",   "content": user_message}
                 ],
                 max_tokens=full_max_tokens,
-                ttft_timeout_s=30.0,
-                total_timeout_s=120.0
+                ttft_timeout_s=45.0,
+                idle_chunk_timeout_s=45.0,
+                max_total_timeout_s=600.0
             )
             raw_clips = _parse_json_response(raw_response)
             if raw_clips and len(raw_clips) >= 1:

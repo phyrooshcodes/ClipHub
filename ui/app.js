@@ -98,12 +98,136 @@ const ThemeManager = {
   }
 };
 
+// Sidebar Manager (Draggable Resizer & Collapsible Toggle)
+const SidebarManager = {
+  sidebarEl: null,
+  resizerEl: null,
+  toggleBtn: null,
+  isResizing: false,
+  minWidth: 180,
+  maxWidth: 500,
+  defaultWidth: 260,
+
+  init() {
+    this.sidebarEl = document.getElementById('app-sidebar');
+    this.resizerEl = document.getElementById('sidebar-resizer');
+    this.toggleBtn = document.getElementById('btn-sidebar-toggle');
+    if (!this.sidebarEl || !this.resizerEl) return;
+
+    // Restore saved width
+    const savedWidth = parseInt(localStorage.getItem('cliphub_sidebar_width'), 10);
+    if (savedWidth && savedWidth >= this.minWidth && savedWidth <= this.maxWidth) {
+      document.documentElement.style.setProperty('--sidebar-w', `${savedWidth}px`);
+    }
+
+    // Restore collapsed state
+    const isCollapsed = localStorage.getItem('cliphub_sidebar_collapsed') === 'true';
+    if (isCollapsed) {
+      this.sidebarEl.classList.add('collapsed');
+      if (this.toggleBtn) {
+        this.toggleBtn.innerHTML = '<i class="ri-layout-right-line"></i>';
+      }
+    }
+
+    // Toggle button click
+    this.toggleBtn?.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.toggle();
+    });
+
+    // Keyboard shortcut Ctrl+B or Cmd+B
+    window.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
+        const activeTag = document.activeElement?.tagName;
+        if (activeTag !== 'INPUT' && activeTag !== 'TEXTAREA') {
+          e.preventDefault();
+          this.toggle();
+        }
+      }
+    });
+
+    // Double-click resizer to reset to default 260px
+    this.resizerEl.addEventListener('dblclick', () => {
+      this.sidebarEl.classList.remove('collapsed');
+      document.documentElement.style.setProperty('--sidebar-w', `${this.defaultWidth}px`);
+      localStorage.setItem('cliphub_sidebar_width', this.defaultWidth);
+      localStorage.setItem('cliphub_sidebar_collapsed', 'false');
+      if (this.toggleBtn) {
+        this.toggleBtn.innerHTML = '<i class="ri-layout-left-line"></i>';
+      }
+    });
+
+    // Drag Resizing
+    this.resizerEl.addEventListener('mousedown', (e) => this.startResize(e));
+    this.resizerEl.addEventListener('touchstart', (e) => this.startResize(e.touches[0]), { passive: true });
+  },
+
+  toggle() {
+    if (!this.sidebarEl) return;
+    const isCollapsed = this.sidebarEl.classList.toggle('collapsed');
+    localStorage.setItem('cliphub_sidebar_collapsed', isCollapsed ? 'true' : 'false');
+    if (this.toggleBtn) {
+      this.toggleBtn.innerHTML = isCollapsed ? '<i class="ri-layout-right-line"></i>' : '<i class="ri-layout-left-line"></i>';
+      this.toggleBtn.title = isCollapsed ? 'Expand Sidebar (Ctrl+B)' : 'Collapse Sidebar (Ctrl+B)';
+    }
+  },
+
+  startResize(e) {
+    if (!this.sidebarEl) return;
+    this.isResizing = true;
+    this.sidebarEl.classList.add('is-resizing');
+    this.resizerEl.classList.add('active');
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+
+    const onMove = (moveEvent) => {
+      if (!this.isResizing) return;
+      const clientX = moveEvent.clientX || (moveEvent.touches && moveEvent.touches[0]?.clientX);
+      if (clientX === undefined) return;
+
+      if (clientX < 110) {
+        // Auto-collapse if dragged very small
+        this.sidebarEl.classList.add('collapsed');
+        localStorage.setItem('cliphub_sidebar_collapsed', 'true');
+        if (this.toggleBtn) this.toggleBtn.innerHTML = '<i class="ri-layout-right-line"></i>';
+      } else {
+        this.sidebarEl.classList.remove('collapsed');
+        localStorage.setItem('cliphub_sidebar_collapsed', 'false');
+        if (this.toggleBtn) this.toggleBtn.innerHTML = '<i class="ri-layout-left-line"></i>';
+
+        const newWidth = Math.max(this.minWidth, Math.min(this.maxWidth, clientX));
+        document.documentElement.style.setProperty('--sidebar-w', `${newWidth}px`);
+        localStorage.setItem('cliphub_sidebar_width', newWidth);
+      }
+    };
+
+    const onEnd = () => {
+      this.isResizing = false;
+      this.sidebarEl.classList.remove('is-resizing');
+      this.resizerEl.classList.remove('active');
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onEnd);
+      window.removeEventListener('touchmove', onMove);
+      window.removeEventListener('touchend', onEnd);
+    };
+
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onEnd);
+    window.addEventListener('touchmove', onMove, { passive: true });
+    window.addEventListener('touchend', onEnd);
+  }
+};
+
 // UI State Management & GSAP Animations
 document.addEventListener("DOMContentLoaded", () => {
   
-  // Initialize Toast and Theme Manager
+  // Initialize Toast, Theme Manager, and Sidebar Manager
   Toast.init();
   ThemeManager.init();
+  SidebarManager.init();
 
   async function refreshSystemBadges() {
     try {

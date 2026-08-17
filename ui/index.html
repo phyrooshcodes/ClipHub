@@ -23,7 +23,8 @@
   <div class="app-shell">
     
     <!-- LEFT SIDEBAR -->
-    <aside class="sidebar">
+    <!-- LEFT SIDEBAR -->
+    <aside class="sidebar" id="app-sidebar">
       <div class="sidebar-header">
         <div class="logo-box">
           <img src="logo.png" alt="ClipHub Logo" class="logo-img">
@@ -32,32 +33,35 @@
           <span class="logo-text">ClipHub</span>
           <span class="logo-badge">Studio</span>
         </div>
+        <button class="btn-sidebar-toggle" id="btn-sidebar-toggle" title="Toggle Sidebar (Ctrl+B)">
+          <i class="ri-layout-left-line"></i>
+        </button>
       </div>
       
       <nav class="sidebar-nav">
         <!-- Main Nav -->
-        <button class="nav-item active" id="btn-nav-studio">
+        <button class="nav-item active" id="btn-nav-studio" title="Studio">
           <i class="ri-dashboard-3-line"></i> 
           <div class="nav-text">
             <span>Studio</span>
             <small>AI Clipping Workspace</small>
           </div>
         </button>
-        <button class="nav-item" id="btn-nav-recent">
+        <button class="nav-item" id="btn-nav-recent" title="Recent Uploads">
           <i class="ri-folder-video-line"></i> 
           <div class="nav-text">
             <span>Recent Uploads</span>
             <small>Select Previous Videos</small>
           </div>
         </button>
-        <button class="nav-item" id="btn-nav-gallery">
+        <button class="nav-item" id="btn-nav-gallery" title="Clip Gallery">
           <i class="ri-film-line"></i> 
           <div class="nav-text">
             <span>Clip Gallery</span>
             <small>Exported Viral Clips</small>
           </div>
         </button>
-        <button class="nav-item" id="btn-history">
+        <button class="nav-item" id="btn-history" title="Job History">
           <i class="ri-history-line"></i> 
           <div class="nav-text">
             <span>Job History</span>
@@ -84,7 +88,7 @@
         </div>
 
         <div style="display:flex; gap:8px; align-items:center;">
-          <button class="nav-item-simple" id="btn-settings" style="flex:1;">
+          <button class="nav-item-simple" id="btn-settings" style="flex:1;" title="Settings">
             <i class="ri-settings-3-line"></i>
             <span>Settings</span>
           </button>
@@ -94,6 +98,9 @@
         </div>
       </div>
     </aside>
+
+    <!-- DRAGGABLE RESIZER HANDLE -->
+    <div class="sidebar-resizer" id="sidebar-resizer" title="Drag to resize sidebar (Double click to reset)"></div>
 
     <!-- MAIN CONTENT -->
     <main class="main-content">
