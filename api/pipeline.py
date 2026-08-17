@@ -525,12 +525,12 @@ async def run_pipeline_ws(websocket: WebSocket, job_id: str):
         if config.get("auto_publish"): 
             cmd += ["--auto-publish"]
             
-        phase = config.get("phase", "1")
+        phase = config.get("phase", "all")
         cmd += ["--phase", phase]
         
-        # reset phase back to 1 for future runs (if needed)
+        # reset phase back to all for future runs
         if "phase" in config:
-            config["phase"] = "1"
+            config["phase"] = "all"
             registry.set_config(job_id, config)
 
         asyncio.create_task(_run_process(job_id, cmd, getattr(job, "execution_start_time", job.start_time)))

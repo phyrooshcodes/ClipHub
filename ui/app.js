@@ -1672,13 +1672,12 @@ document.addEventListener("DOMContentLoaded", () => {
         // during long "stuck" stages.
         appendLog(`<span class="log-warning">[Warning]</span> ${data.raw}`);
       } else if (data.type === 'phase_1_complete') {
-        appendLog(`<span class="log-highlight">[System]</span> Phase 1 complete. Waiting for Human Review...`);
-        showHumanReviewUI(jobId, data.metadata);
+        appendLog(`<span class="log-highlight">[System]</span> Phase 1 analysis complete.`);
       } else if (data.type === 'done') {
         if (!data.success) {
           appendLog('[Error] Pipeline failed. Check the preceding log entries.');
           updateProgress(null, 'Pipeline failed', 0);
-        } else if (!data.is_phase_1) {
+        } else {
           updateProgress('step-render', "Finished Processing", 100);
           appendLog(`<span class="log-highlight">[Success]</span> Pipeline completed.`);
           setTimeout(() => fetchClips(jobId), 1000);
