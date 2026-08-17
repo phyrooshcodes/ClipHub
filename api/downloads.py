@@ -73,21 +73,12 @@ async def _run_ytdl(job: DownloadJob, python_exe: str, save_path: str):
     env["PYTHONIOENCODING"] = "utf-8"
     env["PYTHONUTF8"] = "1"
 
-    async def execute_cmd() -> bool:
-        cmd = [
-            python_exe, "-m", "yt_dlp",
-            "--remote-components", "ejs:github",
-            "--js-runtimes", "node",
-            "--format", "bestvideo[height<=1080]+bestaudio/bestvideo+bestaudio/best[height<=1080]/best",
-            "--merge-output-format", "mp4",
-            "--output", save_path,
-            "--newline", "--no-playlist", "--no-part", "--", job.url
-        ]
+    node_bin = shutil.which("node") or (r"C:\Program Files\nodejs\node.exe" if Path(r"C:\Program Files\nodejs\node.exe").exists() else "node")
 
-        job.add_event({"type": "ytdl_start", "url": job.url})
+    async def run_command_stream(cmd_args: list) -> bool:
         try:
             process = await asyncio.create_subprocess_exec(
-                *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
+                *cmd_args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
                 env=env
             )
             while True:
@@ -115,7 +106,34 @@ async def _run_ytdl(job: DownloadJob, python_exe: str, save_path: str):
             return False
 
     try:
-        success = await execute_cmd()
+        job.add_event({"type": "ytdl_start", "url": job.url})
+        # Primary high-definition 1080p command
+        primary_cmd = [
+            python_exe, "-m", "yt_dlp",
+            "--remote-components", "ejs:github",
+            "--js-runtimes", f"node:{node_bin}" if Path(str(node_bin)).exists() else "node",
+            "--format", "bestvideo[height<=1080]+bestaudio/bestvideo+bestaudio/best[height<=1080]/best",
+            "--merge-output-format", "mp4",
+            "--retries", "5",
+            "--fragment-retries", "5",
+            "--output", save_path,
+            "--newline", "--no-playlist", "--no-part", "--", job.url
+        ]
+        success = await run_command_stream(primary_cmd)
+        
+        # Resilient fallback if 403 Forbidden or DASH signing throttled
+        if not success or not Path(save_path).exists():
+            job.add_event({"type": "ytdl_log", "raw": "[Info] High-definition DASH stream restricted. Switching to Android/Web stream fallback..."})
+            fallback_cmd = [
+                python_exe, "-m", "yt_dlp",
+                "--extractor-args", "youtube:player_client=android,web",
+                "--format", "best[height<=1080]/best",
+                "--merge-output-format", "mp4",
+                "--output", save_path,
+                "--newline", "--no-playlist", "--no-part", "--", job.url
+            ]
+            success = await run_command_stream(fallback_cmd)
+
         if success and Path(save_path).exists():
             registry.register(job.job_id, save_path, f"job_{job.job_id}.mp4")
             job.add_event({
