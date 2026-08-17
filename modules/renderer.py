@@ -124,50 +124,84 @@ def render_clip(
         v_segments = []
         a_segments = []
         
-        # 1. AI Intro Hook (Video holds opening frame while Sarah introduces the clip)
         hook_ev = next((ev for ev in ai_inputs if ev.get("type") == "hook"), None)
+        comm_events = [ev for ev in ai_inputs if ev.get("type") == "commentary"]
+        comm_events.sort(key=lambda x: x.get("source_time", 0.0))
+        
+        # Calculate branches needed for video and audio splits
+        num_v_splits = (1 if hook_ev else 0) + (len(comm_events) * 2) + 1
+        num_a_splits = len(comm_events) + 1
+        
+        v_split_tags = [f"v_sp_{i}" for i in range(num_v_splits)]
+        a_split_tags = [f"a_sp_{i}" for i in range(num_a_splits)]
+        
+        filter_complex.append(f"[{v_head}]split={num_v_splits}{''.join(f'[{tag}]' for tag in v_split_tags)}")
+        filter_complex.append(f"[{a_head}]asplit={num_a_splits}{''.join(f'[{tag}]' for tag in a_split_tags)}")
+        
+        v_idx = 0
+        a_idx = 0
+        
+        # 1. AI Intro Hook (Video holds opening frame while Sarah introduces the clip)
         if hook_ev:
-            filter_complex.append(f"[{v_head}]trim=start=0:end=0.1,setpts=PTS-STARTPTS,tpad=stop_mode=clone:stop_duration={hook_ev['duration']:.3f}[v_seg_hook]")
+            filter_complex.append(
+                f"[{v_split_tags[v_idx]}]trim=start=0:end=0.1,setpts=PTS-STARTPTS,"
+                f"tpad=stop_mode=clone:stop_duration={hook_ev['duration']:.3f}[v_seg_hook]"
+            )
             v_segments.append("[v_seg_hook]")
+            v_idx += 1
+            
             filter_complex.append(f"[{hook_ev['input_idx']}:a]asetpts=PTS-STARTPTS[a_seg_hook]")
             a_segments.append("[a_seg_hook]")
 
         # 2. Source Speech and Mid-Clip Commentary Segments
-        comm_events = [ev for ev in ai_inputs if ev.get("type") == "commentary"]
-        comm_events.sort(key=lambda x: x.get("source_time", 0.0))
-        
         last_src_t = 0.0
         for c_idx, cev in enumerate(comm_events):
             t_insert = min(duration_s, max(last_src_t + 0.1, cev.get("source_time", duration_s * 0.4)))
             
             # Source speech segment before commentary (Host speaks at full volume, AI is silent)
-            filter_complex.append(f"[{v_head}]trim=start={last_src_t:.3f}:end={t_insert:.3f},setpts=PTS-STARTPTS[v_src_{c_idx}]")
+            filter_complex.append(
+                f"[{v_split_tags[v_idx]}]trim=start={last_src_t:.3f}:end={t_insert:.3f},setpts=PTS-STARTPTS[v_src_{c_idx}]"
+            )
             v_segments.append(f"[v_src_{c_idx}]")
-            filter_complex.append(f"[{a_head}]atrim=start={last_src_t:.3f}:end={t_insert:.3f},asetpts=PTS-STARTPTS[a_src_{c_idx}]")
+            v_idx += 1
+            
+            filter_complex.append(
+                f"[{a_split_tags[a_idx]}]atrim=start={last_src_t:.3f}:end={t_insert:.3f},asetpts=PTS-STARTPTS[a_src_{c_idx}]"
+            )
             a_segments.append(f"[a_src_{c_idx}]")
+            a_idx += 1
             
             # Freeze-frame pause during commentary (Host is 100% silent, AI explains concept)
             freeze_start = max(0.0, t_insert - 0.05)
             filter_complex.append(
-                f"[{v_head}]trim=start={freeze_start:.3f}:end={t_insert:.3f},setpts=PTS-STARTPTS,"
+                f"[{v_split_tags[v_idx]}]trim=start={freeze_start:.3f}:end={t_insert:.3f},setpts=PTS-STARTPTS,"
                 f"tpad=stop_mode=clone:stop_duration={cev['duration']:.3f}[v_frz_{c_idx}]"
             )
             v_segments.append(f"[v_frz_{c_idx}]")
+            v_idx += 1
+            
             filter_complex.append(f"[{cev['input_idx']}:a]asetpts=PTS-STARTPTS[a_comm_{c_idx}]")
             a_segments.append(f"[a_comm_{c_idx}]")
             
             last_src_t = t_insert
             
         # 3. Final Source Speech segment to end of clip
-        if last_src_t < duration_s:
-            filter_complex.append(f"[{v_head}]trim=start={last_src_t:.3f}:end={duration_s:.3f},setpts=PTS-STARTPTS[v_src_tail]")
+        if last_src_t < duration_s and v_idx < num_v_splits and a_idx < num_a_splits:
+            filter_complex.append(
+                f"[{v_split_tags[v_idx]}]trim=start={last_src_t:.3f}:end={duration_s:.3f},setpts=PTS-STARTPTS[v_src_tail]"
+            )
             v_segments.append("[v_src_tail]")
-            filter_complex.append(f"[{a_head}]atrim=start={last_src_t:.3f}:end={duration_s:.3f},asetpts=PTS-STARTPTS[a_src_tail]")
+            
+            filter_complex.append(
+                f"[{a_split_tags[a_idx]}]atrim=start={last_src_t:.3f}:end={duration_s:.3f},asetpts=PTS-STARTPTS[a_src_tail]"
+            )
             a_segments.append("[a_src_tail]")
             
         if len(v_segments) > 1:
             filter_complex.append(f"{''.join(v_segments)}concat=n={len(v_segments)}:v=1:a=0[v_sequenced]")
             v_head = "v_sequenced"
+        elif len(v_segments) == 1:
+            v_head = v_segments[0].strip("[]")
             
         if len(a_segments) > 1:
             filter_complex.append(f"{''.join(a_segments)}concat=n={len(a_segments)}:v=0:a=1,loudnorm=I=-14:LRA=7:TP=-1.5,alimiter=limit=0.95[final_audio]")
