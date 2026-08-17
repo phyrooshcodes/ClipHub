@@ -1404,19 +1404,8 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     };
 
-    if (typeof gsap !== 'undefined') {
-      try {
-        const tl = gsap.timeline();
-        tl.to(sectionUpload, {
-          y: -50, opacity: 0, duration: 0.4, ease: "power3.inOut",
-          onComplete: launchPipeline
-        });
-      } catch(e) {
-        launchPipeline();
-      }
-    } else {
-      launchPipeline();
-    }
+    // Direct synchronous launch of pipeline
+    await launchPipeline();
   }
 
   function connectYoutubeWS(jobId, url) {
