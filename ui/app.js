@@ -1573,37 +1573,42 @@ document.addEventListener("DOMContentLoaded", () => {
     container.innerHTML = '';
     
     metadata.forEach((clip, idx) => {
-      if (!clip.editorial_data) return;
-      
       const card = document.createElement('div');
       card.className = 'review-card';
       
-      let html = `<div class="rc-header"><span>Clip ${idx + 1}: ${escapeHtml(clip.title)}</span><div class="rc-actions"><select class="rc-select" data-idx="${idx}"><option>Keep</option><option>Discard</option></select></div></div>`;
+      const startSec = (clip.start_ms || 0) / 1000;
+      const endSec = (clip.end_ms || 0) / 1000;
+      const timeStr = `${Math.floor(startSec / 60)}:${Math.floor(startSec % 60).toString().padStart(2, '0')} - ${Math.floor(endSec / 60)}:${Math.floor(endSec % 60).toString().padStart(2, '0')}`;
+      const scoreStr = clip.hook_score ? `Score: ${clip.hook_score}` : '';
       
-      const hookText = typeof clip.editorial_data.hook === 'object' ? (clip.editorial_data.hook?.text || '') : (clip.editorial_data.hook || '');
-      const takeawayText = typeof clip.editorial_data.takeaway === 'object' ? (clip.editorial_data.takeaway?.text || '') : (clip.editorial_data.takeaway || '');
+      let html = `<div class="rc-header"><span>Clip ${idx + 1}: ${escapeHtml(clip.title || 'Untitled')} <small style="color:var(--text-muted);font-weight:400;margin-left:8px;">(${timeStr} · ${scoreStr})</small></span><div class="rc-actions"><select class="rc-select" data-idx="${idx}"><option>Keep</option><option>Discard</option></select></div></div>`;
+      
+      if (clip.editorial_data) {
+        const hookText = typeof clip.editorial_data.hook === 'object' ? (clip.editorial_data.hook?.text || '') : (clip.editorial_data.hook || '');
+        const takeawayText = typeof clip.editorial_data.takeaway === 'object' ? (clip.editorial_data.takeaway?.text || '') : (clip.editorial_data.takeaway || '');
 
-      if (clip.editorial_data.hook) {
-        html += `<div style="margin-bottom:12px;">
-          <label style="display:block; margin-bottom:5px; font-weight:600; color:var(--brand-purple); font-size:12px;">AI Hook</label>
-          <textarea class="review-hook rc-text" data-idx="${idx}" style="width:100%; height:60px; background:var(--bg-app); border:1px solid var(--border-light); padding:8px; border-radius:4px; font-family:inherit;">${escapeHtml(hookText)}</textarea>
-        </div>`;
-      }
-      
-      if (clip.editorial_data.commentary_segments && clip.editorial_data.commentary_segments.length > 0) {
-        html += `<div style="margin-bottom:12px;">
-          <label style="display:block; margin-bottom:5px; font-weight:600; color:var(--brand-purple); font-size:12px;">AI Commentary</label>`;
-        clip.editorial_data.commentary_segments.forEach((seg, sIdx) => {
-          html += `<textarea class="review-commentary rc-text" data-idx="${idx}" data-sidx="${sIdx}" style="width:100%; height:60px; margin-bottom:8px; background:var(--bg-app); border:1px solid var(--border-light); padding:8px; border-radius:4px; font-family:inherit;">${escapeHtml(seg.text || '')}</textarea>`;
-        });
-        html += `</div>`;
-      }
-      
-      if (clip.editorial_data.takeaway) {
-        html += `<div style="margin-bottom:12px;">
-          <label style="display:block; margin-bottom:5px; font-weight:600; color:var(--brand-purple); font-size:12px;">AI Takeaway</label>
-          <textarea class="review-takeaway rc-text" data-idx="${idx}" style="width:100%; height:60px; background:var(--bg-app); border:1px solid var(--border-light); padding:8px; border-radius:4px; font-family:inherit;">${escapeHtml(takeawayText)}</textarea>
-        </div>`;
+        if (clip.editorial_data.hook) {
+          html += `<div style="margin-bottom:12px;">
+            <label style="display:block; margin-bottom:5px; font-weight:600; color:var(--brand-purple); font-size:12px;">AI Hook</label>
+            <textarea class="review-hook rc-text" data-idx="${idx}" style="width:100%; height:60px; background:var(--bg-app); border:1px solid var(--border-light); padding:8px; border-radius:4px; font-family:inherit;">${escapeHtml(hookText)}</textarea>
+          </div>`;
+        }
+        
+        if (clip.editorial_data.commentary_segments && clip.editorial_data.commentary_segments.length > 0) {
+          html += `<div style="margin-bottom:12px;">
+            <label style="display:block; margin-bottom:5px; font-weight:600; color:var(--brand-purple); font-size:12px;">AI Commentary</label>`;
+          clip.editorial_data.commentary_segments.forEach((seg, sIdx) => {
+            html += `<textarea class="review-commentary rc-text" data-idx="${idx}" data-sidx="${sIdx}" style="width:100%; height:60px; margin-bottom:8px; background:var(--bg-app); border:1px solid var(--border-light); padding:8px; border-radius:4px; font-family:inherit;">${escapeHtml(seg.text || '')}</textarea>`;
+          });
+          html += `</div>`;
+        }
+        
+        if (clip.editorial_data.takeaway) {
+          html += `<div style="margin-bottom:12px;">
+            <label style="display:block; margin-bottom:5px; font-weight:600; color:var(--brand-purple); font-size:12px;">AI Takeaway</label>
+            <textarea class="review-takeaway rc-text" data-idx="${idx}" style="width:100%; height:60px; background:var(--bg-app); border:1px solid var(--border-light); padding:8px; border-radius:4px; font-family:inherit;">${escapeHtml(takeawayText)}</textarea>
+          </div>`;
+        }
       }
       
       card.innerHTML = html;
@@ -1616,23 +1621,29 @@ document.addEventListener("DOMContentLoaded", () => {
         // Gather updated data
         document.querySelectorAll('.review-hook').forEach(ta => {
           const idx = parseInt(ta.getAttribute('data-idx'));
-          if (typeof metadata[idx].editorial_data.hook === 'object') {
-            metadata[idx].editorial_data.hook.text = ta.value;
-          } else {
-            metadata[idx].editorial_data.hook = ta.value;
+          if (metadata[idx] && metadata[idx].editorial_data) {
+            if (typeof metadata[idx].editorial_data.hook === 'object') {
+              metadata[idx].editorial_data.hook.text = ta.value;
+            } else {
+              metadata[idx].editorial_data.hook = ta.value;
+            }
           }
         });
         document.querySelectorAll('.review-commentary').forEach(ta => {
           const idx = parseInt(ta.getAttribute('data-idx'));
           const sIdx = parseInt(ta.getAttribute('data-sidx'));
-          metadata[idx].editorial_data.commentary_segments[sIdx].text = ta.value;
+          if (metadata[idx] && metadata[idx].editorial_data && metadata[idx].editorial_data.commentary_segments && metadata[idx].editorial_data.commentary_segments[sIdx]) {
+            metadata[idx].editorial_data.commentary_segments[sIdx].text = ta.value;
+          }
         });
         document.querySelectorAll('.review-takeaway').forEach(ta => {
           const idx = parseInt(ta.getAttribute('data-idx'));
-          if (typeof metadata[idx].editorial_data.takeaway === 'object') {
-            metadata[idx].editorial_data.takeaway.text = ta.value;
-          } else {
-            metadata[idx].editorial_data.takeaway = ta.value;
+          if (metadata[idx] && metadata[idx].editorial_data) {
+            if (typeof metadata[idx].editorial_data.takeaway === 'object') {
+              metadata[idx].editorial_data.takeaway.text = ta.value;
+            } else {
+              metadata[idx].editorial_data.takeaway = ta.value;
+            }
           }
         });
         

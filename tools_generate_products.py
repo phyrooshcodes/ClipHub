@@ -80,10 +80,18 @@ Transcript:
             ],
             temperature=0.7,
             max_tokens=500,
+            timeout=30.0
         )
         content = response.choices[0].message.content.strip()
         cleaned = re.sub(r"```(?:json)?", "", content).strip().strip("`").strip()
-        return json.loads(cleaned)
+        try:
+            return json.loads(cleaned)
+        except Exception:
+            s_idx = content.find("{")
+            e_idx = content.rfind("}")
+            if s_idx != -1 and e_idx > s_idx:
+                return json.loads(content[s_idx:e_idx+1])
+            raise
     except Exception as e:
         raise RuntimeError(f"NVIDIA API product generation failed: {e}")
 

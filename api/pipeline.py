@@ -572,14 +572,24 @@ async def get_history():
     if OUTPUT_DIR.exists():
         for d in OUTPUT_DIR.iterdir():
             if d.is_dir():
-                has_meta = (d / "metadata.json").exists()
+                meta_file = d / "metadata.json"
+                clips_meta_file = d / "clips_metadata.json"
                 clips = _list_clips(job_id=d.name)
                 if clips:
                     meta = {"job_id": d.name, "created": d.stat().st_mtime}
-                    if has_meta:
+                    if meta_file.exists():
                         try:
-                            with open(d / "metadata.json", "r", encoding="utf-8") as f:
-                                meta.update(json.load(f))
+                            with open(meta_file, "r", encoding="utf-8") as f:
+                                data = json.load(f)
+                                if isinstance(data, dict):
+                                    meta.update(data)
+                        except Exception: pass
+                    elif clips_meta_file.exists():
+                        try:
+                            with open(clips_meta_file, "r", encoding="utf-8") as f:
+                                data = json.load(f)
+                                if isinstance(data, dict):
+                                    meta.update(data)
                         except Exception: pass
                     meta["filename"] = meta.get("filename") or d.name
                     meta["clip_count"] = len(clips)
