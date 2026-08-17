@@ -94,7 +94,7 @@ def render_clip(
         if platform.system() == "Windows":
             sendcmd_ffmpeg = re.sub(r'^([A-Za-z]):', r'\1\\:', sendcmd_ffmpeg)
 
-    # AI Audio Inputs
+    # AI Audio Inputs & Mouse Click SFX
     ai_inputs = []
     for ev in ai_audio_events:
         if os.path.exists(ev["audio_path"]):
@@ -102,6 +102,14 @@ def render_clip(
             ev["input_idx"] = input_idx
             ai_inputs.append(ev)
             input_idx += 1
+
+    click_sfx_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "assets", "sfx", "mouse_click.mp3"))
+    has_click_sfx = os.path.exists(click_sfx_path)
+    click_sfx_idx = -1
+    if has_click_sfx and ai_inputs:
+        command += ["-i", click_sfx_path]
+        click_sfx_idx = input_idx
+        input_idx += 1
 
     filter_complex = []
     
@@ -180,7 +188,14 @@ def render_clip(
             v_segments.append(f"[v_frz_{c_idx}]")
             v_idx += 1
             
-            filter_complex.append(f"[{cev['input_idx']}:a]asetpts=PTS-STARTPTS[a_comm_{c_idx}]")
+            # Play gentle mouse click right as the pause triggers
+            if has_click_sfx and click_sfx_idx >= 0:
+                filter_complex.append(f"[{click_sfx_idx}:a]volume=0.30[a_sfx_click_{c_idx}]")
+                filter_complex.append(
+                    f"[{cev['input_idx']}:a][a_sfx_click_{c_idx}]amix=inputs=2:duration=first:dropout_transition=0,asetpts=PTS-STARTPTS[a_comm_{c_idx}]"
+                )
+            else:
+                filter_complex.append(f"[{cev['input_idx']}:a]asetpts=PTS-STARTPTS[a_comm_{c_idx}]")
             a_segments.append(f"[a_comm_{c_idx}]")
             
             last_src_t = t_insert
