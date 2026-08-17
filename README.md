@@ -16,7 +16,7 @@
 
 ## 🚀 Quickstart: Install & Run
 
-Get the project up and running in minutes with our new Zero-Click launchers!
+Get the project up and running in minutes!
 
 ### Prerequisites
 1. **FFmpeg**: Download from [ffmpeg.org](https://ffmpeg.org/download.html) and add it to your system `PATH`.
