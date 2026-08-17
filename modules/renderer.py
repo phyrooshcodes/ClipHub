@@ -115,6 +115,48 @@ def render_clip(
         filter_complex.append(f"[0:v]crop={crop_w}:{crop_h}:{crop_x}:{crop_y}[crop_out]")
         v_head = "crop_out"
 
+    # Freeze-Frame Pause on Commentary & Voiceover
+    # If AI commentary segments are present, freeze the video frame at the insertion point
+    # so the video pauses with the pause icon while the AI speaks, and then resumes seamlessly.
+    freeze_events = [
+        ev for ev in ai_audio_events
+        if ev.get("type") in ("commentary", "hook", "takeaway") and (ev.get("end_s", 0) - ev.get("start_s", 0)) > 0.5
+    ]
+    
+    if freeze_events:
+        freeze_events.sort(key=lambda x: x["start_s"])
+        v_parts = []
+        last_t = 0.0
+        n_splits = len(freeze_events) + (1 if freeze_events[-1]["start_s"] < duration_s else 0)
+        
+        if n_splits > 1:
+            split_tags = "".join(f"[v_sp_{i}]" for i in range(n_splits))
+            filter_complex.append(f"[{v_head}]split={n_splits}{split_tags}")
+            
+            for f_idx, fev in enumerate(freeze_events):
+                t_pause = min(duration_s, max(last_t + 0.05, fev["start_s"]))
+                f_dur = fev["end_s"] - fev["start_s"]
+                filter_complex.append(
+                    f"[v_sp_{f_idx}]trim=start={last_t:.3f}:end={t_pause:.3f},setpts=PTS-STARTPTS,"
+                    f"tpad=stop_mode=clone:stop_duration={f_dur:.3f}[v_frz_{f_idx}]"
+                )
+                v_parts.append(f"[v_frz_{f_idx}]")
+                last_t = t_pause
+                
+            if last_t < duration_s and len(v_parts) < n_splits:
+                tail_idx = len(freeze_events)
+                filter_complex.append(
+                    f"[v_sp_{tail_idx}]trim=start={last_t:.3f}:end={duration_s:.3f},setpts=PTS-STARTPTS[v_frz_tail]"
+                )
+                v_parts.append("[v_frz_tail]")
+                
+            if len(v_parts) > 1:
+                concat_inputs = "".join(v_parts)
+                filter_complex.append(f"{concat_inputs}concat=n={len(v_parts)}:v=1:a=0[v_paused]")
+                v_head = "v_paused"
+            elif len(v_parts) == 1:
+                v_head = v_parts[0].strip("[]")
+
     # Scale and Subtitles (Always 100% crisp HD, zero random blur)
     if safe_sub_path:
         filter_complex.append(f"[{v_head}]scale=1080:1920,ass='{safe_sub_path}'[v_final]")

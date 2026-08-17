@@ -78,20 +78,20 @@ def html_color_to_ass(hex_color: str) -> str:
 
 def _get_ass_header(
     preset_name: str = "default",
-    font_name: str = "",
-    font_size: int = 0,
-    primary_color: str = "",
-    outline_color: str = ""
+    font_name: Optional[str] = None,
+    font_size: Optional[int] = None,
+    primary_color: Optional[str] = None,
+    outline_color: Optional[str] = None
 ) -> str:
     p = dict(PRESETS.get(preset_name, PRESETS["default"]))
     
-    if font_name.strip():
+    if font_name and isinstance(font_name, str) and font_name.strip():
         p["fontname"] = font_name.strip()
-    if font_size > 0:
+    if font_size and isinstance(font_size, int) and font_size > 0:
         p["fontsize"] = font_size
-    if primary_color.strip():
+    if primary_color and isinstance(primary_color, str) and primary_color.strip():
         p["primary"] = html_color_to_ass(primary_color)
-    if outline_color.strip():
+    if outline_color and isinstance(outline_color, str) and outline_color.strip():
         p["outline"] = html_color_to_ass(outline_color)
         
     title_font = "Impact" if p["fontname"] == "Impact" else "Arial Black"
@@ -125,12 +125,13 @@ def generate_ass_subtitles(
     clip_end_s: float,
     output_path: str,
     style_name: str = "kinetic_slide",
-    clip_title: str = "",
+    clip_title: Optional[str] = None,
     preset_name: str = "default",
-    font_name: str = "",
-    font_size: int = 0,
-    primary_color: str = "",
-    outline_color: str = ""
+    font_name: Optional[str] = None,
+    font_size: Optional[int] = None,
+    primary_color: Optional[str] = None,
+    outline_color: Optional[str] = None,
+    ai_audio_events: Optional[List[Dict[str, Any]]] = None
 ) -> str:
     """
     Generate a TikTok-style ASS subtitle file for a clip segment.
@@ -147,6 +148,7 @@ def generate_ass_subtitles(
         font_size:    Custom font size override.
         primary_color: Custom primary text color override.
         outline_color: Custom outline color override.
+        ai_audio_events: AI voice commentary events for pause/context badges.
 
     Returns:
         Path to the generated ASS file.
@@ -174,7 +176,7 @@ def generate_ass_subtitles(
             f"[{clip_start_s:.2f}s → {clip_end_s:.2f}s]. "
             "Creating empty subtitle file."
         )
-        _write_ass(output_path, [], style_name, clip_title, preset_name, font_name, font_size, primary_color, outline_color)
+        _write_ass(output_path, [], style_name, clip_title, preset_name, font_name, font_size, primary_color, outline_color, ai_audio_events)
         return output_path
 
     # Normalize timestamps: make them relative to clip start
@@ -196,7 +198,7 @@ def generate_ass_subtitles(
         f"[{clip_start_s:.1f}s → {clip_end_s:.1f}s]"
     )
 
-    _write_ass(output_path, groups, style_name, clip_title, preset_name, font_name, font_size, primary_color, outline_color)
+    _write_ass(output_path, groups, style_name, clip_title, preset_name, font_name, font_size, primary_color, outline_color, ai_audio_events)
     logger.info(f"[SubtitleEngine] ✅ ASS file written → {output_path}")
     return output_path
 
@@ -271,7 +273,8 @@ def _write_ass(
     font_name: str = "",
     font_size: int = 0,
     primary_color: str = "",
-    outline_color: str = ""
+    outline_color: str = "",
+    ai_audio_events: Optional[List[Dict[str, Any]]] = None
 ) -> None:
     """
     Write the ASS file generating dynamic word-by-word slide-up, zoom, neon, karaoke,
@@ -287,17 +290,42 @@ def _write_ass(
         font_size:    Custom font size override.
         primary_color: Custom primary color override.
         outline_color: Custom outline color override.
+        ai_audio_events: AI voice commentary events for pause/context badges.
     """
     lines = [_get_ass_header(preset_name, font_name, font_size, primary_color, outline_color)]
 
     # Add permanent title banner at the top of the viewport
-    if clip_title.strip() and groups:
+    if clip_title and clip_title.strip() and groups:
         total_end = groups[-1]["end"]
         start_ts = _seconds_to_ass_time(0.0)
         end_ts   = _seconds_to_ass_time(total_end)
         clean_title = _sanitize_word(clip_title.strip()).upper()
         fade_ms = min(200, max(50, int(total_end * 500)))
         lines.append(f"Dialogue: 0,{start_ts},{end_ts},TitleStyle,,0,0,0,,{{\\fad({fade_ms},{fade_ms})}}{clean_title}")
+
+    # Add viral context / pause badges during AI voiceover segments
+    if ai_audio_events:
+        for ev in ai_audio_events:
+            ev_start_ts = _seconds_to_ass_time(ev.get("start_s", 0.0))
+            ev_end_ts   = _seconds_to_ass_time(ev.get("end_s", 0.0))
+            ev_type     = ev.get("type", "commentary")
+            
+            if ev_type == "hook":
+                badge_text = "⚡ HOOK INTRO"
+                badge_color = "00FFFF" # Neon Yellow
+            elif ev_type == "takeaway":
+                badge_text = "💡 KEY TAKEAWAY"
+                badge_color = "00FF00" # Emerald Green
+            else:
+                badge_text = "⏸ EXPLANATION"
+                badge_color = "00D7FF" # Warm Gold
+                
+            badge_line = (
+                f"Dialogue: 2,{ev_start_ts},{ev_end_ts},Kinetic,,0,0,0,,"
+                f"{{\\an8\\pos(540,240)\\fs46\\b1\\c&H{badge_color}&\\3c&H000000&\\bord5\\shad3"
+                f"\\t(0,120,\\fscx115\\fscy115)\\t(120,240,\\fscx100\\fscy100)}}{badge_text}"
+            )
+            lines.append(badge_line)
 
     for group in groups:
         group_start = group["start"]

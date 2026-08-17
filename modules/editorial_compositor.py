@@ -81,15 +81,14 @@ def align_editorial_timeline(
         current_time = target_start + duration
         return current_time
 
-    # 1. Hook (Starts at 0.0)
+    # 1. Hook (Starts at 0.0, pauses video at opening)
     current_time = 0.0
     hook_val = editorial_data.get("hook")
     hook_text = hook_val.get("text", "") if isinstance(hook_val, dict) else (hook_val or "")
     if isinstance(hook_text, str) and hook_text.strip():
         current_time = process_segment(hook_text.strip(), current_time, "hook")
 
-    # 2. Commentary Segments
-    # Find insertion points based on exact phrase token sequence
+    # 2. Commentary Segments (Pauses video at sentence conclusion)
     for seg in editorial_data.get("commentary_segments", []):
         insert_text = seg.get("insert_after_text", "").strip()
         if not insert_text:
@@ -117,12 +116,11 @@ def align_editorial_timeline(
                     break
                 
         if insert_time >= 0:
-            # Ensure non-overlap with earlier AI events
             insert_time = max(insert_time, current_time + 0.1)
             if insert_time < clip_duration:
                 current_time = process_segment(seg.get("text", ""), insert_time, "commentary")
 
-    # 3. Takeaway (Aligned near end of clip, with safety margin)
+    # 3. Takeaway (Aligned near end of clip)
     takeaway_val = editorial_data.get("takeaway")
     takeaway_text = takeaway_val.get("text", "") if isinstance(takeaway_val, dict) else (takeaway_val or "")
     if isinstance(takeaway_text, str) and takeaway_text.strip():
@@ -134,24 +132,26 @@ def align_editorial_timeline(
         if actual_start < clip_duration:
             process_segment(text, actual_start, "takeaway")
 
-    # Filter source words that overlap with AI events
-    filtered_source_words = []
+    # Freeze-Frame Pause & Timeline Shift:
+    # All source words after an AI pause point are shifted forward by the pause duration
+    # so that 100% of the original host/guest dialogue is preserved without dropping words.
+    shifted_source_words = []
     for w in source_words:
+        w_copy = dict(w)
         w_start_rel = w["start"] - clip_start_s
-        w_end_rel = w["end"] - clip_start_s
         
-        overlap = False
-        for ev in ai_audio_events:
-            # If word overlaps any part of an AI speech event
-            if max(w_start_rel, ev["start_s"]) < min(w_end_rel, ev["end_s"]):
-                overlap = True
-                break
-        
-        if not overlap:
-            filtered_source_words.append(w)
+        # Calculate cumulative pause shift from earlier AI events
+        shift = sum(
+            (ev["end_s"] - ev["start_s"])
+            for ev in ai_audio_events
+            if ev["start_s"] <= w_start_rel
+        )
+        w_copy["start"] += shift
+        w_copy["end"] += shift
+        shifted_source_words.append(w_copy)
 
-    # Combine and sort
-    combined_words = filtered_source_words + ai_words
+    # Combine all words and sort chronologically
+    combined_words = shifted_source_words + ai_words
     combined_words.sort(key=lambda x: x["start"])
 
     return combined_words, ai_audio_events

@@ -572,7 +572,8 @@ def run_pipeline(args: argparse.Namespace) -> None:
             font_name=args.font_name,
             font_size=args.font_size,
             primary_color=args.primary_color,
-            outline_color=args.outline_color
+            outline_color=args.outline_color,
+            ai_audio_events=ai_audio_events
         )
 
         # ─── Stage 6: NVENC Render ───────────────────────────
