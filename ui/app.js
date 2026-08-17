@@ -577,12 +577,38 @@ document.addEventListener("DOMContentLoaded", () => {
   // Settings Modal & Caption Studio Architecture
   const configCaptionStyle = document.getElementById('config-caption-style');
   const savedCaptionStyle = localStorage.getItem('captionStyle') || 'kinetic_slide';
-  if (configCaptionStyle) configCaptionStyle.value = savedCaptionStyle;
-  
   if (configCaptionStyle) {
+    configCaptionStyle.value = savedCaptionStyle;
     configCaptionStyle.addEventListener('change', (e) => {
       localStorage.setItem('captionStyle', e.target.value);
       renderCaptionStudioGrid();
+    });
+  }
+
+  const configModel = document.getElementById('config-model');
+  const savedModel = localStorage.getItem('cliphub_model') || 'small';
+  if (configModel) {
+    configModel.value = savedModel;
+    configModel.addEventListener('change', (e) => {
+      localStorage.setItem('cliphub_model', e.target.value);
+    });
+  }
+
+  const configCommentaryMode = document.getElementById('config-commentary-mode');
+  const savedCommentaryMode = localStorage.getItem('cliphub_commentary_mode') || 'hook_commentary';
+  if (configCommentaryMode) {
+    configCommentaryMode.value = savedCommentaryMode;
+    configCommentaryMode.addEventListener('change', (e) => {
+      localStorage.setItem('cliphub_commentary_mode', e.target.value);
+    });
+  }
+
+  const configCommentaryVoice = document.getElementById('config-commentary-voice');
+  const savedCommentaryVoice = localStorage.getItem('cliphub_commentary_voice') || 'af_sarah';
+  if (configCommentaryVoice) {
+    configCommentaryVoice.value = savedCommentaryVoice;
+    configCommentaryVoice.addEventListener('change', (e) => {
+      localStorage.setItem('cliphub_commentary_voice', e.target.value);
     });
   }
 

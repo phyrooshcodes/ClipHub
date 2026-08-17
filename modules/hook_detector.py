@@ -151,7 +151,9 @@ def _call_streaming_with_failover(
     max_tokens: int,
     ttft_timeout_s: float = 45.0,
     idle_chunk_timeout_s: float = 45.0,
-    max_total_timeout_s: float = 600.0
+    max_total_timeout_s: float = 600.0,
+    total_timeout_s: float | None = None,
+    **kwargs
 ) -> str:
     """
     Execute streaming completion on model.
@@ -160,6 +162,9 @@ def _call_streaming_with_failover(
     Crucially, as long as tokens are streaming, the query is NEVER interrupted by an arbitrary total timeout.
     """
     import time
+
+    if total_timeout_s is not None:
+        max_total_timeout_s = max(total_timeout_s, max_total_timeout_s)
 
     start_time = time.time()
     last_token_time = start_time
@@ -183,7 +188,7 @@ def _call_streaming_with_failover(
         if first_token_received and (now - last_token_time > idle_chunk_timeout_s):
             raise TimeoutError(f"Streaming stalled: No token received for {idle_chunk_timeout_s}s from {model}")
 
-        # Generous 10-minute overall safety ceiling
+        # Generous safety ceiling
         if now - start_time > max_total_timeout_s:
             raise TimeoutError(f"Streaming generation exceeded safety limit of {max_total_timeout_s}s")
 
@@ -203,7 +208,7 @@ def _call_streaming_with_failover(
     full_text = "".join(chunks).strip()
     if not full_text:
         raise ValueError(f"Model {model} returned an empty streaming response.")
-    logger.info(f"[HookDetector] ✅ Single model {model} completed full transcript analysis ({token_count} tokens in {time.time() - start_time:.1f}s)")
+    logger.info(f"[HookDetector] ✅ Single model {model} completed analysis ({token_count} tokens in {time.time() - start_time:.1f}s)")
     return full_text
 
 
@@ -212,12 +217,14 @@ def adjust_clip_to_sentences(
     start_ms: int,
     end_ms: int,
     video_duration_seconds: float,
-    max_expansion_s: float = 8.0
+    max_expansion_s: float = 12.0
 ) -> Tuple[int, int]:
     """
     Snap start_ms and end_ms to the closest actual words in the transcript,
     then adjust backward and forward to find natural sentence boundaries
     (ending in '.', '?', '!') or natural gaps (>1.0s) between words.
+    If the selected quote is short (< 25s), automatically expands forward
+    through subsequent sentences so the clip becomes a rich standalone unit (30–65s).
     """
     if not words:
         return start_ms, end_ms
@@ -251,9 +258,13 @@ def adjust_clip_to_sentences(
             break
             
     # 2. Walk end_idx forward to find the end of the sentence
+    # If the clip is currently under 28 seconds, allow generous forward expansion to complete the thought
+    current_dur = words[end_idx]["end"] - words[curr_start_idx]["start"]
+    effective_forward_expansion = 30.0 if current_dur < 28.0 else max_expansion_s
+
     curr_end_idx = end_idx
     for i in range(end_idx, len(words)):
-        if words[i]["end"] - orig_end_s > max_expansion_s:
+        if words[i]["end"] - orig_end_s > effective_forward_expansion:
             break
             
         word_text = words[i]["word"].strip()
@@ -263,9 +274,12 @@ def adjust_clip_to_sentences(
         if i < len(words) - 1:
             large_gap = (words[i+1]["start"] - words[i]["end"]) > 1.0
             
-        if ends_with_punc or large_gap or i == len(words) - 1:
+        dur_so_far = words[i]["end"] - words[curr_start_idx]["start"]
+        if (ends_with_punc or large_gap or i == len(words) - 1):
             curr_end_idx = i
-            break
+            # If we reached a sentence boundary and have at least 25s of content, stop expanding
+            if dur_so_far >= 25.0:
+                break
             
     new_start_ms = int(words[curr_start_idx]["start"] * 1000)
     # Add a 150ms cushion at the end to prevent syllable clipping
@@ -330,7 +344,7 @@ def _validate_and_clamp_clips(
         start = clip.get("start_ms", 0)
         end = clip.get("end_ms", 0)
         
-        # Snap and adjust clip to actual sentence boundaries for clean cuts
+        # Snap and adjust clip to actual sentence boundaries for clean cuts & auto-expand short quotes
         start, end = adjust_clip_to_sentences(words, start, end, video_duration_seconds)
         
         # Discard clips that start beyond video duration
@@ -346,13 +360,13 @@ def _validate_and_clamp_clips(
             logger.warning(f"[HookDetector] Discarding clip with invalid range: {clip.get('title', 'Untitled')} ({start/1000:.1f}s -> {end/1000:.1f}s)")
             continue
 
-        # Discard clips that are too short (under 20s or total duration) or too long (over 90s)
+        # Keep clips that are at least 12s or total video length (avoid throwing away valid moments)
         duration = end - start
-        min_allowed = min(20000, max_ms)
+        min_allowed = min(12000, max_ms)
         if duration < min_allowed:
             logger.warning(f"[HookDetector] Discarding clip that is too short ({duration/1000:.1f}s): {clip.get('title', 'Untitled')}")
             continue
-        if duration > 90000:
+        if duration > 95000:
             logger.warning(f"[HookDetector] Discarding clip that is too long ({duration/1000:.1f}s): {clip.get('title', 'Untitled')}")
             continue
             
@@ -510,8 +524,9 @@ def detect_hooks(
                         {"role": "user",   "content": user_message}
                     ],
                     max_tokens=chunk_max_tokens,
-                    ttft_timeout_s=30.0,
-                    total_timeout_s=90.0
+                    ttft_timeout_s=45.0,
+                    idle_chunk_timeout_s=45.0,
+                    max_total_timeout_s=300.0
                 )
                 logger.info(f"[HookDetector] Chunk {idx+1} successfully completed with {m}")
                 break
