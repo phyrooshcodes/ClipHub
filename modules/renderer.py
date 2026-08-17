@@ -135,6 +135,34 @@ def render_clip(
 
     a_head = f"{silent_audio_idx}:a" if not has_audio else "0:a"
 
+    # Helper to generate smooth 2D balloon floating drift expressions
+    def make_balloon_floating_expr(duration: float, w_av: int = 932, h_av: int = 1400):
+        t_in = 0.45
+        t_out = 0.45
+        t_exit = max(t_in + 0.1, duration - t_out)
+        x_pos_base = (1080 - w_av) // 2
+        y_rest = 1920 - h_av + 100
+        y_off = 1920
+        travel = y_off - y_rest
+
+        # Organic 2D balloon floating motion (half-speed, multi-frequency gentle drift)
+        x_expr = (
+            f"if(lt(t,{t_in:.3f}), {x_pos_base}, "
+            f"if(lt(t,{t_exit:.3f}), "
+            f"{x_pos_base} + 14 * sin(1.4 * (t - {t_in:.3f})) + 8 * cos(0.8 * (t - {t_in:.3f})), "
+            f"{x_pos_base}"
+            f"))"
+        )
+        y_expr = (
+            f"if(lt(t,{t_in:.3f}), "
+            f"{y_off} - {travel} * sin(t/{t_in:.3f}*1.570796), "
+            f"if(lt(t,{t_exit:.3f}), "
+            f"{y_rest} + 10 * sin(1.1 * (t - {t_in:.3f})) + 6 * sin(2.1 * (t - {t_in:.3f}) + 0.8), "
+            f"{y_rest} + {travel} * (1 - cos((t-{t_exit:.3f})/{t_out:.3f}*1.570796))"
+            f"))"
+        )
+        return x_expr, y_expr
+
     # ─── Explainer Video & Audio Splicing (Strictly Sequential - ZERO Voice Overlap) ───
     if ai_inputs:
         v_segments = []
@@ -154,19 +182,62 @@ def render_clip(
         filter_complex.append(f"[{v_head}]split={num_v_splits}{''.join(f'[{tag}]' for tag in v_split_tags)}")
         filter_complex.append(f"[{a_head}]asplit={num_a_splits}{''.join(f'[{tag}]' for tag in a_split_tags)}")
         
+        # Prepare avatar splits if avatar is present
+        avatar_branch_idx = 0
+        if has_avatar and avatar_input_idx >= 0:
+            num_avatar_splits = (1 if hook_ev else 0) + len(comm_events)
+            w_av = 932
+            h_av = 1400
+            if num_avatar_splits > 1:
+                av_tags = "".join(f"[av_sp_{i}]" for i in range(num_avatar_splits))
+                filter_complex.append(f"[{avatar_input_idx}:v]scale={w_av}:{h_av}:flags=lanczos,split={num_avatar_splits}{av_tags}")
+            else:
+                filter_complex.append(f"[{avatar_input_idx}:v]scale={w_av}:{h_av}:flags=lanczos[av_sp_0]")
+
+        # Prepare click SFX splits if present
+        click_branch_idx = 0
+        if has_click_sfx and click_sfx_idx >= 0:
+            num_click_splits = (1 if hook_ev else 0) + len(comm_events)
+            if num_click_splits > 1:
+                clk_tags = "".join(f"[clk_sp_{i}]" for i in range(num_click_splits))
+                filter_complex.append(f"[{click_sfx_idx}:a]volume=0.30,asplit={num_click_splits}{clk_tags}")
+            else:
+                filter_complex.append(f"[{click_sfx_idx}:a]volume=0.30[clk_sp_0]")
+
         v_idx = 0
         a_idx = 0
         
-        # 1. AI Intro Hook (Video holds opening frame while Sarah introduces the clip)
+        # 1. AI Intro Hook (Anime Presenter on blurred background with gentle click)
         if hook_ev:
-            filter_complex.append(
-                f"[{v_split_tags[v_idx]}]trim=start=0:end=0.1,setpts=PTS-STARTPTS,"
-                f"tpad=stop_mode=clone:stop_duration={hook_ev['duration']:.3f},scale=1080:1920[v_seg_hook]"
-            )
+            hook_dur = hook_ev["duration"]
+            if has_avatar and avatar_input_idx >= 0:
+                hook_x_expr, hook_y_expr = make_balloon_floating_expr(hook_dur)
+                filter_complex.append(
+                    f"[{v_split_tags[v_idx]}]trim=start=0:end=0.1,setpts=PTS-STARTPTS,"
+                    f"tpad=stop_mode=clone:stop_duration={hook_dur:.3f},scale=1080:1920[v_hook_raw]"
+                )
+                filter_complex.append(
+                    f"[v_hook_raw]boxblur=20:5,eq=brightness=-0.08:contrast=1.05[v_hook_bg]"
+                )
+                filter_complex.append(
+                    f"[v_hook_bg][av_sp_{avatar_branch_idx}]overlay=x='{hook_x_expr}':y='{hook_y_expr}':eval=frame[v_seg_hook]"
+                )
+                avatar_branch_idx += 1
+            else:
+                filter_complex.append(
+                    f"[{v_split_tags[v_idx]}]trim=start=0:end=0.1,setpts=PTS-STARTPTS,"
+                    f"tpad=stop_mode=clone:stop_duration={hook_dur:.3f},scale=1080:1920[v_seg_hook]"
+                )
             v_segments.append("[v_seg_hook]")
             v_idx += 1
             
-            filter_complex.append(f"[{hook_ev['input_idx']}:a]asetpts=PTS-STARTPTS[a_seg_hook]")
+            if has_click_sfx and click_sfx_idx >= 0:
+                filter_complex.append(
+                    f"[{hook_ev['input_idx']}:a][clk_sp_{click_branch_idx}]amix=inputs=2:duration=first:dropout_transition=0,asetpts=PTS-STARTPTS[a_seg_hook]"
+                )
+                click_branch_idx += 1
+            else:
+                filter_complex.append(f"[{hook_ev['input_idx']}:a]asetpts=PTS-STARTPTS[a_seg_hook]")
             a_segments.append("[a_seg_hook]")
 
         # 2. Source Speech and Mid-Clip Commentary Segments (Anime Presenter Explains)
@@ -189,30 +260,11 @@ def render_clip(
             a_idx += 1
             
             # Freeze-frame pause during commentary:
-            # Whole background clip blurs, and Anime Girl slides up smoothly, floats, and slides down
+            # Whole background clip blurs, and Anime Girl slides up smoothly, floats in 2D balloon drift, and slides down
             freeze_start = max(0.0, t_insert - 0.05)
             
             if has_avatar and avatar_input_idx >= 0:
-                t_in = 0.45
-                t_out = 0.45
-                t_exit = max(t_in + 0.1, comm_dur - t_out)
-                
-                w_av = 932
-                h_av = 1400
-                x_pos = (1080 - w_av) // 2
-                y_rest = 1920 - h_av + 100
-                y_off = 1920
-                travel = y_off - y_rest
-                
-                y_expr = (
-                    f"if(lt(t,{t_in:.3f}), "
-                    f"{y_off} - {travel} * sin(t/{t_in:.3f}*1.570796), "
-                    f"if(lt(t,{t_exit:.3f}), "
-                    f"{y_rest} + 16 * sin(4.712389*(t-{t_in:.3f})), "
-                    f"{y_rest} + {travel} * (1 - cos((t-{t_exit:.3f})/{t_out:.3f}*1.570796))"
-                    f"))"
-                )
-                
+                comm_x_expr, comm_y_expr = make_balloon_floating_expr(comm_dur)
                 filter_complex.append(
                     f"[{v_split_tags[v_idx]}]trim=start={freeze_start:.3f}:end={t_insert:.3f},setpts=PTS-STARTPTS,"
                     f"tpad=stop_mode=clone:stop_duration={comm_dur:.3f},scale=1080:1920[v_frz_raw_{c_idx}]"
@@ -221,11 +273,9 @@ def render_clip(
                     f"[v_frz_raw_{c_idx}]boxblur=20:5,eq=brightness=-0.08:contrast=1.05[v_frz_bg_{c_idx}]"
                 )
                 filter_complex.append(
-                    f"[{avatar_input_idx}:v]scale={w_av}:{h_av}:flags=lanczos[v_avatar_{c_idx}]"
+                    f"[v_frz_bg_{c_idx}][av_sp_{avatar_branch_idx}]overlay=x='{comm_x_expr}':y='{comm_y_expr}':eval=frame[v_frz_{c_idx}]"
                 )
-                filter_complex.append(
-                    f"[v_frz_bg_{c_idx}][v_avatar_{c_idx}]overlay=x={x_pos}:y='{y_expr}':eval=frame[v_frz_{c_idx}]"
-                )
+                avatar_branch_idx += 1
             else:
                 filter_complex.append(
                     f"[{v_split_tags[v_idx]}]trim=start={freeze_start:.3f}:end={t_insert:.3f},setpts=PTS-STARTPTS,"
@@ -236,10 +286,10 @@ def render_clip(
             
             # Play gentle mouse click right as the pause triggers
             if has_click_sfx and click_sfx_idx >= 0:
-                filter_complex.append(f"[{click_sfx_idx}:a]volume=0.30[a_sfx_click_{c_idx}]")
                 filter_complex.append(
-                    f"[{cev['input_idx']}:a][a_sfx_click_{c_idx}]amix=inputs=2:duration=first:dropout_transition=0,asetpts=PTS-STARTPTS[a_comm_{c_idx}]"
+                    f"[{cev['input_idx']}:a][clk_sp_{click_branch_idx}]amix=inputs=2:duration=first:dropout_transition=0,asetpts=PTS-STARTPTS[a_comm_{c_idx}]"
                 )
+                click_branch_idx += 1
             else:
                 filter_complex.append(f"[{cev['input_idx']}:a]asetpts=PTS-STARTPTS[a_comm_{c_idx}]")
             a_segments.append(f"[a_comm_{c_idx}]")
