@@ -167,7 +167,6 @@
               <i class="ri-article-line"></i>
               <h3>EDITORIAL SCRIPT</h3>
             </div>
-            <span class="header-pill">AI Review Ready</span>
           </div>
           <div class="panel-tabs">
             <button class="tab active"><i class="ri-file-text-line"></i> SCRIPT SEGMENTS</button>
@@ -182,7 +181,6 @@
           </div>
           <div class="script-footer">
             <button class="btn-outline-dashed" id="btn-add-segment"><i class="ri-add-line"></i> Add New Segment</button>
-            <span class="header-pill" id="script-status-pill" style="font-size:11px;"><i class="ri-sparkling-fill"></i> AI Review Ready</span>
             <button id="btn-approve-review" class="hidden"></button>
           </div>
         </div>
@@ -191,7 +189,6 @@
         <div class="panel panel-pipeline" id="panel-pipeline-wrapper">
           <div class="panel-tabs">
             <button class="tab active">ACTIVE JOB</button>
-            <button class="tab">PIPELINE</button>
           </div>
           <div class="pipeline-body">
             <div class="job-info">
@@ -297,12 +294,8 @@
 
         <!-- BOTTOM RIGHT: Activity Logs -->
         <div class="panel panel-logs">
-          <div class="panel-tabs between">
-            <div>
-              <button class="tab active">ACTIVITY LOG</button>
-              <button class="tab">SYSTEM LOGS</button>
-            </div>
-            <button class="btn-clear" onclick="document.getElementById('console-output').innerHTML=''">Clear</button>
+          <div class="panel-tabs">
+            <button class="tab active">ACTIVITY LOG</button>
           </div>
           <div class="logs-content" id="console-output">
             <!-- Logs injected here -->
