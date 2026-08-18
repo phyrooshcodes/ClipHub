@@ -2044,9 +2044,10 @@ body.dark-theme .tag {
 /* ── CLIP GALLERY CARDS ─────────────────────────────────── */
 .clips-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 16px;
-  padding: 4px 0;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 320px));
+  gap: 20px;
+  padding: 8px 0;
+  justify-content: start;
 }
 
 .clip-card {
@@ -2058,20 +2059,22 @@ body.dark-theme .tag {
   display: flex;
   flex-direction: column;
   transition: transform 0.2s, box-shadow 0.2s;
+  width: 100%;
 }
 
 .clip-card:hover {
-  transform: translateY(-2px);
+  transform: translateY(-3px);
   box-shadow: var(--shadow-lg);
   border-color: var(--border-strong);
 }
 
 .clip-video {
   width: 100%;
-  aspect-ratio: 9/16;
-  max-height: 280px;
+  aspect-ratio: 9 / 16;
   object-fit: cover;
   background: #000000;
+  display: block;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
 }
 
 .clip-body {
