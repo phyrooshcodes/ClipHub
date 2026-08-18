@@ -167,9 +167,16 @@ def render_clip(
                 inp_cnt += 1
             
             x_expr, y_expr = make_balloon_floating_expr(duration, is_intro=is_intro)
-            fc = [
-                f"[0:v]trim=start=0:end=0.04,scale=1080:1920:flags=lanczos,setsar=1,boxblur=15:3,eq=brightness=-0.08:contrast=1.05,tpad=stop_mode=clone:stop_duration={duration:.3f},trim=start=0:end={duration:.3f},fps=60,setpts=PTS-STARTPTS[bg]"
-            ]
+            if is_intro:
+                # Universal Black Background for Intro & Thumbnails
+                fc = [
+                    f"color=c=0x070709:s=1080x1920:d={duration:.3f},fps=60,setpts=PTS-STARTPTS[bg]"
+                ]
+            else:
+                # Freeze & blur host video during mid-clip commentary breakdown
+                fc = [
+                    f"[0:v]trim=start=0:end=0.04,scale=1080:1920:flags=lanczos,setsar=1,boxblur=15:3,eq=brightness=-0.08:contrast=1.05,tpad=stop_mode=clone:stop_duration={duration:.3f},trim=start=0:end={duration:.3f},fps=60,setpts=PTS-STARTPTS[bg]"
+                ]
             if has_avatar and av_idx >= 0:
                 fc.append(f"[{av_idx}:v]scale=932:1400:flags=lanczos[av]")
                 fc.append(f"[bg][av]overlay=x='{x_expr}':y='{y_expr}':eval=frame,scale=1080:1920:flags=lanczos,setsar=1,fps=60,setpts=PTS-STARTPTS[v]")
