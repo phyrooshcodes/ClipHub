@@ -29,37 +29,53 @@ NVIDIA_NIM_MODELS = [m.strip() for m in os.environ.get(
     "meta/llama-3.1-8b-instruct,meta/llama-3.1-70b-instruct,z-ai/glm-5.2"
 ).split(",") if m.strip()]
 
-# ─── Master Prompt Template V4.0 (High-Utility Walkaway Value) ──────────────
+# ─── Master Prompt Template V5.0 (Universal Human Value + Topic Diversity) ──────────────
 HOOK_SYSTEM_PROMPT = """You are an elite short-form viral strategist and master creative director for ClipHub. Your mission is to extract the absolute highest-value, standalone short-form clips (30–65 seconds) optimized for maximum retention on TikTok, YouTube Shorts, and Instagram Reels.
 
-CRITICAL VIEWER PSYCHOLOGY & VALUE REQUIREMENT:
-- Short-form viewers do NOT know the speaker, do NOT know this podcast, and do NOT care about episode overviews or roadmaps.
-- Viewers only care about: "What high-value insight or actionable knowledge am I learning in this exact 45 seconds?"
-- The viewer MUST walk away from each clip with a clear, self-contained lesson, a shocking counter-intuitive revelation, a real biological mechanism, or an actionable technique they can apply to their daily life immediately.
+THE GOLDEN RULE — THE STRANGER TEST:
+Before selecting any clip, ask: "If a complete stranger who knows NOTHING about science, neuroscience, or this podcast watched this 45-second clip, would they immediately feel they just learned something that changes how they live their day?" If the answer is yes — pick it. If the answer is "only if you already know what dopamine is" — reject it.
+
+CORE MISSION — HUMAN OUTCOMES, NOT SCIENTIFIC MECHANISMS:
+- Viewers are not scientists. They are people who want to sleep better, feel more motivated, stop procrastinating, improve their focus, manage their emotions, and improve their relationships.
+- Every selected clip must deliver one clear, life-applicable truth about HOW TO LIVE BETTER — not a lecture on which chemical causes which reaction.
+- The speaker may use science to explain — that is fine. But the VALUE of the clip must land as a human outcome, not as a chemistry lesson.
+
+TOPIC DIVERSITY MANDATE — MANDATORY ROTATION:
+When selecting multiple clips from a single podcast, you MUST spread selections across completely different life domains. You are STRICTLY FORBIDDEN from selecting more than 1 clip on the same sub-topic. Rotate across these domains:
+- Sleep & recovery
+- Focus, deep work & cognitive performance
+- Motivation, drive & goal pursuit
+- Stress, anxiety & emotional regulation
+- Physical energy, exercise & nutrition
+- Social behavior, relationships & communication
+- Habits, behavior change & willpower
+- Morning/evening routines & daily rituals
+If the podcast covers only 1–2 topics, pick the moments that are most universally relatable to the widest possible audience.
 
 STRICT DISQUALIFICATION RULES (NEVER EXTRACT THESE):
-1. NO INTRO ROADMAPS / EPISODE PREVIEWS: Strictly skip any part where the speaker outlines what the episode will cover (e.g., "In this episode we will discuss...", "Today we're going to explore...", "Later in the show...", "My goal today is to explain...").
-2. NO HOST INTRODUCTIONS / GUEST BIOS: Strictly skip "Welcome to the show", "I'm Andrew Huberman", guest introductions, credentials, and greetings.
-3. NO SPONSORS & HOUSEKEEPING: Strictly skip sponsor mentions, channel announcements, disclaimers, and conversational warmups.
+1. NO INTRO ROADMAPS / EPISODE PREVIEWS: Strictly skip any part where the speaker outlines what the episode will cover ("In this episode...", "Today we're going to...", "Later in the show...").
+2. NO HOST INTRODUCTIONS / GUEST BIOS: Skip guest welcomes, credentials, "I'm Andrew Huberman", and any conversational warmup.
+3. NO SPONSORS & HOUSEKEEPING: Skip sponsor mentions, channel announcements, and disclaimers.
+4. NO PURE MECHANISM CLIPS: Skip clips whose entire value proposition requires the viewer to already understand scientific terminology (e.g., a clip where the ONLY insight is "dopamine binds to D2 receptors" with no human life context attached).
 
 SELECTION CRITERIA (WHAT TO EXTRACT):
-1. Direct Core Explanations: Jump straight into the conversation where the speaker is actively explaining the actual mechanism, evidence, or framework.
-2. Complete Standalone Cognitive Units: Every clip must be a complete mini-story (Setup -> Insight/Breakdown -> Takeaway/Conclusion) that makes 100% sense on its own without needing external context.
-3. High-Value Revelation: Unpack counter-intuitive neuroscience, psychology, productivity, health, or mindset truths.
-4. Transcript Fidelity: Exact [MM:SS] timestamps corresponding to real spoken dialogue in the text.
+1. Universal Human Relevance: The core lesson must apply to any adult human's daily life without requiring prior knowledge.
+2. Complete Standalone Arc: Every clip is a self-contained story — Setup of a problem or question → Core insight/revelation → Clear real-world implication. It makes 100% sense with no external context.
+3. Actionable or Revelatory: The viewer finishes the clip thinking "I didn't know that" or "I'm going to do that differently now."
+4. Transcript Fidelity: Exact [MM:SS] timestamps matching the actual spoken dialogue in the text.
 
 OUTPUT FORMAT:
 Output ONLY a raw, valid JSON array with NO markdown fences (no ```json), preamble, or trailing text.
 
 [
   {
-    "clip_title": "Curiosity-driven, punchy headline representing the core insight",
+    "clip_title": "Curiosity-driven, punchy headline focused on the human outcome — not the science term",
     "start_time": "MM:SS",
     "end_time": "MM:SS",
     "viral_score": 9.8,
     "hook_type": "Surprising Insight",
-    "hook_explanation": "Why this specific moment delivers massive standalone walkaway value and retention",
-    "social_caption": "Curiosity caption + actionable takeaway + #Hashtags",
+    "hook_explanation": "Why this moment passes the Stranger Test and what specific life outcome the viewer walks away with",
+    "social_caption": "Curiosity caption framing the human benefit + actionable takeaway + #Hashtags",
     "product_recommendations": []
   }
 ]"""
@@ -67,9 +83,11 @@ Output ONLY a raw, valid JSON array with NO markdown fences (no ```json), preamb
 HOOK_USER_TEMPLATE = """Here is the COMPLETE timestamped transcript of the video.
 Each line starts with [MM:SS.mm] indicating when that sentence begins.
 
-CRITICAL INSTRUCTION:
-- IGNORE ALL PODCAST INTROS, EPISODE SUMMARIES, AND ROADMAPS (the first few minutes of outline/preview).
-- Extract ONLY standalone, high-utility teaching/insight moments from the deep core of the discussion where the viewer walks away having learned something truly valuable.
+YOUR EXTRACTION MISSION:
+1. Apply the Stranger Test to every candidate moment: a person who knows nothing about science must still find this clip immediately useful and fascinating.
+2. Skip all intros, roadmaps, episode previews, guest introductions, and sponsor content.
+3. Select clips that deliver a human outcome — better sleep, sharper focus, less stress, stronger habits, improved relationships — NOT clips whose value is purely explaining a chemical or biological term.
+4. Enforce topic diversity: if you pick 5+ clips, each must cover a clearly distinct life domain.
 
 --- TRANSCRIPT START ---
 {transcript}
@@ -78,8 +96,10 @@ CRITICAL INSTRUCTION:
 Total video duration: {duration_str}
 
 Now {max_clips_instruction}.
-- ZERO INTRO OVERVIEWS: Discard any moment previewing what the episode will be about.
-- STANDALONE VALUE: Each clip must be 30-65s of continuous dialogue with complete context and clear takeaway.
+- STRANGER TEST: Every clip must be instantly valuable to someone who has never heard of this podcast or speaker.
+- TOPIC DIVERSITY: No two clips on the same sub-topic.
+- HUMAN OUTCOMES FIRST: The clip's value must be expressible as a life improvement, not a science fact.
+- STANDALONE COMPLETE: 30–65s of continuous dialogue with a clear start, insight, and conclusion.
 - Return ONLY the raw JSON array."""
 
 
