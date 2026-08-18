@@ -258,27 +258,6 @@ html, body {
   display: none !important;
 }
 
-.sidebar.collapsed .sidebar-header {
-  padding: 0 16px;
-  justify-content: center;
-  position: relative;
-}
-
-.sidebar.collapsed .logo-box {
-  margin-right: 0;
-  cursor: pointer;
-  transition: transform 0.18s ease, filter 0.18s ease;
-}
-
-.sidebar.collapsed .logo-box:hover {
-  transform: scale(1.06);
-  filter: drop-shadow(0 0 8px rgba(99, 102, 241, 0.45));
-}
-
-.sidebar.collapsed .btn-sidebar-toggle {
-  display: none !important;
-}
-
 .sidebar.collapsed .sidebar-nav {
   padding: 16px 8px;
   align-items: center;

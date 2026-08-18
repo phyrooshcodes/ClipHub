@@ -23,22 +23,8 @@
   <div class="app-shell">
     
     <!-- LEFT SIDEBAR -->
-    <!-- LEFT SIDEBAR -->
     <aside class="sidebar" id="app-sidebar">
-      <div class="sidebar-header">
-        <div class="logo-box">
-          <img src="logo.png" alt="ClipHub Logo" class="logo-img">
-        </div>
-        <div class="logo-info">
-          <span class="logo-text">ClipHub</span>
-          <span class="logo-badge">Studio</span>
-        </div>
-        <button class="btn-sidebar-toggle" id="btn-sidebar-toggle" title="Toggle Sidebar (Ctrl+B)">
-          <i class="ri-layout-left-line"></i>
-        </button>
-      </div>
-      
-      <nav class="sidebar-nav">
+      <nav class="sidebar-nav" style="padding-top:16px;">
         <!-- Main Nav -->
         <button class="nav-item active" id="btn-nav-studio" title="Studio">
           <i class="ri-dashboard-3-line"></i> 
@@ -95,6 +81,9 @@
           <button class="nav-item-simple btn-theme-icon" id="btn-theme-toggle" title="Toggle Dark/Light Theme">
             <i class="ri-moon-line"></i>
           </button>
+          <button class="nav-item-simple btn-theme-icon" id="btn-sidebar-toggle" title="Toggle Sidebar (Ctrl+B)">
+            <i class="ri-layout-left-line"></i>
+          </button>
         </div>
       </div>
     </aside>
@@ -114,11 +103,6 @@
             <div class="panel-header-title">
               <i class="ri-video-line"></i>
               <h3 id="player-title">No video loaded</h3>
-            </div>
-            <div class="player-tags">
-              <span class="tag" id="ui-res"><i class="ri-aspect-ratio-line"></i> —</span>
-              <span class="tag" id="ui-dur"><i class="ri-time-line"></i> —</span>
-              <span class="tag" id="ui-fmt"><i class="ri-file-video-line"></i> —</span>
             </div>
           </div>
           <div class="player-container">
