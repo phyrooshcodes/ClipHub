@@ -298,6 +298,8 @@ def _write_ass(
     """
     lines = [_get_ass_header(preset_name, font_name, font_size, primary_color, outline_color)]
 
+    CLEAN_COVER_DELAY = 0.15  # Ensures Frame 0-9 has zero subtitle overlay for clean cover capture
+
     for group in groups:
         group_start = group["start"]
         group_end   = group["end"]
@@ -305,6 +307,17 @@ def _write_ass(
         
         if not group_words:
             continue
+
+        # Delay early subtitles so first frames are 100% clean cover frame
+        if group_start < CLEAN_COVER_DELAY:
+            shift = CLEAN_COVER_DELAY - group_start
+            group_start = CLEAN_COVER_DELAY
+            group_end = max(group_end, group_start + MIN_SUBTITLE_DURATION)
+            for w in group_words:
+                if w.get("start", 0) < CLEAN_COVER_DELAY:
+                    w["start"] = max(CLEAN_COVER_DELAY, w.get("start", 0) + shift)
+                if w.get("end", 0) <= w["start"]:
+                    w["end"] = w["start"] + 0.15
             
         W_texts = [_sanitize_word(w.get("word", "")).upper() for w in group_words]
 

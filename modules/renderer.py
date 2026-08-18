@@ -254,17 +254,28 @@ def render_clip(
             ]
         _run_ffmpeg(concat_cmd)
 
-        # 5. Extract cover thumbnail image with the presenter at frame 0
+        # 5. Generate pristine clean 1080x1920 cover thumbnail image
         try:
             thumb_path = f"{os.path.splitext(output_path)[0]}_thumb.jpg"
-            cmd_thumb = [
-                "ffmpeg", "-y", "-ss", "0.05", "-i", output_path,
-                "-vframes", "1", "-q:v", "2", thumb_path
-            ]
-            _run_ffmpeg(cmd_thumb)
-            logger.info(f"[Renderer] 📸 Saved cover thumbnail: {thumb_path}")
+            if has_avatar:
+                cmd_thumb = [
+                    "ffmpeg", "-y",
+                    "-f", "lavfi", "-i", "color=c=0x070709:s=1080x1920:d=1",
+                    "-i", avatar_path,
+                    "-filter_complex", "[1:v]scale=932:1400:flags=lanczos[av];[0:v][av]overlay=(1080-932)/2:(1920-1400+100)",
+                    "-vframes", "1", "-q:v", "1",
+                    thumb_path
+                ]
+                _run_ffmpeg(cmd_thumb)
+                logger.info(f"[Renderer] 📸 Saved clean cover thumbnail: {thumb_path}")
+            else:
+                cmd_thumb = [
+                    "ffmpeg", "-y", "-ss", "0.0", "-i", output_path,
+                    "-vframes", "1", "-q:v", "1", thumb_path
+                ]
+                _run_ffmpeg(cmd_thumb)
         except Exception as e:
-            logger.warning(f"[Renderer] Could not extract cover thumbnail: {e}")
+            logger.warning(f"[Renderer] Could not generate cover thumbnail: {e}")
 
         # Cleanup segments
         try:
