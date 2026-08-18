@@ -1,10 +1,16 @@
 import os
+import sys
 import threading
 import time
 import webbrowser
 import logging
 import secrets
 from pathlib import Path
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8")
 
 import uvicorn
 from fastapi import FastAPI
@@ -87,6 +93,11 @@ from fastapi.staticfiles import StaticFiles
 app.include_router(pipeline_router)
 app.include_router(social_router)
 app.include_router(downloads_router)
+
+# ─── Static Asset Mounts ────────────────────────────────────
+assets_dir = BASE_DIR / "assets"
+assets_dir.mkdir(exist_ok=True)
+app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="assets")
 
 # ─── Static UI Routes ───────────────────────────────────────
 @app.get("/", response_class=HTMLResponse)
@@ -205,15 +216,15 @@ if __name__ == "__main__":
 
     local_ip = get_local_ip()
     print("\n" + "=" * 55)
-    print("  ✦  CLIPHUB STUDIO SERVER STARTED")
+    print("  [*] CLIPHUB STUDIO SERVER STARTED")
     print("=" * 55)
-    print(f"  • Local Interface : http://localhost:{port}")
+    print(f"  - Local Interface : http://localhost:{port}")
     if host == "0.0.0.0":
-        print(f"  • LAN Interface   : http://{local_ip}:{port}")
-        print(f"  • LAN Token       : {lan_token()} (Pass as X-ClipHub-Token or ?token=)")
+        print(f"  - LAN Interface   : http://{local_ip}:{port}")
+        print(f"  - LAN Token       : {lan_token()} (Pass as X-ClipHub-Token or ?token=)")
     else:
-        print(f"  • Security Mode   : Desktop Only (Loopback 127.0.0.1)")
-        print(f"  • LAN Sharing     : Pass --host 0.0.0.0 to enable")
+        print(f"  - Security Mode   : Desktop Only (Loopback 127.0.0.1)")
+        print(f"  - LAN Sharing     : Pass --host 0.0.0.0 to enable")
     print("=" * 55 + "\n")
 
     uvicorn.run(app, host=host, port=port, log_level="warning")

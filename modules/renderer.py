@@ -264,15 +264,21 @@ def render_clip(
             ]
         _run_ffmpeg(concat_cmd)
 
-        # 5. Generate pristine clean 1080x1920 cover thumbnail image from video frame 0
+        # 5. Generate pristine clean 1080x1920 cover thumbnail image
         try:
             thumb_path = f"{os.path.splitext(output_path)[0]}_thumb.jpg"
-            cmd_thumb = [
-                "ffmpeg", "-y", "-ss", "0.0", "-i", output_path,
-                "-vframes", "1", "-q:v", "1", thumb_path
-            ]
-            _run_ffmpeg(cmd_thumb)
-            logger.info(f"[Renderer] 📸 Saved clean cover thumbnail from video: {thumb_path}")
+            default_cover_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "assets", "covers", "default_cover.jpg"))
+            if os.path.exists(default_cover_path):
+                import shutil
+                shutil.copyfile(default_cover_path, thumb_path)
+                logger.info(f"[Renderer] 📸 Applied master anime teacher cover thumbnail: {thumb_path}")
+            else:
+                cmd_thumb = [
+                    "ffmpeg", "-y", "-ss", "0.0", "-i", output_path,
+                    "-vframes", "1", "-q:v", "1", thumb_path
+                ]
+                _run_ffmpeg(cmd_thumb)
+                logger.info(f"[Renderer] 📸 Saved clean cover thumbnail from video: {thumb_path}")
         except Exception as e:
             logger.warning(f"[Renderer] Could not generate cover thumbnail: {e}")
 
@@ -370,4 +376,23 @@ def render_clip(
             except Exception:
                 pass
     logger.info(f"[Renderer] ✅ Clip {clip_index + 1} rendered → {output_path}")
+
+    # Generate pristine clean 1080x1920 cover thumbnail image
+    try:
+        thumb_path = f"{os.path.splitext(output_path)[0]}_thumb.jpg"
+        default_cover_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "assets", "covers", "default_cover.jpg"))
+        if os.path.exists(default_cover_path):
+            import shutil
+            shutil.copyfile(default_cover_path, thumb_path)
+            logger.info(f"[Renderer] 📸 Applied master anime teacher cover thumbnail: {thumb_path}")
+        else:
+            cmd_thumb = [
+                "ffmpeg", "-y", "-ss", "0.0", "-i", output_path,
+                "-vframes", "1", "-q:v", "1", thumb_path
+            ]
+            _run_ffmpeg(cmd_thumb)
+            logger.info(f"[Renderer] 📸 Saved clean cover thumbnail from video: {thumb_path}")
+    except Exception as e:
+        logger.warning(f"[Renderer] Could not generate cover thumbnail: {e}")
+
     return output_path

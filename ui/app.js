@@ -2189,7 +2189,7 @@ document.addEventListener("DOMContentLoaded", () => {
         clipsHtml += `
           <div class="clip-card" style="opacity:0; transform:translateY(30px);">
             <div style="position:relative;">
-              <video src="${clip.url}" class="clip-video" controls preload="metadata"></video>
+              <video src="${clip.url}" class="clip-video" controls preload="metadata"${clip.thumbnail_url ? ` poster="${clip.thumbnail_url}"` : ''}></video>
             </div>
             <div class="clip-body">
               <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
@@ -2480,7 +2480,7 @@ document.addEventListener("DOMContentLoaded", () => {
           clipsHtml += `
             <div class="clip-card" style="opacity:0; transform:translateY(20px);">
               <div style="position:relative;">
-                <video src="${clip.url}" class="clip-video" controls preload="metadata"></video>
+                <video src="${clip.url}" class="clip-video" controls preload="metadata"${clip.thumbnail_url ? ` poster="${clip.thumbnail_url}"` : ''}></video>
               </div>
               <div class="clip-body">
                 <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">

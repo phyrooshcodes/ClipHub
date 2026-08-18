@@ -284,18 +284,21 @@ async def serve_output(filename: str):
     path = (OUTPUT_DIR / filename).resolve()
     if not path.is_relative_to(OUTPUT_DIR.resolve()) or not path.is_file():
         return JSONResponse({"error": "not found"}, status_code=404)
-    return FileResponse(str(path), media_type="video/mp4")
+    media_type = "image/jpeg" if path.suffix.lower() == ".jpg" else ("image/png" if path.suffix.lower() == ".png" else "video/mp4")
+    return FileResponse(str(path), media_type=media_type)
 
 @router.get("/output/caption_studio/{filename}")
 async def serve_caption_studio_output(filename: str):
     path = (OUTPUT_DIR / "caption_studio" / filename).resolve()
     if not path.is_relative_to(OUTPUT_DIR.resolve()) or not path.is_file():
         return JSONResponse({"error": "not found"}, status_code=404)
-    return FileResponse(str(path), media_type="video/mp4")
+    media_type = "image/jpeg" if path.suffix.lower() == ".jpg" else ("image/png" if path.suffix.lower() == ".png" else "video/mp4")
+    return FileResponse(str(path), media_type=media_type)
 
 @router.get("/output/{job_id}/{filename}")
 async def serve_job_output(job_id: str, filename: str):
     path = (OUTPUT_DIR / job_id / filename).resolve()
     if not path.is_relative_to(OUTPUT_DIR.resolve()) or not path.is_file():
         return JSONResponse({"error": "not found"}, status_code=404)
-    return FileResponse(str(path), media_type="video/mp4")
+    media_type = "image/jpeg" if path.suffix.lower() == ".jpg" else ("image/png" if path.suffix.lower() == ".png" else "video/mp4")
+    return FileResponse(str(path), media_type=media_type)

@@ -197,6 +197,9 @@ def _list_clips(job_id: str = None, newer_than: float = 0) -> list:
             editorial_data = clip_meta.get("editorial_data", {})
             ai_audio_events = clip_meta.get("ai_audio_events", [])
 
+            thumb_f = d / f"{f.stem}_thumb.jpg"
+            thumb_url = f"/output/{d.name}/{thumb_f.name}" if thumb_f.exists() else "/assets/covers/default_cover.jpg"
+
             clips.append({
                 "job_id": d.name,
                 "filename": f.name,
@@ -206,6 +209,7 @@ def _list_clips(job_id: str = None, newer_than: float = 0) -> list:
                 "editorial_data": editorial_data,
                 "ai_audio_events": ai_audio_events,
                 "url": f"/output/{d.name}/{f.name}",
+                "thumbnail_url": thumb_url,
                 "modified": stat.st_mtime,
                 "size_mb": round(stat.st_size / (1024 * 1024), 2)
             })
