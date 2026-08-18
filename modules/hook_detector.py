@@ -380,27 +380,37 @@ def detect_hooks(
     max_clips: int = 10
 ) -> List[Dict]:
     """
-    Query the smartest model with the full transcript first. If it succeeds,
-    return those hooks. If it fails or times out, fall back to the parallel chunked workflow.
+    Intelligent Viral Hook Detector:
+    - For long videos (> 12 minutes / 720s), scans parallel 8-10 minute topic chunks across
+      the entire timeline to discover high-retention clips from every chapter of the podcast.
+    - For short videos (<= 12 minutes), queries the smart model with the full transcript,
+      supplementing with chunked scanning if additional viral candidates are needed.
     """
-    import concurrent.futures
-
     if not words:
         return []
 
     is_auto = (max_clips == 0)
     effective_max_clips = 50 if is_auto else max_clips
 
+    # For long-form videos (> 12 mins / 720s), directly use high-coverage parallel chunked topic scanning.
+    # Single-transcript LLM queries across 2+ hours suffer from attention collapse and only return 2 clips.
+    if video_duration_seconds > 720.0:
+        logger.info(
+            f"[HookDetector] Long video detected ({video_duration_seconds/60:.1f} minutes). "
+            f"Executing high-coverage parallel topic scanning across entire timeline for comprehensive clip coverage..."
+        )
+        return _detect_hooks_chunked(words, video_duration_seconds, effective_max_clips, is_auto)
+
+    # For short videos (<= 12 mins), attempt full-transcript query first
+    logger.info("[HookDetector] Short video: attempting full transcript query on smart model...")
+    from modules.transcriber import words_to_timed_transcript
+    full_tx = words_to_timed_transcript(words)
+    
     if is_auto:
         max_clips_instruction = "identify all truly viral clip moments (anywhere from 2 to 50 moments, depending on the richness and depth of the content)"
     else:
         max_clips_instruction = f"identify the top {max_clips} viral clip moments (or fewer if the content doesn't have that many truly great moments)"
 
-    # A. First Attempt: Full transcript query using smartest models
-    logger.info("[HookDetector] Attempting single smartest model query on full transcript for 10/10 quality...")
-    from modules.transcriber import words_to_timed_transcript
-    full_tx = words_to_timed_transcript(words)
-    
     user_message = HOOK_USER_TEMPLATE.format(
         transcript=full_tx,
         duration_str=f"{int(video_duration_seconds // 60):02d}:{int(video_duration_seconds % 60):02d}",
@@ -408,9 +418,9 @@ def detect_hooks(
     )
     
     smartest_models = NVIDIA_NIM_MODELS
-    
     client = _get_client()
     full_max_tokens = _size_max_tokens(effective_max_clips)
+    
     for m in smartest_models:
         try:
             logger.info(f"[HookDetector] Querying full transcript with smart model: {m} (max_tokens={full_max_tokens}, stream=True) ...")
@@ -429,23 +439,28 @@ def detect_hooks(
             raw_clips = _parse_json_response(raw_response)
             if raw_clips and len(raw_clips) >= 1:
                 valid_clips = _validate_and_clamp_clips(raw_clips, video_duration_seconds, words)
-                if len(valid_clips) >= 1:
+                if len(valid_clips) >= min(effective_max_clips, 3):
                     logger.info(f"[HookDetector] ✅ Smart single model ({m}) successfully returned {len(valid_clips)} premium hooks.")
-                    # Sort and limit
                     valid_clips = sorted(valid_clips, key=lambda x: x.get("hook_score", 0.0), reverse=True)[:effective_max_clips]
-                    
-                    # Print summary
-                    logger.info(f"[HookDetector] Final selected clips:")
-                    for i, clip in enumerate(valid_clips, 1):
-                        logger.info(f"  Clip {i}: [{clip['start_ms']/1000:.1f}s → {clip['end_ms']/1000:.1f}s] Score={clip.get('hook_score','?')} | {clip.get('title','Untitled')}")
                     return valid_clips
         except Exception as e:
-            logger.warning(f"[HookDetector] Full-transcript query failed or timed out with {m}: {e}. Trying next candidate model...")
+            logger.warning(f"[HookDetector] Full-transcript query failed with {m}: {e}. Trying next candidate...")
 
-    # B. Second Attempt (Fallback): Split words into 10-minute chunks with 1-minute overlap
-    logger.warning("[HookDetector] ⚠️ Full-transcript query failed on all smart models. Falling back to parallel chunked workflow...")
+    # Fallback to chunked scanning if single query failed or returned too few clips
+    logger.info("[HookDetector] Running parallel chunked scan to ensure full clip quota...")
+    return _detect_hooks_chunked(words, video_duration_seconds, effective_max_clips, is_auto)
+
+
+def _detect_hooks_chunked(
+    words: List[Dict],
+    video_duration_seconds: float,
+    effective_max_clips: int,
+    is_auto: bool
+) -> List[Dict]:
+    """Split video into 8-10 minute topic chunks, query in parallel, aggregate, and rank."""
+    import concurrent.futures
     
-    chunk_size = 600.0  # 10 minutes in seconds
+    chunk_size = 540.0  # 9 minutes in seconds
     overlap = 60.0      # 1 minute in seconds
     
     chunks = []
@@ -463,19 +478,18 @@ def detect_hooks(
             break
         start_s += (chunk_size - overlap)
 
-    logger.info(f"[HookDetector] Video length: {video_duration_seconds:.1f}s. Processing in {len(chunks)} parallel chunks.")
+    logger.info(f"[HookDetector] Video length: {video_duration_seconds:.1f}s ({video_duration_seconds/60:.1f}m). Processing in {len(chunks)} parallel topic chunks.")
 
     available_models = NVIDIA_NIM_MODELS
-
     all_raw_clips = []
 
-    # 2. Worker function to query a single chunk
+    # Per-chunk target: ask each 9-minute chunk for 2 to 3 standout moments
+    per_chunk_target = max(2, min(4, round((effective_max_clips / max(1, len(chunks))) * 1.6)))
+
     def process_chunk(idx, chunk):
         import time
         if idx > 0:
-            stagger = (idx % 3) * 2.0
-            if stagger > 0:
-                time.sleep(stagger)
+            time.sleep((idx % 4) * 0.35)
 
         from modules.transcriber import words_to_timed_transcript
         timed_tx = words_to_timed_transcript(chunk["words"])
@@ -486,14 +500,11 @@ def detect_hooks(
         end_sec = int(chunk["end_s"] % 60)
         duration_str = f"{start_min:02d}:{start_sec:02d} to {end_min:02d}:{end_sec:02d}"
 
-        # Per-chunk we ask for a proportional number of clips
-        chunk_fraction = (chunk["end_s"] - chunk["start_s"]) / video_duration_seconds
-        chunk_max = max(2, round(effective_max_clips * chunk_fraction))
-
-        if is_auto:
-            chunk_instruction = f"identify all truly viral clip moments (up to {chunk_max} moments, depending on the richness and quality of this segment)"
-        else:
-            chunk_instruction = f"identify the top {chunk_max} viral clip moments (or fewer if this segment doesn't have that many)"
+        chunk_instruction = (
+            f"identify all standout viral moments from this specific conversation topic (extract {per_chunk_target} best moments)"
+            if is_auto else
+            f"identify the top {per_chunk_target} viral clip moments from this specific conversation topic"
+        )
 
         user_message = HOOK_USER_TEMPLATE.format(
             transcript=timed_tx,
@@ -501,18 +512,17 @@ def detect_hooks(
             max_clips_instruction=chunk_instruction
         )
 
-        # Distribute model selection round-robin
         preferred_model = available_models[idx % len(available_models)]
         chunk_models = [preferred_model] + [m for m in available_models if m != preferred_model]
 
         client = _get_client()
         raw_response = None
         last_err = None
-        chunk_max_tokens = _size_max_tokens(chunk_max)
+        chunk_max_tokens = _size_max_tokens(per_chunk_target)
 
         for m in chunk_models:
             try:
-                logger.info(f"[HookDetector] Chunk {idx+1}/{len(chunks)} ({duration_str}) querying model: {m} (max_tokens={chunk_max_tokens}, stream=True) ...")
+                logger.info(f"[HookDetector] Chunk {idx+1}/{len(chunks)} ({duration_str}) querying model: {m} (max_tokens={chunk_max_tokens}) ...")
                 raw_response = _call_streaming_with_failover(
                     client=client,
                     model=m,
@@ -525,31 +535,33 @@ def detect_hooks(
                     idle_chunk_timeout_s=45.0,
                     max_total_timeout_s=300.0
                 )
-                logger.info(f"[HookDetector] Chunk {idx+1} successfully completed with {m}")
+                logger.info(f"[HookDetector] Chunk {idx+1}/{len(chunks)} successfully completed with {m}")
                 break
             except Exception as e:
                 logger.warning(f"[HookDetector] Chunk {idx+1} failed with {m}: {e}")
                 last_err = e
+                time.sleep(0.5)
                 continue
 
         if not raw_response:
-            raise RuntimeError(f"Chunk {idx+1} failed on all models. Last error: {last_err}")
+            logger.error(f"[HookDetector] Chunk {idx+1} failed on all models: {last_err}")
+            return []
 
         return _parse_json_response(raw_response)
 
-    # 3. Execute queries concurrently
-    with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(chunks), 8)) as executor:
+    # Execute chunk queries with controlled concurrency
+    with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(chunks), 4)) as executor:
         futures = {executor.submit(process_chunk, i, chunk): i for i, chunk in enumerate(chunks)}
         for future in concurrent.futures.as_completed(futures):
             chunk_idx = futures[future]
             try:
                 chunk_clips = future.result()
-                all_raw_clips.extend(chunk_clips)
+                if chunk_clips:
+                    all_raw_clips.extend(chunk_clips)
             except Exception as e:
                 logger.error(f"[HookDetector] ❌ Chunk {chunk_idx+1} failed processing: {e}")
 
-    # 4. Normalize timestamps before deduplication. The model schema uses start_time/end_time,
-    # while deduplication operates on milliseconds.
+    logger.info(f"[HookDetector] Extracted {len(all_raw_clips)} raw candidates across all {len(chunks)} chunks.")
     normalized_clips = _validate_and_clamp_clips(all_raw_clips, video_duration_seconds, words)
     clips = _deduplicate_clips(normalized_clips, effective_max_clips)
 
