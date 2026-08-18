@@ -140,7 +140,7 @@ def render_clip(
             crop_x = int(sum(dynamic_crop_x[int(t_from * fps):int(t_to * fps)+1]) / len(dynamic_crop_x[int(t_from * fps):int(t_to * fps)+1])) if (use_dynamic and dynamic_crop_x[int(t_from * fps):int(t_to * fps)+1]) else crop_coords.get("crop_x", 0)
             
             filter_str = (
-                f"[0:v]crop={crop_w}:{crop_h}:{crop_x}:0,scale=1080:1080:flags=lanczos,setsar=1,pad=1080:1920:0:0:black,fps=60,setpts=PTS-STARTPTS[v];"
+                f"[0:v]crop={crop_w}:{crop_h}:{crop_x}:0,scale=1080:1080:flags=lanczos,setsar=1,pad=1080:1920:0:420:black,fps=60,setpts=PTS-STARTPTS[v];"
                 f"[0:a]aformat=channel_layouts=stereo:sample_rates=48000,asetpts=PTS-STARTPTS[a]"
             )
             cmd += ["-filter_complex", filter_str, "-map", "[v]", "-map", "[a]"] + enc_args + ["-t", f"{seg_dur:.3f}", "-c:a", "aac", "-b:a", "192k", "-ac", "2", "-ar", "48000", "-pix_fmt", "yuv420p", out_file]
@@ -155,7 +155,7 @@ def render_clip(
             x_expr, y_expr = make_balloon_floating_expr(duration, is_intro=is_intro)
             crop_x = dynamic_crop_x[0] if (is_intro and use_dynamic and dynamic_crop_x) else (dynamic_crop_x[min(len(dynamic_crop_x) - 1, max(0, int(freeze_t * fps)))] if (use_dynamic and dynamic_crop_x) else crop_coords.get("crop_x", 0))
             
-            fc = [f"[0:v]trim=start=0:end=0.04,crop={crop_w}:{crop_h}:{crop_x}:0,scale=1080:1080:flags=lanczos,setsar=1,boxblur=18:3,eq=brightness=-0.06:contrast=1.08,pad=1080:1920:0:0:black,tpad=stop_mode=clone:stop_duration={duration:.3f},trim=start=0:end={duration:.3f},fps=60,setpts=PTS-STARTPTS[bg]"]
+            fc = [f"[0:v]trim=start=0:end=0.04,crop={crop_w}:{crop_h}:{crop_x}:0,scale=1080:1080:flags=lanczos,setsar=1,boxblur=18:3,eq=brightness=-0.06:contrast=1.08,pad=1080:1920:0:420:black,tpad=stop_mode=clone:stop_duration={duration:.3f},trim=start=0:end={duration:.3f},fps=60,setpts=PTS-STARTPTS[bg]"]
             if has_avatar and av_idx >= 0:
                 fc.append(f"[{av_idx}:v]scale=932:1400:flags=lanczos[av]")
                 fc.append(f"[bg][av]overlay=x='{x_expr}':y='{y_expr}':eval=frame,scale=1080:1920:flags=lanczos,setsar=1,fps=60,setpts=PTS-STARTPTS[v]")
@@ -320,9 +320,9 @@ def render_clip(
         a_head = "final_audio"
 
     if safe_sub_path:
-        filter_complex.append(f"[{v_head}]scale=1080:1080:flags=lanczos,pad=1080:1920:0:0:black,ass='{safe_sub_path}'[v_final]")
+        filter_complex.append(f"[{v_head}]scale=1080:1080:flags=lanczos,pad=1080:1920:0:420:black,ass='{safe_sub_path}'[v_final]")
     else:
-        filter_complex.append(f"[{v_head}]scale=1080:1080:flags=lanczos,pad=1080:1920:0:0:black[v_final]")
+        filter_complex.append(f"[{v_head}]scale=1080:1080:flags=lanczos,pad=1080:1920:0:420:black[v_final]")
 
     filter_str = ";".join(filter_complex)
     is_direct_stream = (a_head == "0:a" or a_head == f"{silent_audio_idx}:a")

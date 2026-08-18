@@ -35,35 +35,35 @@ MIN_SUBTITLE_DURATION = 0.25  # Seconds — minimum display time per group
 PRESETS = {
     "default": {
         "fontname": "Arial",
-        "fontsize": 90,
+        "fontsize": 54,
         "primary": "&H00FFFFFF&",  # White
         "outline": "&H00000000&",  # Black
         "bold": "-1",
-        "outline_width": "6",
+        "outline_width": "4",
     },
     "hormozi": {
         "fontname": "Impact",
-        "fontsize": 95,
+        "fontsize": 57,
         "primary": "&H0000FFFF&",  # Yellow
         "outline": "&H00000000&",  # Black
         "bold": "-1",
-        "outline_width": "9",
+        "outline_width": "5",
     },
     "beast": {
         "fontname": "Arial Black",
-        "fontsize": 90,
+        "fontsize": 54,
         "primary": "&H0000FFFF&",  # Yellow
         "outline": "&H00000000&",  # Black
         "bold": "-1",
-        "outline_width": "8",
+        "outline_width": "5",
     },
     "minimal": {
         "fontname": "Arial",
-        "fontsize": 80,
+        "fontsize": 48,
         "primary": "&H00FFFFFF&",  # White
         "outline": "&H00000000&",  # Black
         "bold": "0",
-        "outline_width": "3",
+        "outline_width": "2",
     }
 }
 
@@ -107,7 +107,7 @@ ScaledBorderAndShadow: yes
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
 Style: Kinetic,{p["fontname"]},{p["fontsize"]},{p["primary"]},&H000000FF&,{p["outline"]},&H80000000&,{p["bold"]},0,0,0,100,100,0,0,1,{p["outline_width"]},0,5,60,60,60,1
-Style: TitleStyle,{p["fontname"]},55,&H00FFFFFF&,&H000000FF&,&H00000000&,&H80000000&,-1,0,0,0,100,100,0,0,1,4,2,8,60,60,180,1
+Style: TitleStyle,{p["fontname"]},33,&H00FFFFFF&,&H000000FF&,&H00000000&,&H80000000&,-1,0,0,0,100,100,0,0,1,3,2,8,60,60,180,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -345,7 +345,7 @@ def _write_ass(
                 
             start_ts = _seconds_to_ass_time(group_start)
             end_ts   = _seconds_to_ass_time(group_end)
-            text     = "{\\pos(540,1300)\\fad(150,150)\\2c&HFFFFFF&\\1c&H00FFFF&}" + "".join(parts)
+            text     = "{\\pos(540,1565)\\fad(150,150)\\2c&HFFFFFF&\\1c&H00FFFF&}" + "".join(parts)
             lines.append(f"Dialogue: 0,{start_ts},{end_ts},Kinetic,,0,0,0,,{text}")
             continue
 
@@ -370,7 +370,7 @@ def _write_ass(
                         # Upcoming words in phrase: Dimmed Studio White
                         parts.append(f"{{\\c&HFFFFFF&\\alpha&H80&\\3c&H00000000&\\fscx100\\fscy100\\shad2}}{clean_other}")
                 
-                text = f"{{\\pos(540,1300)}}" + " ".join(parts)
+                text = f"{{\\pos(540,1565)}}" + " ".join(parts)
                 lines.append(f"Dialogue: 1,{t0_ts},{t1_ts},Kinetic,,0,0,0,,{text}")
             
             # Phrase resting tail
@@ -379,7 +379,7 @@ def _write_ass(
                 start_ts = _seconds_to_ass_time(last_word_end)
                 end_ts = _seconds_to_ass_time(group_end)
                 parts = [f"{{\\c&HFFFFFF&\\alpha&H40&\\3c&H00000000&\\shad2}}{_sanitize_word(ow['word']).upper()}" for ow in group_words]
-                text = f"{{\\pos(540,1300)}}" + " ".join(parts)
+                text = f"{{\\pos(540,1565)}}" + " ".join(parts)
                 lines.append(f"Dialogue: 1,{start_ts},{end_ts},Kinetic,,0,0,0,,{text}")
 
             continue
@@ -392,8 +392,8 @@ def _write_ass(
             # Find start of next word or group end
             next_start = group_words[j+1]["start"] if j < len(group_words) - 1 else group_end
             
-            pos_x, pos_y = 540, 1300
-            anim_y_start = 1325
+            pos_x, pos_y = 540, 1565
+            anim_y_start = 1585
             anim_dur_max = 0.150
             
             # Defaults
@@ -622,7 +622,7 @@ def _write_ass(
             else:
                 c_post = "FFFFFF" # White
                 
-            text = f"{{\\pos(540,960)\\c&H{c_post}&}}" + " ".join(W_texts)
+            text = f"{{\\pos(540,1565)\\c&H{c_post}&}}" + " ".join(W_texts)
             lines.append(f"Dialogue: 0,{start_ts},{end_ts},Kinetic,,0,0,0,,{text}")
 
     with open(output_path, "w", encoding="utf-8") as f:
