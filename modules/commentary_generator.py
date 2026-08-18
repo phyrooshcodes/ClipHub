@@ -10,8 +10,13 @@ load_dotenv()
 
 NVIDIA_API_KEY = os.environ.get("NVIDIA_API_KEY", "")
 NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1"
-MODEL_NAME = "z-ai/glm-5.2"
-MODEL_FALLBACKS = ["z-ai/glm-5.2", "meta/llama-3.1-8b-instruct"]
+MODEL_NAME = os.environ.get("NVIDIA_MODEL", "meta/llama-3.1-8b-instruct")
+MODEL_FALLBACKS = [
+    m.strip() for m in os.environ.get(
+        "NVIDIA_NIM_MODELS",
+        "meta/llama-3.1-8b-instruct,meta/llama-3.1-70b-instruct,z-ai/glm-5.2"
+    ).split(",") if m.strip()
+]
 
 # ─── Dr. Mei Master's Explainer Persona (Teenager & Young Adult Mentorship) ─
 SYSTEM_PROMPT = """You are Dr. Mei, a brilliant, charismatic anime female educator and co-host with a Master's degree in neuroscience, psychology, and high performance. Your life mission is to mentor teenagers and young adults on social media (Instagram Reels, TikTok, YouTube Shorts), translating dense podcast insights (Andrew Huberman, Lex Fridman, etc.) into practical, eye-opening knowledge that helps them thrive in school, focus, mental health, and daily life.

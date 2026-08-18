@@ -26,7 +26,7 @@ NVIDIA_API_KEY  = os.environ.get("NVIDIA_API_KEY", "")
 NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1"
 NVIDIA_NIM_MODELS = [m.strip() for m in os.environ.get(
     "NVIDIA_NIM_MODELS",
-    "z-ai/glm-5.2,meta/llama-3.1-8b-instruct"
+    "meta/llama-3.1-8b-instruct,meta/llama-3.1-70b-instruct,z-ai/glm-5.2"
 ).split(",") if m.strip()]
 
 # ─── Master Prompt Template V3.2 (Zero-Bloat, High-Retention) ──────────────
