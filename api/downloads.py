@@ -136,17 +136,18 @@ async def _run_ytdl(job: DownloadJob, python_exe: str, save_path: str):
         job.add_event({"type": "ytdl_start", "url": job.url})
         node_str = f"node:{node_bin}" if Path(str(node_bin)).exists() else "node"
 
-        # Primary high-definition 1080p command
+        # Primary high-definition 1080p command using web_embedded player & EJS JS solver
         primary_cmd = [
             python_exe, "-m", "yt_dlp",
             "--no-playlist",
             "--force-overwrites",
+            "--remote-components", "ejs:github",
+            "--extractor-args", "youtube:player_client=web_embedded",
             "--format", "bestvideo[height<=1080]+bestaudio/bestvideo+bestaudio/best[height<=1080]/best",
             "--merge-output-format", "mp4",
             "--retries", "5",
             "--fragment-retries", "5",
             "--newline",
-            "--no-part",
             "-o", save_path,
         ]
         if ffmpeg_dir:
@@ -157,15 +158,16 @@ async def _run_ytdl(job: DownloadJob, python_exe: str, save_path: str):
 
         success = await run_command_stream(primary_cmd)
         
-        # Resilient fallback if 403 Forbidden or DASH signing throttled
+        # Resilient fallback if web_embedded stream is throttled
         if not success or not Path(save_path).exists():
-            job.add_event({"type": "ytdl_log", "raw": "[Info] High-definition DASH stream restricted. Switching to Android/Web stream fallback..."})
+            job.add_event({"type": "ytdl_log", "raw": "[Info] Switching to multi-client 1080p fallback..."})
             fallback_cmd = [
                 python_exe, "-m", "yt_dlp",
                 "--no-playlist",
                 "--force-overwrites",
-                "--extractor-args", "youtube:player_client=ios,android,web",
-                "--format", "best[height<=1080]/best",
+                "--remote-components", "ejs:github",
+                "--extractor-args", "youtube:player_client=web,android",
+                "--format", "bestvideo[height<=1080]+bestaudio/best[height<=1080]/best",
                 "--merge-output-format", "mp4",
                 "--retries", "5",
                 "--newline",

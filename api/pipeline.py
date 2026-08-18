@@ -314,7 +314,7 @@ class JobConfigModel(BaseModel):
     commentary_voice: str = "af_sarah"
     language: str = ""
     auto_publish: bool = False
-    phase: Literal["1", "2", "all"] = "1"
+    phase: Literal["1", "2", "all"] = "all"
     force_restart: bool = False
 
 class ClipReviewItem(BaseModel):

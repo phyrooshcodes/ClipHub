@@ -1494,7 +1494,8 @@ document.addEventListener("DOMContentLoaded", () => {
                  model: model,
                  caption_style: captionStyle,
                  commentary_mode: commentaryMode,
-                 commentary_voice: commentaryVoice
+                 commentary_voice: commentaryVoice,
+                 phase: 'all'
               })
             });
           } catch(e) { console.error("Config send failed", e); }
