@@ -168,14 +168,24 @@ def render_clip(
             
             x_expr, y_expr = make_balloon_floating_expr(duration, is_intro=is_intro)
             if is_intro:
-                # Universal Black Background for Intro & Thumbnails
+                # Beautifully blurred source video background during intro hook
+                if use_dynamic:
+                    crop_x = dynamic_crop_x[0] if dynamic_crop_x else crop_coords.get("crop_x", 0)
+                else:
+                    crop_x = crop_coords.get("crop_x", 0)
                 fc = [
-                    f"color=c=0x070709:s=1080x1920:d={duration:.3f},fps=60,setpts=PTS-STARTPTS[bg]"
+                    f"[0:v]trim=start=0:end=0.04,crop={crop_w}:{crop_h}:{crop_x}:0,scale=1080:1920:flags=lanczos,setsar=1,boxblur=18:3,eq=brightness=-0.06:contrast=1.08,tpad=stop_mode=clone:stop_duration={duration:.3f},trim=start=0:end={duration:.3f},fps=60,setpts=PTS-STARTPTS[bg]"
                 ]
             else:
                 # Freeze & blur host video during mid-clip commentary breakdown
+                freeze_sample_s = max(0.0, freeze_t)
+                if use_dynamic:
+                    f_idx = min(len(dynamic_crop_x) - 1, max(0, int(freeze_sample_s * fps)))
+                    crop_x = dynamic_crop_x[f_idx]
+                else:
+                    crop_x = crop_coords.get("crop_x", 0)
                 fc = [
-                    f"[0:v]trim=start=0:end=0.04,scale=1080:1920:flags=lanczos,setsar=1,boxblur=15:3,eq=brightness=-0.08:contrast=1.05,tpad=stop_mode=clone:stop_duration={duration:.3f},trim=start=0:end={duration:.3f},fps=60,setpts=PTS-STARTPTS[bg]"
+                    f"[0:v]trim=start=0:end=0.04,crop={crop_w}:{crop_h}:{crop_x}:0,scale=1080:1920:flags=lanczos,setsar=1,boxblur=16:3,eq=brightness=-0.08:contrast=1.05,tpad=stop_mode=clone:stop_duration={duration:.3f},trim=start=0:end={duration:.3f},fps=60,setpts=PTS-STARTPTS[bg]"
                 ]
             if has_avatar and av_idx >= 0:
                 fc.append(f"[{av_idx}:v]scale=932:1400:flags=lanczos[av]")
@@ -254,26 +264,15 @@ def render_clip(
             ]
         _run_ffmpeg(concat_cmd)
 
-        # 5. Generate pristine clean 1080x1920 cover thumbnail image
+        # 5. Generate pristine clean 1080x1920 cover thumbnail image from video frame 0
         try:
             thumb_path = f"{os.path.splitext(output_path)[0]}_thumb.jpg"
-            if has_avatar:
-                cmd_thumb = [
-                    "ffmpeg", "-y",
-                    "-f", "lavfi", "-i", "color=c=0x070709:s=1080x1920:d=1",
-                    "-i", avatar_path,
-                    "-filter_complex", "[1:v]scale=932:1400:flags=lanczos[av];[0:v][av]overlay=(1080-932)/2:(1920-1400+100)",
-                    "-vframes", "1", "-q:v", "1",
-                    thumb_path
-                ]
-                _run_ffmpeg(cmd_thumb)
-                logger.info(f"[Renderer] 📸 Saved clean cover thumbnail: {thumb_path}")
-            else:
-                cmd_thumb = [
-                    "ffmpeg", "-y", "-ss", "0.0", "-i", output_path,
-                    "-vframes", "1", "-q:v", "1", thumb_path
-                ]
-                _run_ffmpeg(cmd_thumb)
+            cmd_thumb = [
+                "ffmpeg", "-y", "-ss", "0.0", "-i", output_path,
+                "-vframes", "1", "-q:v", "1", thumb_path
+            ]
+            _run_ffmpeg(cmd_thumb)
+            logger.info(f"[Renderer] 📸 Saved clean cover thumbnail from video: {thumb_path}")
         except Exception as e:
             logger.warning(f"[Renderer] Could not generate cover thumbnail: {e}")
 
