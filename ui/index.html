@@ -449,6 +449,7 @@
              <label style="display:flex; flex-direction:column; gap:4px; font-size:12px; color:var(--text-muted);">
                Caption Style
                <select id="config-caption-style" style="padding:8px; border:1px solid var(--border-light); border-radius:4px; background:var(--bg-app); font-family:inherit;">
+                 <option value="aftereffect_preset">⭐ VIP: Aftereffect preset (Rise & Fade)</option>
                  <option value="kinetic_slide">Kinetic Slide (Default)</option>
                  <option value="hormozi_gold">Alex Hormozi Gold</option>
                  <option value="mrbeast_lightning">MrBeast Lightning</option>
@@ -738,8 +739,28 @@
         </div>
         <div class="modal-body" style="padding:20px; max-height:70vh; overflow-y:auto;">
           <div id="caption-studio-main">
-            <div id="caption-styles-grid" class="caption-grid" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(240px, 1fr)); gap:16px;">
-              <!-- 16 Kinetic style cards dynamically rendered -->
+            <!-- ⭐ VIP Master Preset Section -->
+            <div class="vip-presets-container" style="margin-bottom: 24px;">
+              <div class="vip-section-header" style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; padding-bottom:8px; border-bottom:1px solid rgba(255,215,0,0.2);">
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <span class="vip-badge-pill"><i class="ri-vip-crown-2-fill"></i> ⭐ VIP STUDIO PRESET</span>
+                  <span style="font-size:0.85rem; color:#fbd38d; font-weight:700; letter-spacing:0.5px;">After Effects Motion Typography</span>
+                </div>
+                <span style="font-size:0.75rem; color:var(--text-muted); background:rgba(255,215,0,0.08); padding:2px 8px; border-radius:12px; border:1px solid rgba(255,215,0,0.2);">10/10 Premium</span>
+              </div>
+              <div id="vip-caption-styles-grid" style="display:grid; grid-template-columns:1fr; gap:16px;">
+                <!-- VIP Cards dynamically rendered -->
+              </div>
+            </div>
+
+            <!-- Standard Styles Section -->
+            <div class="standard-presets-container">
+              <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
+                <span style="font-size:0.75rem; text-transform:uppercase; letter-spacing:1px; color:var(--text-muted); font-weight:700;">Standard Kinetic Styles</span>
+              </div>
+              <div id="caption-styles-grid" class="caption-grid" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(240px, 1fr)); gap:16px;">
+                <!-- Standard style cards -->
+              </div>
             </div>
           </div>
           <div id="standalone-caption-loading" class="hidden" style="text-align:center; padding:40px;">

@@ -368,7 +368,23 @@ def _write_ass(
             static_active_tags = ""
             anim_effect = ""
             
-            if style_name == "kinetic_slide":
+            if style_name in ("aftereffect_preset", "ae_rise_fade", "aftereffects_preset"):
+                # ⭐ VIP PRESET: After Effects Word-by-Word Rise & Fade In (Slide Up Reveal)
+                # Pure broadcast kinetic typography: vertical glide +26px -> 0px with simultaneous buttery alpha fade-in
+                anim_dur_max = 0.140
+                color_active = "00FFFF"       # Vivid luminous Gold / Yellow-White highlight
+                color_other = "E2E8F0"        # Clean high-end platinum
+                alpha_other = "45"            # 45% transparency for non-active words
+                active_tags = (
+                    "\\c&H0000FFFF&\\3c&H00000000&\\shad2\\blur1.2"
+                    "\\fscx96\\fscy96"
+                    "\\t(0,75,\\fscx116\\fscy116)"
+                    "\\t(75,140,\\fscx100\\fscy100)"
+                )
+                static_active_tags = "\\c&H0000FFFF&\\3c&H00000000&\\shad2\\blur1.2"
+                anim_effect = f"\\move({pos_x},{anim_y_start + 18},{pos_x},{pos_y},0,140)\\fad(90,0)"
+
+            elif style_name == "kinetic_slide":
                 # Default Improved: Smooth slide-up with a bounce/scale-pop on entry
                 anim_dur_max = 0.150
                 active_tags = "\\c&H00FFFF&\\fscx100\\fscy100\\t(0,80,\\fscx120\\fscy120)\\t(80,150,\\fscx100\\fscy100)"

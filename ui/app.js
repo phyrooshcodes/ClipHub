@@ -618,7 +618,26 @@ document.addEventListener("DOMContentLoaded", () => {
 
   let currentPendingJob = null;
 
-  const CAPTION_STYLES_DATA = [
+  const VIP_CAPTION_STYLES_DATA = [
+    {
+      id: 'aftereffect_preset',
+      name: 'Aftereffect preset',
+      desc: 'Word-by-Word Rise & Fade In (Slide Up Reveal). Broadcast-grade After Effects kinetic text motion (+28px → 0px) with simultaneous buttery alpha dissolve & glowing focus.',
+      badge: '⭐ VIP MASTER • 10/10 STUDIO',
+      previewCss: '',
+      isVip: true,
+      html: `
+        <div class="ae-preview-stage">
+          <span class="ae-word ae-word-1">WORD</span>
+          <span class="ae-word ae-word-2">BY</span>
+          <span class="ae-word ae-word-3">WORD</span>
+          <span class="ae-word ae-word-4 ae-highlight">REVEAL</span>
+        </div>
+      `
+    }
+  ];
+
+  const STANDARD_CAPTION_STYLES_DATA = [
     { id: 'kinetic_slide', name: 'Kinetic Slide (Default)', desc: 'Smooth vertical slide with a punchy entry scale pop.', previewCss: 'color: #00FFFF; text-shadow: 0 2px 4px rgba(0,0,0,0.8); font-weight: 800;', badge: '★ Most Popular', html: '<span style="color: #fff; opacity: 0.5;">VIRAL</span> <span style="color: #00ffff; text-shadow: 2px 2px 0px #000; display: inline-block; transform: scale(1.1);">GROWTH</span>' },
     { id: 'hormozi_gold', name: 'Alex Hormozi Gold', desc: 'Signature warm gold text, heavy drop shadow, and explosive bounce.', previewCss: 'color: #FFD700; text-shadow: 0 3px 6px #000; font-weight: 900;', badge: '👑 Hormozi Style', html: '<span style="color: #fff; opacity: 0.4;">HOW TO</span> <span style="color: #FFD700; text-shadow: 3px 3px 0 #000; display: inline-block; transform: scale(1.25); font-weight: 900;">WIN</span> <span style="color: #fff; opacity: 0.4;">TODAY</span>' },
     { id: 'mrbeast_lightning', name: 'MrBeast Lightning', desc: 'Hyper-bright electric cyan with energetic tilt and thick outline.', previewCss: 'color: #00FFFF; font-weight: 900;', badge: '⚡ MrBeast Vibe', html: '<span style="color: #00FFFF; -webkit-text-stroke: 1px black; text-shadow: 3px 3px 0 #000; display: inline-block; transform: rotate(-5deg) scale(1.15); font-weight: 900;">INSANE!</span>' },
@@ -640,55 +659,86 @@ document.addEventListener("DOMContentLoaded", () => {
     { id: 'future_cyber', name: 'Future Cyber', desc: 'Active cyan glow outline with bright yellow fill and swift scale.', previewCss: 'color: #00FFCC; font-weight: 800;', badge: '🛸 Sci-Fi', html: '<span style="color: #FFFF00; text-shadow: 0 0 8px #00FF00; display: inline-block; transform: scale(1.2);">FUTURE</span>' }
   ];
 
-  function renderCaptionStudioGrid() {
-    const grid = document.getElementById('caption-styles-grid');
-    if (!grid) return;
-    grid.innerHTML = '';
-    const selected = localStorage.getItem('captionStyle') || 'kinetic_slide';
+  const CAPTION_STYLES_DATA = [...VIP_CAPTION_STYLES_DATA, ...STANDARD_CAPTION_STYLES_DATA];
 
-    CAPTION_STYLES_DATA.forEach(st => {
-      const isSelected = st.id === selected;
-      const card = document.createElement('div');
-      card.className = `caption-card ${isSelected ? 'selected' : ''}`;
-      card.setAttribute('data-style', st.id);
+  function createCaptionCardElement(st, selected) {
+    const isSelected = st.id === selected;
+    const isVip = !!st.isVip;
+    const card = document.createElement('div');
+    card.className = `caption-card ${isVip ? 'vip-card' : ''} ${isSelected ? 'selected' : ''}`;
+    card.setAttribute('data-style', st.id);
+    
+    if (isVip) {
+      card.style.cssText = `
+        border-radius: 14px; padding: 22px; cursor: pointer; transition: all 0.25s ease;
+        display: flex; flex-direction: column; justify-content: space-between; position: relative;
+      `;
+    } else {
       card.style.cssText = `
         background: rgba(20, 20, 28, 0.85); border: ${isSelected ? '2px solid var(--accent-cyan)' : '1px solid var(--border-color)'};
         border-radius: 12px; padding: 20px; cursor: pointer; transition: all 0.25s ease;
         box-shadow: ${isSelected ? '0 0 25px rgba(0, 240, 255, 0.3)' : 'none'};
         display: flex; flex-direction: column; justify-content: space-between; position: relative;
       `;
+    }
 
-      card.innerHTML = `
-        <div>
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-            <span style="font-size: 0.75rem; background: rgba(255,255,255,0.08); padding: 4px 10px; border-radius: 20px; color: var(--accent-cyan); font-weight: 600;">${st.badge}</span>
-            <div class="radio-check" style="width: 20px; height: 20px; border-radius: 50%; border: 2px solid ${isSelected ? 'var(--accent-cyan)' : 'var(--text-muted)'}; background: ${isSelected ? 'var(--accent-cyan)' : 'transparent'}; display: flex; align-items: center; justify-content: center; color: #000; font-size: 0.8rem; font-weight: bold;">
-              ${isSelected ? '✓' : ''}
-            </div>
-          </div>
-          <h4 style="color: var(--text-main); font-size: 1.15rem; margin-bottom: 8px; font-weight: 700;">${st.name}</h4>
-          <p style="color: var(--text-muted); font-size: 0.85rem; line-height: 1.4; margin-bottom: 16px;">${st.desc}</p>
-        </div>
-        <div style="background: rgba(0,0,0,0.6); border: 1px dashed rgba(255,255,255,0.15); padding: 20px 10px; border-radius: 8px; text-align: center; overflow: hidden;">
-          <div style="${st.previewCss} font-size: 1.15rem; transition: transform 0.3s ease;">
-            ${st.html}
+    const checkBorderColor = isVip ? '#FFD700' : 'var(--accent-cyan)';
+    const checkBgColor = isVip ? '#FFD700' : 'var(--accent-cyan)';
+    const badgeHtml = isVip ? `<span class="vip-badge-pill"><i class="ri-vip-crown-2-fill"></i> ${st.badge}</span>` : `<span style="font-size: 0.75rem; background: rgba(255,255,255,0.08); padding: 4px 10px; border-radius: 20px; color: var(--accent-cyan); font-weight: 600;">${st.badge}</span>`;
+
+    card.innerHTML = `
+      ${isVip ? '<div class="vip-glow-mesh"></div>' : ''}
+      <div>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+          ${badgeHtml}
+          <div class="radio-check" style="width: 22px; height: 22px; border-radius: 50%; border: 2px solid ${isSelected ? checkBorderColor : 'var(--text-muted)'}; background: ${isSelected ? checkBgColor : 'transparent'}; display: flex; align-items: center; justify-content: center; color: #000; font-size: 0.85rem; font-weight: 900;">
+            ${isSelected ? '✓' : ''}
           </div>
         </div>
-      `;
+        <h4 style="color: ${isVip ? '#fff' : 'var(--text-main)'}; font-size: 1.2rem; margin-bottom: 8px; font-weight: 800; display: flex; align-items: center; gap: 6px;">
+          ${st.name} ${isVip ? '<i class="ri-sparkling-fill" style="color: #FFD700; font-size: 1rem;"></i>' : ''}
+        </h4>
+        <p style="color: ${isVip ? '#cbd5e1' : 'var(--text-muted)'}; font-size: 0.86rem; line-height: 1.45; margin-bottom: 16px;">${st.desc}</p>
+      </div>
+      <div style="background: ${isVip ? 'rgba(0,0,0,0.75)' : 'rgba(0,0,0,0.6)'}; border: ${isVip ? '1px solid rgba(255,215,0,0.35)' : '1px dashed rgba(255,255,255,0.15)'}; padding: 18px 10px; border-radius: 10px; text-align: center; overflow: hidden; box-shadow: ${isVip ? 'inset 0 0 15px rgba(0,0,0,0.6)' : 'none'};">
+        <div style="${st.previewCss || ''}">
+          ${st.html}
+        </div>
+      </div>
+    `;
 
-      card.addEventListener('click', () => {
-        localStorage.setItem('captionStyle', st.id);
-        const cfg = document.getElementById('config-caption-style');
-        if (cfg) cfg.value = st.id;
-        renderCaptionStudioGrid();
-        
-        const btnText = document.getElementById('btn-proceed-modal-text');
-        if (btnText && (!currentPendingJob || !currentPendingJob.isStandaloneTool)) {
-          btnText.textContent = `Generate Clips (${st.name})`;
-        }
+    card.addEventListener('click', () => {
+      localStorage.setItem('captionStyle', st.id);
+      const cfg = document.getElementById('config-caption-style');
+      if (cfg) cfg.value = st.id;
+      renderCaptionStudioGrid();
+      
+      const btnText = document.getElementById('btn-proceed-modal-text');
+      if (btnText && (!currentPendingJob || !currentPendingJob.isStandaloneTool)) {
+        btnText.textContent = `Generate Clips (${st.name})`;
+      }
+    });
+
+    return card;
+  }
+
+  function renderCaptionStudioGrid() {
+    const vipGrid = document.getElementById('vip-caption-styles-grid');
+    const stdGrid = document.getElementById('caption-styles-grid');
+    if (!stdGrid) return;
+    
+    const selected = localStorage.getItem('captionStyle') || 'aftereffect_preset';
+
+    if (vipGrid) {
+      vipGrid.innerHTML = '';
+      VIP_CAPTION_STYLES_DATA.forEach(st => {
+        vipGrid.appendChild(createCaptionCardElement(st, selected));
       });
+    }
 
-      grid.appendChild(card);
+    stdGrid.innerHTML = '';
+    STANDARD_CAPTION_STYLES_DATA.forEach(st => {
+      stdGrid.appendChild(createCaptionCardElement(st, selected));
     });
   }
 
