@@ -104,9 +104,9 @@ const SidebarManager = {
   resizerEl: null,
   toggleBtn: null,
   isResizing: false,
-  minWidth: 180,
-  maxWidth: 500,
-  defaultWidth: 260,
+  minWidth: 210,
+  maxWidth: 450,
+  defaultWidth: 250,
 
   init() {
     this.sidebarEl = document.getElementById('app-sidebar');
@@ -118,6 +118,9 @@ const SidebarManager = {
     const savedWidth = parseInt(localStorage.getItem('cliphub_sidebar_width'), 10);
     if (savedWidth && savedWidth >= this.minWidth && savedWidth <= this.maxWidth) {
       document.documentElement.style.setProperty('--sidebar-w', `${savedWidth}px`);
+    } else {
+      document.documentElement.style.setProperty('--sidebar-w', `${this.defaultWidth}px`);
+      localStorage.setItem('cliphub_sidebar_width', this.defaultWidth);
     }
 
     // Restore collapsed state
@@ -136,15 +139,6 @@ const SidebarManager = {
       this.toggle();
     });
 
-    // Logo click in collapsed mode expands sidebar
-    this.sidebarEl.querySelector('.logo-box')?.addEventListener('click', (e) => {
-      if (this.sidebarEl.classList.contains('collapsed')) {
-        e.preventDefault();
-        e.stopPropagation();
-        this.toggle();
-      }
-    });
-
     // Keyboard shortcut Ctrl+B or Cmd+B
     window.addEventListener('keydown', (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
@@ -156,7 +150,7 @@ const SidebarManager = {
       }
     });
 
-    // Double-click resizer to reset to default 260px
+    // Double-click resizer to reset to default 250px
     this.resizerEl.addEventListener('dblclick', () => {
       this.sidebarEl.classList.remove('collapsed');
       document.documentElement.style.setProperty('--sidebar-w', `${this.defaultWidth}px`);
@@ -195,7 +189,7 @@ const SidebarManager = {
       const clientX = moveEvent.clientX || (moveEvent.touches && moveEvent.touches[0]?.clientX);
       if (clientX === undefined) return;
 
-      if (clientX < 110) {
+      if (clientX < 135) {
         // Auto-collapse if dragged very small
         this.sidebarEl.classList.add('collapsed');
         localStorage.setItem('cliphub_sidebar_collapsed', 'true');
