@@ -79,34 +79,46 @@ Analyze the above and generate the editorial components as JSON.
 """
     logger.info("Requesting editorial commentary from LLM...")
     import re
+    import time
 
     response_content = None
     for model_candidate in MODEL_FALLBACKS:
-        try:
-            stream = client.chat.completions.create(
-                model=model_candidate,
-                messages=[
-                    {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user", "content": user_prompt}
-                ],
-                temperature=0.7,
-                max_tokens=1024,
-                stream=True,
-                timeout=35.0
-            )
-            chunks = []
-            for chunk in stream:
-                if chunk.choices and len(chunk.choices) > 0:
-                    delta = chunk.choices[0].delta
-                    c = getattr(delta, "content", None)
-                    if c: chunks.append(c)
-            response_content = "".join(chunks).strip()
-            if response_content:
-                logger.info(f"[CommentaryGenerator] Successfully generated commentary via {model_candidate}")
-                break
-        except Exception as e:
-            logger.warning(f"[CommentaryGenerator] Model {model_candidate} failed: {e}. Trying fallback...")
-            continue
+        for attempt in range(4):
+            try:
+                stream = client.chat.completions.create(
+                    model=model_candidate,
+                    messages=[
+                        {"role": "system", "content": SYSTEM_PROMPT},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    temperature=0.7,
+                    max_tokens=1024,
+                    stream=True,
+                    timeout=35.0
+                )
+                chunks = []
+                for chunk in stream:
+                    if chunk.choices and len(chunk.choices) > 0:
+                        delta = chunk.choices[0].delta
+                        c = getattr(delta, "content", None)
+                        if c: chunks.append(c)
+                response_content = "".join(chunks).strip()
+                if response_content:
+                    logger.info(f"[CommentaryGenerator] Successfully generated commentary via {model_candidate}")
+                    break
+            except Exception as e:
+                err_str = str(e).lower()
+                is_rate_limit = ("429" in err_str or "too many requests" in err_str or "rate limit" in err_str)
+                if is_rate_limit and attempt < 3:
+                    wait_s = 3.5 * (attempt + 1)
+                    logger.info(f"[CommentaryGenerator] ⏳ Model {model_candidate} rate-limited (429). Giving a {wait_s:.1f}s cooldown break (attempt {attempt+1}/4)...")
+                    time.sleep(wait_s)
+                    continue
+                else:
+                    logger.warning(f"[CommentaryGenerator] Model {model_candidate} failed (attempt {attempt+1}): {e}")
+                    break
+        if response_content:
+            break
 
     data = {}
     if response_content:

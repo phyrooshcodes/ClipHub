@@ -116,63 +116,77 @@ def _call_streaming_with_failover(
     idle_chunk_timeout_s: float = 45.0,
     max_total_timeout_s: float = 600.0,
     total_timeout_s: float | None = None,
+    max_rate_limit_retries: int = 4,
+    base_backoff_s: float = 3.5,
     **kwargs
 ) -> str:
     """
-    Execute streaming completion on model.
-    If TTFT (Time-To-First-Token) exceeds ttft_timeout_s or tokens stall for > idle_chunk_timeout_s,
-    raises TimeoutError so caller can failover.
-    Crucially, as long as tokens are streaming, the query is NEVER interrupted by an arbitrary total timeout.
+    Execute streaming completion on model with automatic cooldown backoff on 429 rate limits.
+    If rate-limited (429), gives the primary model an exponential break (3.5s, 7.0s, etc.)
+    and retries before giving up, ensuring maximum model consistency.
     """
     import time
 
     if total_timeout_s is not None:
         max_total_timeout_s = max(total_timeout_s, max_total_timeout_s)
 
-    start_time = time.time()
-    last_token_time = start_time
-    chunks = []
-    first_token_received = False
-    token_count = 0
+    for attempt in range(max_rate_limit_retries):
+        try:
+            start_time = time.time()
+            last_token_time = start_time
+            chunks = []
+            first_token_received = False
+            token_count = 0
 
-    stream = client.chat.completions.create(
-        model=model,
-        messages=messages,
-        temperature=0.2,
-        max_tokens=max_tokens,
-        top_p=0.85,
-        stream=True,
-        timeout=ttft_timeout_s
-    )
+            stream = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                temperature=0.2,
+                max_tokens=max_tokens,
+                top_p=0.85,
+                stream=True,
+                timeout=ttft_timeout_s
+            )
 
-    for chunk in stream:
-        now = time.time()
-        # Per-token stall check (only fail if network drops and no token arrives for > idle_chunk_timeout_s)
-        if first_token_received and (now - last_token_time > idle_chunk_timeout_s):
-            raise TimeoutError(f"Streaming stalled: No token received for {idle_chunk_timeout_s}s from {model}")
+            for chunk in stream:
+                now = time.time()
+                # Per-token stall check (only fail if network drops and no token arrives for > idle_chunk_timeout_s)
+                if first_token_received and (now - last_token_time > idle_chunk_timeout_s):
+                    raise TimeoutError(f"Streaming stalled: No token received for {idle_chunk_timeout_s}s from {model}")
 
-        # Generous safety ceiling
-        if now - start_time > max_total_timeout_s:
-            raise TimeoutError(f"Streaming generation exceeded safety limit of {max_total_timeout_s}s")
+                # Generous safety ceiling
+                if now - start_time > max_total_timeout_s:
+                    raise TimeoutError(f"Streaming generation exceeded safety limit of {max_total_timeout_s}s")
 
-        if chunk.choices and len(chunk.choices) > 0:
-            delta = chunk.choices[0].delta
-            content = getattr(delta, "content", None)
-            if content:
-                if not first_token_received:
-                    first_token_received = True
-                    logger.info(f"[HookDetector] ⚡ First token received from {model} in {now - start_time:.2f}s! Streaming generation...")
-                chunks.append(content)
-                token_count += 1
-                last_token_time = now
-                if token_count % 300 == 0:
-                    logger.info(f"[HookDetector] ⚡ Streaming generation in progress: {token_count} tokens generated ({now - start_time:.1f}s elapsed)...")
+                if chunk.choices and len(chunk.choices) > 0:
+                    delta = chunk.choices[0].delta
+                    content = getattr(delta, "content", None)
+                    if content:
+                        if not first_token_received:
+                            first_token_received = True
+                            logger.info(f"[HookDetector] ⚡ First token received from {model} in {now - start_time:.2f}s! Streaming generation...")
+                        chunks.append(content)
+                        token_count += 1
+                        last_token_time = now
+                        if token_count % 300 == 0:
+                            logger.info(f"[HookDetector] ⚡ Streaming generation in progress: {token_count} tokens generated ({now - start_time:.1f}s elapsed)...")
 
-    full_text = "".join(chunks).strip()
-    if not full_text:
-        raise ValueError(f"Model {model} returned an empty streaming response.")
-    logger.info(f"[HookDetector] ✅ Single model {model} completed analysis ({token_count} tokens in {time.time() - start_time:.1f}s)")
-    return full_text
+            full_text = "".join(chunks).strip()
+            if not full_text:
+                raise ValueError(f"Model {model} returned an empty streaming response.")
+            logger.info(f"[HookDetector] ✅ Single model {model} completed analysis ({token_count} tokens in {time.time() - start_time:.1f}s)")
+            return full_text
+
+        except Exception as e:
+            err_str = str(e).lower()
+            is_rate_limit = ("429" in err_str or "too many requests" in err_str or "rate limit" in err_str)
+            if is_rate_limit and attempt < max_rate_limit_retries - 1:
+                wait_s = base_backoff_s * (attempt + 1)
+                logger.info(f"[HookDetector] ⏳ Model {model} received rate limit (429). Giving a {wait_s:.1f}s cooldown break before retrying (attempt {attempt+1}/{max_rate_limit_retries})...")
+                time.sleep(wait_s)
+                continue
+            else:
+                raise e
 
 
 def adjust_clip_to_sentences(
@@ -486,8 +500,7 @@ def _detect_hooks_chunked(
             max_clips_instruction=chunk_instruction
         )
 
-        preferred_model = available_models[idx % len(available_models)]
-        chunk_models = [preferred_model] + [m for m in available_models if m != preferred_model]
+        chunk_models = list(available_models)
 
         client = _get_client()
         raw_response = None
