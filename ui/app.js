@@ -622,16 +622,16 @@ document.addEventListener("DOMContentLoaded", () => {
     {
       id: 'aftereffect_preset',
       name: 'Aftereffect preset',
-      desc: 'Word-by-Word Rise & Fade In (Slide Up Reveal). Broadcast-grade After Effects kinetic text motion (+28px → 0px) with simultaneous buttery alpha dissolve & glowing focus.',
-      badge: '⭐ VIP MASTER • 10/10 STUDIO',
+      desc: 'Word-by-Word Rise & Fade In (Bricks AE Preset). Position Y: +80px → 0px with simultaneous alpha dissolve (0% → 100%) and Ease High 20% / Ease Low 100% curve. Zero bounce, pure silky motion.',
+      badge: '⭐ VIP MASTER • AFTER EFFECTS',
       previewCss: '',
       isVip: true,
       html: `
         <div class="ae-preview-stage">
-          <span class="ae-word ae-word-1">WORD</span>
-          <span class="ae-word ae-word-2">BY</span>
-          <span class="ae-word ae-word-3">WORD</span>
-          <span class="ae-word ae-word-4 ae-highlight">REVEAL</span>
+          <span class="ae-word-mask"><span class="ae-word ae-word-1">WORD</span></span>
+          <span class="ae-word-mask"><span class="ae-word ae-word-2">BY</span></span>
+          <span class="ae-word-mask"><span class="ae-word ae-word-3">WORD</span></span>
+          <span class="ae-word-mask"><span class="ae-word ae-word-4 ae-highlight">REVEAL</span></span>
         </div>
       `
     }

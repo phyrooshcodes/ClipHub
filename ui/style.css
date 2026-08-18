@@ -2395,62 +2395,75 @@ body.dark-theme .tag {
   pointer-events: none;
 }
 
-/* After Effects Word-by-Word Rise & Fade In Kinetic CSS Simulation */
-@keyframes aeWordRiseFade {
-  0% {
-    opacity: 0;
-    transform: translateY(22px) scale(0.92);
-    filter: blur(4px);
-  }
-  35% {
-    opacity: 1;
-    transform: translateY(-2px) scale(1.06);
-    filter: blur(0px);
-  }
-  50% {
-    opacity: 1;
-    transform: translateY(0px) scale(1);
-    filter: blur(0px);
-  }
-  85% {
-    opacity: 1;
-    transform: translateY(0px) scale(1);
-    filter: blur(0px);
-  }
-  100% {
-    opacity: 0.35;
-    transform: translateY(0px) scale(1);
-    filter: blur(0px);
-  }
-}
-
+/* ═══════════════════════════════════════════════════════════════════════════
+   ⭐ AUTHENTIC AFTER EFFECTS PRESET (BRICKS STYLE 1)
+   Position Y: +80px | Opacity: 0% -> 100% | Ease High: 20%, Ease Low: 100%
+   Zero Bounce / Pure Silky Linear-to-Exponential Deceleration
+   ═══════════════════════════════════════════════════════════════════════════ */
 .ae-preview-stage {
   display: flex;
   justify-content: center;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   font-weight: 900;
-  font-size: 1.35rem;
-  letter-spacing: 0.5px;
+  font-size: 1.45rem;
+  letter-spacing: 0.8px;
   padding: 10px 0;
+  height: 52px;
+  overflow: hidden;
+}
+
+.ae-word-mask {
+  display: inline-block;
+  overflow: hidden;
+  height: 100%;
+  line-height: 52px;
+}
+
+@keyframes aeStyleOneRiseFade {
+  0% {
+    opacity: 0;
+    transform: translateY(100%);
+    filter: blur(4px);
+  }
+  22% {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0px);
+  }
+  80% {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0px);
+  }
+  94% {
+    opacity: 0;
+    transform: translateY(-8px);
+    filter: blur(2px);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(100%);
+    filter: blur(4px);
+  }
 }
 
 .ae-word {
   display: inline-block;
-  color: #e2e8f0;
-  text-shadow: 0 3px 10px rgba(0,0,0,0.9);
-  animation: aeWordRiseFade 3.2s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+  color: #f1f5f9;
+  text-shadow: 0 4px 12px rgba(0, 0, 0, 0.85);
+  animation: aeStyleOneRiseFade 4.2s cubic-bezier(0.12, 0.90, 0.20, 1.0) infinite;
   will-change: transform, opacity, filter;
 }
 
-.ae-word-1 { animation-delay: 0.0s; }
-.ae-word-2 { animation-delay: 0.5s; }
-.ae-word-3 { animation-delay: 1.0s; }
+.ae-word-1 { animation-delay: 0.00s; }
+.ae-word-2 { animation-delay: 0.28s; }
+.ae-word-3 { animation-delay: 0.56s; }
 .ae-word-4.ae-highlight {
-  animation-delay: 1.5s;
+  animation-delay: 0.84s;
   color: #00ffff;
-  text-shadow: 0 0 18px rgba(0, 255, 255, 0.85), 0 3px 6px #000;
+  text-shadow: 0 0 20px rgba(0, 255, 255, 0.80), 0 3px 6px rgba(0, 0, 0, 0.9);
 }
 
 
