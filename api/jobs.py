@@ -61,7 +61,18 @@ class JobRegistry:
             with open(temp_journal, "w", encoding="utf-8") as f:
                 json.dump(data, f)
             if temp_journal.exists():
-                temp_journal.replace(JOURNAL_PATH)
+                for attempt in range(3):
+                    try:
+                        temp_journal.replace(JOURNAL_PATH)
+                        break
+                    except (PermissionError, OSError):
+                        time.sleep(0.05)
+                else:
+                    try:
+                        if temp_journal.exists():
+                            temp_journal.unlink(missing_ok=True)
+                    except Exception:
+                        pass
         except Exception as e:
             logger.debug(f"[JobRegistry] Journal save notice: {e}")
 

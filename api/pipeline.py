@@ -72,6 +72,7 @@ def get_video_metadata(video_path: str) -> dict:
         meta["format"] = fmt_name.split(",")[0].upper()
         
         dur_s = float(format_info.get("duration", 0))
+        meta["duration_s"] = dur_s
         if dur_s > 0:
             mins = int(dur_s // 60)
             secs = int(dur_s % 60)
@@ -148,7 +149,14 @@ def clean_clip_title(raw_title: str) -> str:
 def _list_clips(job_id: str = None, newer_than: float = 0) -> list:
     clips = []
     if not OUTPUT_DIR.exists(): return clips
-    dirs = [OUTPUT_DIR / job_id] if job_id else [d for d in OUTPUT_DIR.iterdir() if d.is_dir()]
+    if job_id:
+        clean_jid = re.sub(r'[^a-zA-Z0-9_\-]', '', str(job_id))
+        target_dir = (OUTPUT_DIR / clean_jid).resolve()
+        if not target_dir.is_relative_to(OUTPUT_DIR.resolve()) or not target_dir.is_dir():
+            return []
+        dirs = [target_dir]
+    else:
+        dirs = [d for d in OUTPUT_DIR.iterdir() if d.is_dir()]
     for d in dirs:
         if not d.exists(): continue
         meta_list = []
@@ -486,16 +494,13 @@ async def submit_review(job_id: str, request: Request):
 
         # Bounds check against probed video duration if available
         meta = get_video_metadata(job.path)
-        duration_val = meta.get("duration")
-        if duration_val and duration_val != "—":
-            try:
-                max_ms = int(float(duration_val) * 1000)
-                for c in validated_clips:
-                    if c["start_ms"] >= max_ms:
-                        return JSONResponse({"error": f"Clip start timestamp ({c['start_ms']}ms) exceeds video duration ({max_ms}ms)"}, status_code=400)
-                    c["end_ms"] = min(c["end_ms"], max_ms)
-            except Exception:
-                pass
+        dur_s = meta.get("duration_s", 0.0)
+        if dur_s and dur_s > 0:
+            max_ms = int(dur_s * 1000)
+            for c in validated_clips:
+                if c["start_ms"] >= max_ms:
+                    return JSONResponse({"error": f"Clip start timestamp ({c['start_ms']}ms) exceeds video duration ({max_ms}ms)"}, status_code=400)
+                c["end_ms"] = min(c["end_ms"], max_ms)
             
         job_dir = OUTPUT_DIR / job_id
         if not job_dir.exists():
@@ -603,21 +608,21 @@ async def run_pipeline_ws(websocket: WebSocket, job_id: str):
 
 @router.get("/api/script/{job_id}")
 async def get_job_script(job_id: str):
-    # Retrieve clips_metadata.json from output or temp directory
-    out_file = OUTPUT_DIR / job_id / "clips_metadata.json"
-    temp_file = Path("temp") / f"processing_{job_id}" / "clips_metadata.json"
+    clean_jid = re.sub(r'[^a-zA-Z0-9_\-]', '', str(job_id))
+    out_file = (OUTPUT_DIR / clean_jid / "clips_metadata.json").resolve()
+    temp_file = (BASE_DIR / "temp" / f"processing_{clean_jid}" / "clips_metadata.json").resolve()
     data = []
-    if out_file.exists():
+    if out_file.is_relative_to(OUTPUT_DIR.resolve()) and out_file.exists():
         try:
             with open(out_file, "r", encoding="utf-8") as f:
                 data = json.load(f)
         except Exception: pass
-    elif temp_file.exists():
+    elif temp_file.is_relative_to((BASE_DIR / "temp").resolve()) and temp_file.exists():
         try:
             with open(temp_file, "r", encoding="utf-8") as f:
                 data = json.load(f)
         except Exception: pass
-    return {"job_id": job_id, "script": data}
+    return {"job_id": clean_jid, "script": data}
 
 @router.get("/clips")
 async def list_clips_endpoint():

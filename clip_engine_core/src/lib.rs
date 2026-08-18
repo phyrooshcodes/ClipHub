@@ -20,15 +20,18 @@ fn mean_absolute_difference(
         return Err(PyValueError::new_err("frames must not be empty"));
     }
 
-    // Since we're iterating over potentially large images, we can parallelize with rayon
-    // But since ndarray's direct parallel iterators aren't always easily available without ndarray-parallel,
-    // we can use standard slices if memory is contiguous, or just iterate.
-    let prev_slice = prev.as_slice_memory_order().unwrap();
-    let curr_slice = curr.as_slice_memory_order().unwrap();
-
-    let sum: i64 = prev_slice.par_iter().zip(curr_slice.par_iter())
-        .map(|(&p, &c)| (p as i64 - c as i64).abs())
-        .sum();
+    let sum: i64 = match (prev.as_slice_memory_order(), curr.as_slice_memory_order()) {
+        (Some(p_slice), Some(c_slice)) => {
+            p_slice.par_iter().zip(c_slice.par_iter())
+                .map(|(&p, &c)| (p as i64 - c as i64).abs())
+                .sum()
+        },
+        _ => {
+            prev.iter().zip(curr.iter())
+                .map(|(&p, &c)| (p as i64 - c as i64).abs())
+                .sum()
+        }
+    };
 
     Ok(sum as f64 / prev.len() as f64)
 }

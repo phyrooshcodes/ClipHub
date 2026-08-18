@@ -39,8 +39,13 @@ class InstagramQueue:
             self._worker.start()
 
     def _connect(self) -> sqlite3.Connection:
-        connection = sqlite3.connect(self.database)
+        connection = sqlite3.connect(self.database, timeout=30.0)
         connection.row_factory = sqlite3.Row
+        try:
+            connection.execute("PRAGMA journal_mode=WAL;")
+            connection.execute("PRAGMA busy_timeout=15000;")
+        except Exception:
+            pass
         return connection
 
     @contextmanager
@@ -292,7 +297,7 @@ class InstagramQueue:
                 self._update(upload_id, status=result.status, progress=100, message=result.status.replace("_", " "), reel_url=result.reel_url, error=None)
                 self._event(upload_id, result.status, result.status.replace("_", " "))
                 if result.status in {"completed", "needs_manual_verification"}:
-                    with self._database() as db:
+                    with self._lock, self._database() as db:
                         db.execute("UPDATE instagram_queue_settings SET value=? WHERE key='last_success_at'", (str(time.time()),))
             except InstagramUploadError as exc:
                 elapsed = time.time() - started_at

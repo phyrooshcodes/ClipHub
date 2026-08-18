@@ -104,7 +104,18 @@ class YouTubePersistentWorker:
             with open(temp_file, "w", encoding="utf-8") as f:
                 json.dump(hist, f, indent=2)
             if temp_file.exists():
-                temp_file.replace(YT_HISTORY_FILE)
+                for attempt in range(3):
+                    try:
+                        temp_file.replace(YT_HISTORY_FILE)
+                        break
+                    except (PermissionError, OSError):
+                        time.sleep(0.05)
+                else:
+                    try:
+                        if temp_file.exists():
+                            temp_file.unlink(missing_ok=True)
+                    except Exception:
+                        pass
         except Exception as e:
             logger.debug(f"[YouTube Worker] History save notice: {e}")
 

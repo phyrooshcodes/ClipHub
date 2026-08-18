@@ -279,12 +279,14 @@ async def list_uploads():
             })
     return {"uploads": sorted(uploads, key=lambda x: x["created"], reverse=True)}
 
+import mimetypes
+
 @router.get("/output/{filename}")
 async def serve_output(filename: str):
     path = (OUTPUT_DIR / filename).resolve()
     if not path.is_relative_to(OUTPUT_DIR.resolve()) or not path.is_file():
         return JSONResponse({"error": "not found"}, status_code=404)
-    media_type = "image/jpeg" if path.suffix.lower() == ".jpg" else ("image/png" if path.suffix.lower() == ".png" else "video/mp4")
+    media_type = mimetypes.guess_type(str(path))[0] or "video/mp4"
     return FileResponse(str(path), media_type=media_type)
 
 @router.get("/output/caption_studio/{filename}")
@@ -292,13 +294,14 @@ async def serve_caption_studio_output(filename: str):
     path = (OUTPUT_DIR / "caption_studio" / filename).resolve()
     if not path.is_relative_to(OUTPUT_DIR.resolve()) or not path.is_file():
         return JSONResponse({"error": "not found"}, status_code=404)
-    media_type = "image/jpeg" if path.suffix.lower() == ".jpg" else ("image/png" if path.suffix.lower() == ".png" else "video/mp4")
+    media_type = mimetypes.guess_type(str(path))[0] or "video/mp4"
     return FileResponse(str(path), media_type=media_type)
 
 @router.get("/output/{job_id}/{filename}")
 async def serve_job_output(job_id: str, filename: str):
-    path = (OUTPUT_DIR / job_id / filename).resolve()
+    clean_jid = re.sub(r'[^a-zA-Z0-9_\-]', '', str(job_id))
+    path = (OUTPUT_DIR / clean_jid / filename).resolve()
     if not path.is_relative_to(OUTPUT_DIR.resolve()) or not path.is_file():
         return JSONResponse({"error": "not found"}, status_code=404)
-    media_type = "image/jpeg" if path.suffix.lower() == ".jpg" else ("image/png" if path.suffix.lower() == ".png" else "video/mp4")
+    media_type = mimetypes.guess_type(str(path))[0] or "video/mp4"
     return FileResponse(str(path), media_type=media_type)

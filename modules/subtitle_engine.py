@@ -7,9 +7,11 @@
 #          0% GPU usage — pure algorithmic string logic.
 # ============================================================
 
+from __future__ import annotations
+
 import os
 import logging
-from typing import List, Dict
+from typing import List, Dict, Optional, Any
 from pathlib import Path
 
 logger = logging.getLogger(__name__)

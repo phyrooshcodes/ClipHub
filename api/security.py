@@ -9,37 +9,45 @@ from fastapi import WebSocket, Request
 
 
 def lan_mode_enabled(app_state=None) -> bool:
-    if app_state and getattr(app_state, "host", None) == "0.0.0.0":
-        return True
+    if app_state and isinstance(getattr(app_state, "host", None), str):
+        return getattr(app_state, "host") == "0.0.0.0"
     return os.environ.get("CLIPHUB_HOST", "127.0.0.1") == "0.0.0.0"
 
 
 def lan_token(app_state=None) -> str:
-    if app_state and getattr(app_state, "lan_token", None):
-        return app_state.lan_token
-    return os.environ.get("CLIPHUB_LAN_TOKEN", "")
+    if app_state and isinstance(getattr(app_state, "lan_token", None), str):
+        return str(app_state.lan_token).strip()
+    return os.environ.get("CLIPHUB_LAN_TOKEN", "").strip()
 
 
 def is_loopback(host: str | None) -> bool:
-    return host in {"127.0.0.1", "::1", "localhost", "testclient"}
+    if not host:
+        return False
+    clean_host = host.split("%")[0].lower()  # Strip IPv6 scope ID if present
+    return clean_host in {"127.0.0.1", "::1", "localhost", "testclient"}
 
 
 def _extract_token(headers: dict, cookies: dict, query_params: dict) -> str | None:
     # 1. X-ClipHub-Token or x-lan-token header
     for h in ("x-cliphub-token", "x-lan-token"):
         val = headers.get(h)
-        if val:
-            return val
+        if val and isinstance(val, str) and val.strip():
+            return val.strip()
     # 2. Authorization: Bearer <token>
     auth = headers.get("authorization", "")
-    if auth.startswith("Bearer "):
-        return auth[7:].strip()
+    if auth and auth.startswith("Bearer "):
+        val = auth[7:].strip()
+        if val:
+            return val
     # 3. Cookie
     cookie_val = cookies.get("cliphub_lan_token")
-    if cookie_val:
-        return cookie_val
+    if cookie_val and isinstance(cookie_val, str) and cookie_val.strip():
+        return cookie_val.strip()
     # 4. Query param
-    return query_params.get("token")
+    q_val = query_params.get("token")
+    if q_val and isinstance(q_val, str) and q_val.strip():
+        return q_val.strip()
+    return None
 
 
 def http_is_authorized(request: Request) -> bool:
@@ -53,7 +61,10 @@ def http_is_authorized(request: Request) -> bool:
     
     headers_lower = {k.lower(): v for k, v in request.headers.items()}
     supplied = _extract_token(headers_lower, request.cookies, request.query_params)
-    return supplied == token
+    if not supplied:
+        return False
+    import secrets
+    return secrets.compare_digest(supplied, token)
 
 
 def websocket_is_authorized(websocket: WebSocket) -> bool:
@@ -75,4 +86,7 @@ def websocket_is_authorized(websocket: WebSocket) -> bool:
 
     headers_lower = {k.lower(): v for k, v in websocket.headers.items()}
     supplied = _extract_token(headers_lower, websocket.cookies, websocket.query_params)
-    return supplied == token
+    if not supplied:
+        return False
+    import secrets
+    return secrets.compare_digest(supplied, token)

@@ -37,6 +37,15 @@ def _run_ffmpeg(command: list) -> None:
         stderr = e.stderr.decode("utf-8", errors="ignore")
         raise RuntimeError(f"FFmpeg failed with exit code {e.returncode}.\nCommand: {' '.join(command)}\nstderr:\n{stderr}") from e
 
+def escape_ffmpeg_filter_path(file_path: str) -> str:
+    """Escapes a file path for safe usage inside FFmpeg filter strings (e.g. ass='path')."""
+    if not file_path:
+        return ""
+    clean_path = os.path.abspath(file_path).replace("\\", "/")
+    if platform.system() == "Windows":
+        clean_path = re.sub(r'^([A-Za-z]):', r'\1\\:', clean_path)
+    return clean_path.replace("'", "'\\''")
+
 def render_clip(
     input_video: str, output_path: str, start_ms: int, end_ms: int, crop_coords: Dict[str, Any],
     subtitle_path: str, music_choice: Optional[Dict[str, Any]] = None, clip_index: int = 0,
@@ -57,12 +66,7 @@ def render_clip(
     use_nvenc = check_nvenc_available() if encoder == "auto" else (encoder == "h264_nvenc")
     enc_args = ["-c:v", "h264_nvenc", "-preset", NVENC_PRESET, "-cq", NVENC_CQ, "-b:v", "10M", "-maxrate", "14M", "-bufsize", "20M", "-r", "60", "-fps_mode", "cfr"] if use_nvenc else ["-c:v", "libx264", "-preset", "medium", "-crf", "18", "-r", "60", "-fps_mode", "cfr"]
 
-    safe_sub_path = None
-    if subtitle_path and os.path.exists(subtitle_path):
-        rel_sub = os.path.relpath(subtitle_path).replace("\\", "/")
-        if platform.system() == "Windows":
-            rel_sub = re.sub(r'^([A-Za-z]):', r'\1\\:', rel_sub)
-        safe_sub_path = rel_sub.replace("'", "'\\''")
+    safe_sub_path = escape_ffmpeg_filter_path(subtitle_path) if subtitle_path and os.path.exists(subtitle_path) else None
 
     click_sfx_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "assets", "sfx", "mouse_click.mp3"))
     has_click_sfx = os.path.exists(click_sfx_path)
@@ -208,61 +212,61 @@ def render_clip(
             ]
             _run_ffmpeg(cmd)
 
-        logger.info(f"[Renderer] Rendering {len(ai_audio_events)} explainer segments (NVENC={use_nvenc}) ...")
-        # 1. Render Hook
-        if hook_ev and os.path.exists(hook_ev["audio_path"]):
-            hook_file = os.path.join(temp_segs_dir, f"seg_{seg_idx:02d}_hook.mp4")
-            render_avatar_segment(0.0, hook_ev["audio_path"], hook_ev["duration"], hook_file, is_intro=True)
-            segment_files.append(hook_file)
-            seg_idx += 1
-
-        # 2. Render Commentary Segments
-        last_t = 0.0
-        for c_idx, cev in enumerate(comm_events):
-            t_ins = min(duration_s, max(last_t + 0.1, cev.get("source_time", duration_s * 0.4)))
-            # Host Part
-            host_file = os.path.join(temp_segs_dir, f"seg_{seg_idx:02d}_host.mp4")
-            render_host_segment(last_t, t_ins, host_file)
-            if os.path.exists(host_file):
-                segment_files.append(host_file)
-                seg_idx += 1
-            # Commentary Part
-            if os.path.exists(cev["audio_path"]):
-                comm_file = os.path.join(temp_segs_dir, f"seg_{seg_idx:02d}_comm.mp4")
-                freeze_t = max(0.0, t_ins - 0.05)
-                render_avatar_segment(freeze_t, cev["audio_path"], cev["duration"], comm_file, is_intro=False)
-                segment_files.append(comm_file)
-                seg_idx += 1
-            last_t = t_ins
-
-        # 3. Render Host Tail
-        if last_t < duration_s:
-            tail_file = os.path.join(temp_segs_dir, f"seg_{seg_idx:02d}_tail.mp4")
-            render_host_segment(last_t, duration_s, tail_file)
-            if os.path.exists(tail_file):
-                segment_files.append(tail_file)
+        try:
+            logger.info(f"[Renderer] Rendering {len(ai_audio_events)} explainer segments (NVENC={use_nvenc}) ...")
+            # 1. Render Hook
+            if hook_ev and os.path.exists(hook_ev["audio_path"]):
+                hook_file = os.path.join(temp_segs_dir, f"seg_{seg_idx:02d}_hook.mp4")
+                render_avatar_segment(0.0, hook_ev["audio_path"], hook_ev["duration"], hook_file, is_intro=True)
+                segment_files.append(hook_file)
                 seg_idx += 1
 
-        # 4. Concat all segments and apply subtitles
-        list_file = os.path.join(temp_segs_dir, "concat_list.txt")
-        with open(list_file, "w", encoding="utf-8") as f:
-            for sfile in segment_files:
-                clean_sfile = os.path.abspath(sfile).replace("\\", "/")
-                f.write(f"file '{clean_sfile}'\n")
+            # 2. Render Commentary Segments
+            last_t = 0.0
+            for c_idx, cev in enumerate(comm_events):
+                t_ins = min(duration_s, max(last_t + 0.1, cev.get("source_time", duration_s * 0.4)))
+                # Host Part
+                host_file = os.path.join(temp_segs_dir, f"seg_{seg_idx:02d}_host.mp4")
+                render_host_segment(last_t, t_ins, host_file)
+                if os.path.exists(host_file):
+                    segment_files.append(host_file)
+                    seg_idx += 1
+                # Commentary Part
+                if os.path.exists(cev["audio_path"]):
+                    comm_file = os.path.join(temp_segs_dir, f"seg_{seg_idx:02d}_comm.mp4")
+                    freeze_t = max(0.0, t_ins - 0.05)
+                    render_avatar_segment(freeze_t, cev["audio_path"], cev["duration"], comm_file, is_intro=False)
+                    segment_files.append(comm_file)
+                    seg_idx += 1
+                last_t = t_ins
 
-        logger.info(f"[Renderer] Assembling {len(segment_files)} segments with subtitles -> {output_path}")
-        concat_cmd = ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", list_file]
-        if safe_sub_path:
-            concat_cmd += [
-                "-vf", f"ass='{safe_sub_path}'",
-            ] + enc_args + [
-                "-c:a", "aac", "-b:a", "192k", "-ac", "2", "-ar", "48000", "-movflags", "+faststart", output_path
-            ]
-        else:
-            concat_cmd += [
-                "-c", "copy", "-movflags", "+faststart", output_path
-            ]
-        _run_ffmpeg(concat_cmd)
+            # 3. Render Host Tail
+            if last_t < duration_s:
+                tail_file = os.path.join(temp_segs_dir, f"seg_{seg_idx:02d}_tail.mp4")
+                render_host_segment(last_t, duration_s, tail_file)
+                if os.path.exists(tail_file):
+                    segment_files.append(tail_file)
+                    seg_idx += 1
+
+            # 4. Concat all segments and apply subtitles
+            logger.info(f"[Renderer] Assembling {len(segment_files)} segments with subtitles -> {output_path}")
+            concat_cmd = ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", list_file]
+            if safe_sub_path:
+                concat_cmd += [
+                    "-vf", f"ass='{safe_sub_path}'",
+                ] + enc_args + [
+                    "-c:a", "aac", "-b:a", "192k", "-ac", "2", "-ar", "48000", "-movflags", "+faststart", output_path
+                ]
+            else:
+                concat_cmd += [
+                    "-c", "copy", "-movflags", "+faststart", output_path
+                ]
+            _run_ffmpeg(concat_cmd)
+        except Exception as e:
+            if use_nvenc and "nvenc" in str(e).lower():
+                logger.warning("[Renderer] ⚠️ NVENC failed in segmented explainer render. Retrying with CPU encoder...")
+                return render_clip(input_video, output_path, start_ms, end_ms, crop_coords, subtitle_path, music_choice, clip_index, "libx264", editorial_data, commentary_voice, intro_duration, ai_audio_events)
+            raise e
 
         # 5. Generate pristine clean 1080x1920 cover thumbnail image
         try:

@@ -18,16 +18,29 @@ _kokoro_lock = threading.Lock()
 
 def _download_file(url, dest_path):
     import ssl
-    ctx = ssl.create_default_context()
-    ctx.check_hostname = False
-    ctx.verify_mode = ssl.CERT_NONE
+    try:
+        ctx = ssl.create_default_context()
+    except Exception:
+        ctx = None
     
     logger.info(f"Downloading {url} to {dest_path}...")
     temp_path = dest_path + ".tmp"
     try:
-        with urllib.request.urlopen(url, context=ctx) as response, open(temp_path, 'wb') as out_file:
-            data = response.read()
-            out_file.write(data)
+        req = urllib.request.Request(url, headers={"User-Agent": "ClipHub/2.3"})
+        open_kwargs = {"context": ctx} if ctx else {}
+        try:
+            resp = urllib.request.urlopen(req, **open_kwargs)
+        except ssl.SSLError:
+            # Fallback if system CA certificates are missing in minimal python container
+            unverified_ctx = ssl._create_unverified_context()
+            resp = urllib.request.urlopen(req, context=unverified_ctx)
+            
+        with resp as response, open(temp_path, 'wb') as out_file:
+            while True:
+                chunk = response.read(65536)
+                if not chunk:
+                    break
+                out_file.write(chunk)
         if os.path.exists(dest_path):
             os.remove(dest_path)
         os.rename(temp_path, dest_path)

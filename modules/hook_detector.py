@@ -63,13 +63,20 @@ SELECTION CRITERIA (WHAT TO EXTRACT):
 2. Complete Standalone Arc: Every clip is a self-contained story — Setup of a problem or question → Core insight/revelation → Clear real-world implication. It makes 100% sense with no external context.
 3. Actionable or Revelatory: The viewer finishes the clip thinking "I didn't know that" or "I'm going to do that differently now."
 4. Transcript Fidelity: Exact [MM:SS] timestamps matching the actual spoken dialogue in the text.
+5. MINIMUM DURATION — NON-NEGOTIABLE: Every clip MUST span at least 35 seconds of uninterrupted continuous dialogue. If a moment is powerful but the speaker only speaks for 10-20 seconds, include enough surrounding context to reach 35s. NEVER select a clip shorter than 35 seconds.
+
+VIRAL TITLE RULES — MANDATORY:
+The clip_title must be a high-CTR curiosity headline that makes someone stop scrolling. It must be punchy, specific, and frame a human outcome or surprising truth — NOT a textbook chapter title.
+WRONG (Wikipedia-style): "The Importance of Sleep for Focus", "The Benefits of Omega-3 Fatty Acids", "The Role of Dopamine"
+RIGHT (Viral CTR title): "Why Two Bad Nights of Sleep Wrecks Your Focus All Week", "This Cheap Supplement Outperforms Most Focus Drugs", "Why You Zone Out Constantly (And How to Fix It in Days)"
+Title must be 6–12 words. No colons. No "The Importance of". No "The Benefits of". No "The Role of".
 
 OUTPUT FORMAT:
 Output ONLY a raw, valid JSON array with NO markdown fences (no ```json), preamble, or trailing text.
 
 [
   {
-    "clip_title": "Curiosity-driven, punchy headline focused on the human outcome — not the science term",
+    "clip_title": "Punchy viral headline — human outcome, 6-12 words, NOT a textbook title",
     "start_time": "MM:SS",
     "end_time": "MM:SS",
     "viral_score": 9.8,
@@ -96,10 +103,12 @@ YOUR EXTRACTION MISSION:
 Total video duration: {duration_str}
 
 Now {max_clips_instruction}.
+- MINIMUM 35 SECONDS: Every clip MUST cover at least 35 seconds of host dialogue. Do not extract short quotes. If the moment is short, expand to include the surrounding sentences until you reach 35s.
 - STRANGER TEST: Every clip must be instantly valuable to someone who has never heard of this podcast or speaker.
 - TOPIC DIVERSITY: No two clips on the same sub-topic.
 - HUMAN OUTCOMES FIRST: The clip's value must be expressible as a life improvement, not a science fact.
-- STANDALONE COMPLETE: 30–65s of continuous dialogue with a clear start, insight, and conclusion.
+- VIRAL TITLE: clip_title must be a curiosity-driven 6–12 word headline. NO "The Importance of...", NO "The Benefits of...", NO "The Role of..."
+- STANDALONE COMPLETE: 35–65s of continuous dialogue with a clear start, insight, and conclusion.
 - Return ONLY the raw JSON array."""
 
 
@@ -268,7 +277,7 @@ def adjust_clip_to_sentences(
     # 2. Walk end_idx forward to find the end of the sentence
     # If the clip is currently under 28 seconds, allow generous forward expansion to complete the thought
     current_dur = words[end_idx]["end"] - words[curr_start_idx]["start"]
-    effective_forward_expansion = 30.0 if current_dur < 28.0 else max_expansion_s
+    effective_forward_expansion = 45.0 if current_dur < 35.0 else max_expansion_s
 
     curr_end_idx = end_idx
     for i in range(end_idx, len(words)):
@@ -285,8 +294,8 @@ def adjust_clip_to_sentences(
         dur_so_far = words[i]["end"] - words[curr_start_idx]["start"]
         if (ends_with_punc or large_gap or i == len(words) - 1):
             curr_end_idx = i
-            # If we reached a sentence boundary and have at least 25s of content, stop expanding
-            if dur_so_far >= 25.0:
+            # If we reached a sentence boundary and have at least 35s of content, stop expanding
+            if dur_so_far >= 35.0:
                 break
             
     new_start_ms = int(words[curr_start_idx]["start"] * 1000)
@@ -381,11 +390,11 @@ def _validate_and_clamp_clips(
             logger.warning(f"[HookDetector] 🚫 Discarding meta-intro/preview clip: '{clip.get('title', 'Untitled')}' ({start/1000:.1f}s)")
             continue
 
-        # Keep clips that are at least 12s or total video length (avoid throwing away valid moments)
+        # Enforce minimum 35s of host dialogue for a complete, standalone clip
         duration = end - start
-        min_allowed = min(12000, max_ms)
+        min_allowed = min(35000, max_ms)  # 35 seconds minimum host dialogue
         if duration < min_allowed:
-            logger.warning(f"[HookDetector] Discarding clip that is too short ({duration/1000:.1f}s): {clip.get('title', 'Untitled')}")
+            logger.warning(f"[HookDetector] Discarding clip too short ({duration/1000:.1f}s < 35s): {clip.get('title', 'Untitled')}")
             continue
         if duration > 95000:
             logger.warning(f"[HookDetector] Discarding clip that is too long ({duration/1000:.1f}s): {clip.get('title', 'Untitled')}")

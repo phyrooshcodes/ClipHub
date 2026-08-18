@@ -120,9 +120,14 @@ def compute_crop_coords(
     # Probe source video dimensions and fps via OpenCV
     cap = cv2.VideoCapture(input_video)
     fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
-    src_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)) or 1920
-    src_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)) or 1080
+    src_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH) or 0)
+    src_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
     cap.release()
+
+    if src_w <= 0 or src_h <= 0:
+        src_w, src_h = 1920, 1080
+    if fps <= 0 or not math.isfinite(fps):
+        fps = 30.0
 
     # Calculate exact 9:16 crop dimensions
     crop_h = src_h
@@ -139,7 +144,7 @@ def compute_crop_coords(
 
     # Resize to 640x360 for 100x faster, robust DNN face detection
     scale_w = 640
-    scale_h = max(180, int(640 * (src_h / src_w)))
+    scale_h = max(180, int(640 * (src_h / float(src_w))))
     if scale_h % 2 != 0: scale_h += 1
     sample_fps = 4  # Sample 4 frames per second
 
@@ -167,6 +172,7 @@ def compute_crop_coords(
     face_detected = False
     frames_read = 0
     last_face_x = src_w / 2.0
+    proc = None
 
     try:
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
@@ -198,11 +204,20 @@ def compute_crop_coords(
                     last_face_x = orig_cx
 
             sampled_xs.append(last_face_x)
-
-        proc.stdout.close()
-        proc.wait()
     except Exception as e:
         logger.warning(f"[FaceTracker] FFmpeg face pipe failed: {e}")
+    finally:
+        if proc:
+            try:
+                if proc.stdout:
+                    proc.stdout.close()
+                proc.terminate()
+                proc.wait(timeout=2.0)
+            except Exception:
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
 
     total_output_frames = max(1, int(dur_s * fps))
 
