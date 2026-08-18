@@ -29,36 +29,47 @@ NVIDIA_NIM_MODELS = [m.strip() for m in os.environ.get(
     "meta/llama-3.1-8b-instruct,meta/llama-3.1-70b-instruct,z-ai/glm-5.2"
 ).split(",") if m.strip()]
 
-# ─── Master Prompt Template V3.2 (Zero-Bloat, High-Retention) ──────────────
-HOOK_SYSTEM_PROMPT = """You are an elite short-form algorithmic strategist for ClipHub. Your mission is to analyze the provided video transcript and extract the most viral, standalone short-form clips (30–65 seconds) optimized for maximum retention on TikTok, YouTube Shorts, and Instagram Reels.
+# ─── Master Prompt Template V4.0 (High-Utility Walkaway Value) ──────────────
+HOOK_SYSTEM_PROMPT = """You are an elite short-form viral strategist and master creative director for ClipHub. Your mission is to extract the absolute highest-value, standalone short-form clips (30–65 seconds) optimized for maximum retention on TikTok, YouTube Shorts, and Instagram Reels.
 
-SELECTION CRITERIA:
-1. High-Value Revelation: Extract moments where the speaker shares counter-intuitive science, actionable frameworks, cognitive breakthroughs, or intense real-world lessons.
-2. Standalone Narrative Unit: Every clip must be a complete mini-story (setup -> core insight -> resolution) that makes 100% sense on its own without needing prior context.
-3. Zero Intro/Outro Noise: Strictly exclude podcast introductions ("welcome to the show", host greetings), sponsor ads, channel announcements, and conversational filler.
-4. Transcript Fidelity: Timestamps ("start_time", "end_time") must accurately match the [MM:SS] timestamps corresponding to real spoken dialogue in the text.
+CRITICAL VIEWER PSYCHOLOGY & VALUE REQUIREMENT:
+- Short-form viewers do NOT know the speaker, do NOT know this podcast, and do NOT care about episode overviews or roadmaps.
+- Viewers only care about: "What high-value insight or actionable knowledge am I learning in this exact 45 seconds?"
+- The viewer MUST walk away from each clip with a clear, self-contained lesson, a shocking counter-intuitive revelation, a real biological mechanism, or an actionable technique they can apply to their daily life immediately.
+
+STRICT DISQUALIFICATION RULES (NEVER EXTRACT THESE):
+1. NO INTRO ROADMAPS / EPISODE PREVIEWS: Strictly skip any part where the speaker outlines what the episode will cover (e.g., "In this episode we will discuss...", "Today we're going to explore...", "Later in the show...", "My goal today is to explain...").
+2. NO HOST INTRODUCTIONS / GUEST BIOS: Strictly skip "Welcome to the show", "I'm Andrew Huberman", guest introductions, credentials, and greetings.
+3. NO SPONSORS & HOUSEKEEPING: Strictly skip sponsor mentions, channel announcements, disclaimers, and conversational warmups.
+
+SELECTION CRITERIA (WHAT TO EXTRACT):
+1. Direct Core Explanations: Jump straight into the conversation where the speaker is actively explaining the actual mechanism, evidence, or framework.
+2. Complete Standalone Cognitive Units: Every clip must be a complete mini-story (Setup -> Insight/Breakdown -> Takeaway/Conclusion) that makes 100% sense on its own without needing external context.
+3. High-Value Revelation: Unpack counter-intuitive neuroscience, psychology, productivity, health, or mindset truths.
+4. Transcript Fidelity: Exact [MM:SS] timestamps corresponding to real spoken dialogue in the text.
 
 OUTPUT FORMAT:
-Output ONLY a raw, valid JSON array with NO markdown fences (no ```json), preamble, or trailing commentary.
+Output ONLY a raw, valid JSON array with NO markdown fences (no ```json), preamble, or trailing text.
 
 [
   {
-    "clip_title": "Curiosity-driven, punchy headline representing the spoken topic",
+    "clip_title": "Curiosity-driven, punchy headline representing the core insight",
     "start_time": "MM:SS",
     "end_time": "MM:SS",
-    "viral_score": 9.5,
+    "viral_score": 9.8,
     "hook_type": "Surprising Insight",
-    "hook_explanation": "Why this specific moment triggers intense viewer retention and shares",
-    "social_caption": "Engaging curiosity caption + CTA + 4 targeted viral hashtags",
+    "hook_explanation": "Why this specific moment delivers massive standalone walkaway value and retention",
+    "social_caption": "Curiosity caption + actionable takeaway + #Hashtags",
     "product_recommendations": []
   }
 ]"""
 
-HOOK_USER_TEMPLATE = """Here is the COMPLETE timestamped transcript of a video.
-Each line starts with [MM:SS.mm] showing when that sentence begins.
+HOOK_USER_TEMPLATE = """Here is the COMPLETE timestamped transcript of the video.
+Each line starts with [MM:SS.mm] indicating when that sentence begins.
 
-READ THE ENTIRE TRANSCRIPT CAREFULLY before selecting clips.
-Extract ONLY genuine, high-value discussion moments from the body of the conversation.
+CRITICAL INSTRUCTION:
+- IGNORE ALL PODCAST INTROS, EPISODE SUMMARIES, AND ROADMAPS (the first few minutes of outline/preview).
+- Extract ONLY standalone, high-utility teaching/insight moments from the deep core of the discussion where the viewer walks away having learned something truly valuable.
 
 --- TRANSCRIPT START ---
 {transcript}
@@ -67,8 +78,8 @@ Extract ONLY genuine, high-value discussion moments from the body of the convers
 Total video duration: {duration_str}
 
 Now {max_clips_instruction}.
-- ZERO PODCAST GREETINGS: Do NOT select the intro ("Welcome to...", channel disclaimers, sponsor ads).
-- COMPLETE COGNITIVE UNITS: Each clip must span 30-65s of continuous dialogue with setup, insight, and conclusion.
+- ZERO INTRO OVERVIEWS: Discard any moment previewing what the episode will be about.
+- STANDALONE VALUE: Each clip must be 30-65s of continuous dialogue with complete context and clear takeaway.
 - Return ONLY the raw JSON array."""
 
 
@@ -337,13 +348,18 @@ def _validate_and_clamp_clips(
             logger.warning(f"[HookDetector] Discarding clip with invalid range: {clip.get('title', 'Untitled')} ({start/1000:.1f}s -> {end/1000:.1f}s)")
             continue
 
-        # Reject opening podcast housekeeping / intro pleasantries (e.g. "Welcome to Huberman Lab", sponsor reads)
-        if start < 75000:  # Within first 75 seconds
-            clip_words_text = " ".join(w["word"].lower() for w in words if start <= int(w["start"] * 1000) <= min(start + 15000, end))
-            intro_triggers = ["welcome to", "podcast", "my name is", "sponsor", "supporter of", "subscribe", "today's guest", "welcome back", "huberman lab"]
-            if any(trig in clip_words_text for trig in intro_triggers):
-                logger.warning(f"[HookDetector] Discarding introductory/housekeeping clip: {clip.get('title', 'Untitled')} ({start/1000:.1f}s)")
-                continue
+        # Reject opening podcast housekeeping, introductions, and episode roadmaps/teasers
+        clip_full_text = " ".join(w["word"].lower() for w in words if start <= int(w["start"] * 1000) <= end)
+        intro_triggers = [
+            "welcome to", "welcome back", "in this episode", "today's episode", "on this podcast",
+            "in this podcast", "we will talk about", "we're going to discuss", "we will explore",
+            "today we are joined", "today my guest is", "sponsor of today", "supporter of this",
+            "before we begin", "before we get started", "a quick word from", "throughout this episode",
+            "in today's discussion", "subscribe to the channel", "huberman lab podcast"
+        ]
+        if any(trig in clip_full_text for trig in intro_triggers):
+            logger.warning(f"[HookDetector] 🚫 Discarding meta-intro/preview clip: '{clip.get('title', 'Untitled')}' ({start/1000:.1f}s)")
+            continue
 
         # Keep clips that are at least 12s or total video length (avoid throwing away valid moments)
         duration = end - start
