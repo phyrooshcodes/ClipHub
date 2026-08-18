@@ -249,6 +249,12 @@ def render_clip(
                     seg_idx += 1
 
             # 4. Concat all segments and apply subtitles
+            list_file = os.path.join(temp_segs_dir, "concat_list.txt")
+            with open(list_file, "w", encoding="utf-8") as f:
+                for sfile in segment_files:
+                    clean_sfile = os.path.abspath(sfile).replace("\\", "/").replace("'", "'\\''")
+                    f.write(f"file '{clean_sfile}'\n")
+
             logger.info(f"[Renderer] Assembling {len(segment_files)} segments with subtitles -> {output_path}")
             concat_cmd = ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", list_file]
             if safe_sub_path:
