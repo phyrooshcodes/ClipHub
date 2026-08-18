@@ -137,60 +137,25 @@ def render_clip(
             if use_dynamic:
                 from_idx = int(t_from * fps)
                 to_idx = int(t_to * fps)
-                sub_cx = dynamic_crop_x[from_idx:to_idx+1]
-                crop_x = int(sum(sub_cx) / len(sub_cx)) if sub_cx else crop_coords.get("crop_x", 0)
-            else:
-                crop_x = crop_coords.get("crop_x", 0)
-                
+            crop_x = int(sum(dynamic_crop_x[int(t_from * fps):int(t_to * fps)+1]) / len(dynamic_crop_x[int(t_from * fps):int(t_to * fps)+1])) if (use_dynamic and dynamic_crop_x[int(t_from * fps):int(t_to * fps)+1]) else crop_coords.get("crop_x", 0)
+            
             filter_str = (
-                f"[0:v]crop={crop_w}:{crop_h}:{crop_x}:0,scale=1080:1920:flags=lanczos,setsar=1,fps=60,setpts=PTS-STARTPTS[v];"
+                f"[0:v]crop={crop_w}:{crop_h}:{crop_x}:0,scale=1080:1080:flags=lanczos,setsar=1,pad=1080:1920:0:0:black,fps=60,setpts=PTS-STARTPTS[v];"
                 f"[0:a]aformat=channel_layouts=stereo:sample_rates=48000,asetpts=PTS-STARTPTS[a]"
             )
-            cmd += [
-                "-filter_complex", filter_str,
-                "-map", "[v]", "-map", "[a]",
-            ] + enc_args + [
-                "-t", f"{seg_dur:.3f}",
-                "-c:a", "aac", "-b:a", "192k", "-ac", "2", "-ar", "48000", "-pix_fmt", "yuv420p", out_file
-            ]
+            cmd += ["-filter_complex", filter_str, "-map", "[v]", "-map", "[a]"] + enc_args + ["-t", f"{seg_dur:.3f}", "-c:a", "aac", "-b:a", "192k", "-ac", "2", "-ar", "48000", "-pix_fmt", "yuv420p", out_file]
             _run_ffmpeg(cmd)
 
-        # Helper to render avatar freeze segment
         def render_avatar_segment(freeze_t: float, audio_path: str, duration: float, out_file: str, is_intro: bool = False):
             cmd = ["ffmpeg", "-y", "-ss", f"{start_s + freeze_t:.3f}", "-i", input_video, "-i", audio_path]
-            clk_idx = -1
-            av_idx = -1
-            inp_cnt = 2
-            if has_click_sfx:
-                cmd += ["-i", click_sfx_path]
-                clk_idx = inp_cnt
-                inp_cnt += 1
-            if has_avatar:
-                cmd += ["-i", avatar_path]
-                av_idx = inp_cnt
-                inp_cnt += 1
+            clk_idx, av_idx, inp_cnt = -1, -1, 2
+            if has_click_sfx: cmd += ["-i", click_sfx_path]; clk_idx = inp_cnt; inp_cnt += 1
+            if has_avatar: cmd += ["-i", avatar_path]; av_idx = inp_cnt; inp_cnt += 1
             
             x_expr, y_expr = make_balloon_floating_expr(duration, is_intro=is_intro)
-            if is_intro:
-                # Beautifully blurred source video background during intro hook
-                if use_dynamic:
-                    crop_x = dynamic_crop_x[0] if dynamic_crop_x else crop_coords.get("crop_x", 0)
-                else:
-                    crop_x = crop_coords.get("crop_x", 0)
-                fc = [
-                    f"[0:v]trim=start=0:end=0.04,crop={crop_w}:{crop_h}:{crop_x}:0,scale=1080:1920:flags=lanczos,setsar=1,boxblur=18:3,eq=brightness=-0.06:contrast=1.08,tpad=stop_mode=clone:stop_duration={duration:.3f},trim=start=0:end={duration:.3f},fps=60,setpts=PTS-STARTPTS[bg]"
-                ]
-            else:
-                # Freeze & blur host video during mid-clip commentary breakdown
-                freeze_sample_s = max(0.0, freeze_t)
-                if use_dynamic:
-                    f_idx = min(len(dynamic_crop_x) - 1, max(0, int(freeze_sample_s * fps)))
-                    crop_x = dynamic_crop_x[f_idx]
-                else:
-                    crop_x = crop_coords.get("crop_x", 0)
-                fc = [
-                    f"[0:v]trim=start=0:end=0.04,crop={crop_w}:{crop_h}:{crop_x}:0,scale=1080:1920:flags=lanczos,setsar=1,boxblur=16:3,eq=brightness=-0.08:contrast=1.05,tpad=stop_mode=clone:stop_duration={duration:.3f},trim=start=0:end={duration:.3f},fps=60,setpts=PTS-STARTPTS[bg]"
-                ]
+            crop_x = dynamic_crop_x[0] if (is_intro and use_dynamic and dynamic_crop_x) else (dynamic_crop_x[min(len(dynamic_crop_x) - 1, max(0, int(freeze_t * fps)))] if (use_dynamic and dynamic_crop_x) else crop_coords.get("crop_x", 0))
+            
+            fc = [f"[0:v]trim=start=0:end=0.04,crop={crop_w}:{crop_h}:{crop_x}:0,scale=1080:1080:flags=lanczos,setsar=1,boxblur=18:3,eq=brightness=-0.06:contrast=1.08,pad=1080:1920:0:0:black,tpad=stop_mode=clone:stop_duration={duration:.3f},trim=start=0:end={duration:.3f},fps=60,setpts=PTS-STARTPTS[bg]"]
             if has_avatar and av_idx >= 0:
                 fc.append(f"[{av_idx}:v]scale=932:1400:flags=lanczos[av]")
                 fc.append(f"[bg][av]overlay=x='{x_expr}':y='{y_expr}':eval=frame,scale=1080:1920:flags=lanczos,setsar=1,fps=60,setpts=PTS-STARTPTS[v]")
@@ -355,9 +320,9 @@ def render_clip(
         a_head = "final_audio"
 
     if safe_sub_path:
-        filter_complex.append(f"[{v_head}]scale=1080:1920,ass='{safe_sub_path}'[v_final]")
+        filter_complex.append(f"[{v_head}]scale=1080:1080:flags=lanczos,pad=1080:1920:0:0:black,ass='{safe_sub_path}'[v_final]")
     else:
-        filter_complex.append(f"[{v_head}]scale=1080:1920[v_final]")
+        filter_complex.append(f"[{v_head}]scale=1080:1080:flags=lanczos,pad=1080:1920:0:0:black[v_final]")
 
     filter_str = ";".join(filter_complex)
     is_direct_stream = (a_head == "0:a" or a_head == f"{silent_audio_idx}:a")

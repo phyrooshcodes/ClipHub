@@ -345,76 +345,42 @@ def _write_ass(
                 
             start_ts = _seconds_to_ass_time(group_start)
             end_ts   = _seconds_to_ass_time(group_end)
-            text     = "{\\pos(540,960)\\fad(150,150)\\2c&HFFFFFF&\\1c&H00FFFF&}" + "".join(parts)
+            text     = "{\\pos(540,1300)\\fad(150,150)\\2c&HFFFFFF&\\1c&H00FFFF&}" + "".join(parts)
             lines.append(f"Dialogue: 0,{start_ts},{end_ts},Kinetic,,0,0,0,,{text}")
             continue
 
         # ─── Style: aftereffect_preset (Authentic Adobe After Effects Style 1) ───
-        # Exact parameters from tutorial:
-        # - Independent per-word horizontal positioning: previous words NEVER bounce when new words rise
-        # - Non-linear Ease-Out Deceleration (Ease High: 20%, Ease Low: 100%): snappy launch from +42px, buttery cushion into baseline
-        # - Simultaneous smooth alpha wipe (0% -> 100%)
-        # - Active word: Electric Cyan (&HFFFF00& in ASS BGR)
-        # - Inactive/previous words: Clean Studio White (&HFFFFFF&) at 50% opacity (&H50&) locked at baseline
         if style_name in ("aftereffect_preset", "ae_rise_fade", "aftereffects_preset"):
-            effective_font_size = font_size or 48
-            avg_char_w = effective_font_size * 0.58
-            space_w = effective_font_size * 0.35
-            
-            clean_words = [_sanitize_word(w.get("word", "")).upper() for w in group_words]
-            total_w = sum(len(cw) * avg_char_w for cw in clean_words) + max(0, len(clean_words) - 1) * space_w
-            start_x = 540 - (total_w / 2)
-            
-            word_coords = []
-            curr_x = start_x
-            for cw, w in zip(clean_words, group_words):
-                w_len = len(cw) * avg_char_w
-                center_x = curr_x + (w_len / 2)
-                word_coords.append({
-                    "word": cw,
-                    "start": w["start"],
-                    "end": w["end"],
-                    "x": int(round(center_x)),
-                    "y": 960
-                })
-                curr_x += w_len + space_w
-
-            anim_dur = 0.180  # 180ms ease-out rise
-            y_base = 960
-            y_offset = 42
-
-            for wc in word_coords:
-                w_start = wc["start"]
-                w_end = wc["end"]
-                px = wc["x"]
-                py = wc["y"]
-
-                # 1. Non-linear Ease-Out Rising Entrance:
-                # Starts fast from +42px, decelerates exponentially into baseline (960px)
+            for j, w in enumerate(group_words):
+                w_start = w["start"]
+                w_end = w["end"]
                 t0_ts = _seconds_to_ass_time(w_start)
-                t1_ts = _seconds_to_ass_time(w_start + anim_dur)
-                anim_event = (
-                    f"{{\\move({px},{py + y_offset},{px},{py},0,180)"
-                    f"\\fad(50,0)\\c&HFFFF00&\\3c&H00000000&\\shad2\\blur1.0}}{wc['word']}"
-                )
-                lines.append(f"Dialogue: 1,{t0_ts},{t1_ts},Kinetic,,0,0,0,,{anim_event}")
-
-                # 2. Active Spoken Phase:
-                # Sits motionless at baseline in Electric Cyan while spoken
-                if w_end > w_start + anim_dur:
-                    t_act_end = _seconds_to_ass_time(w_end)
-                    active_still = f"{{\\pos({px},{py})\\c&HFFFF00&\\3c&H00000000&\\shad2\\blur1.0}}{wc['word']}"
-                    lines.append(f"Dialogue: 1,{t1_ts},{t_act_end},Kinetic,,0,0,0,,{active_still}")
-
-                # 3. Post-Spoken Resting Baseline Phase:
-                # STAYS 100% DEAD STILL at baseline in Studio White (50% alpha) until the phrase ends.
-                # ZERO BOUNCE on any previous words!
-                post_start = max(w_start + anim_dur, w_end)
-                if group_end > post_start:
-                    t_post_start = _seconds_to_ass_time(post_start)
-                    t_post_end = _seconds_to_ass_time(group_end)
-                    post_still = f"{{\\pos({px},{py})\\alpha&H50&\\c&HFFFFFF&\\3c&H00000000&\\shad2\\blur1.0}}{wc['word']}"
-                    lines.append(f"Dialogue: 1,{t_post_start},{t_post_end},Kinetic,,0,0,0,,{post_still}")
+                t1_ts = _seconds_to_ass_time(w_end)
+                
+                parts = []
+                for k, other_w in enumerate(group_words):
+                    clean_other = _sanitize_word(other_w["word"]).upper()
+                    if k == j:
+                        # Active spoken word: Electric Cyan with punch pop
+                        parts.append(f"{{\\c&HFFFF00&\\3c&H00000000&\\fscx108\\fscy108\\shad2}}{clean_other}")
+                    elif k < j:
+                        # Previously spoken words: Studio White at resting baseline
+                        parts.append(f"{{\\c&HFFFFFF&\\alpha&H40&\\3c&H00000000&\\fscx100\\fscy100\\shad2}}{clean_other}")
+                    else:
+                        # Upcoming words in phrase: Dimmed Studio White
+                        parts.append(f"{{\\c&HFFFFFF&\\alpha&H80&\\3c&H00000000&\\fscx100\\fscy100\\shad2}}{clean_other}")
+                
+                text = f"{{\\pos(540,1300)}}" + " ".join(parts)
+                lines.append(f"Dialogue: 1,{t0_ts},{t1_ts},Kinetic,,0,0,0,,{text}")
+            
+            # Phrase resting tail
+            last_word_end = group_words[-1]["end"]
+            if group_end > last_word_end:
+                start_ts = _seconds_to_ass_time(last_word_end)
+                end_ts = _seconds_to_ass_time(group_end)
+                parts = [f"{{\\c&HFFFFFF&\\alpha&H40&\\3c&H00000000&\\shad2}}{_sanitize_word(ow['word']).upper()}" for ow in group_words]
+                text = f"{{\\pos(540,1300)}}" + " ".join(parts)
+                lines.append(f"Dialogue: 1,{start_ts},{end_ts},Kinetic,,0,0,0,,{text}")
 
             continue
 
@@ -426,8 +392,8 @@ def _write_ass(
             # Find start of next word or group end
             next_start = group_words[j+1]["start"] if j < len(group_words) - 1 else group_end
             
-            pos_x, pos_y = 540, 960
-            anim_y_start = 985
+            pos_x, pos_y = 540, 1300
+            anim_y_start = 1325
             anim_dur_max = 0.150
             
             # Defaults
@@ -440,22 +406,18 @@ def _write_ass(
             anim_effect = ""
             
             if style_name == "kinetic_slide":
-                # Default Improved: Smooth slide-up with a bounce/scale-pop on entry
                 anim_dur_max = 0.150
                 active_tags = "\\c&H00FFFF&\\fscx100\\fscy100\\t(0,80,\\fscx120\\fscy120)\\t(80,150,\\fscx100\\fscy100)"
                 static_active_tags = "\\c&H00FFFF&"
                 anim_effect = f"\\move({pos_x},{anim_y_start + 10},{pos_x},{pos_y},0,150)\\fad(100,0)"
                 
             elif style_name == "tiktok_pop":
-                # Static position, active word pops from 0% scale, overshoot to 135%, settles back to 100%
                 anim_dur_max = 0.150
                 active_tags = "\\c&H0000FFFF&\\fscx0\\fscy0\\t(0,100,\\fscx135\\fscy135)\\t(100,150,\\fscx100\\fscy100)"
                 static_active_tags = "\\c&H0000FFFF&"
                 anim_effect = f"\\pos({pos_x},{pos_y})\\fad(80,0)"
-                color_active = "0000FF" # Red outline / Shadow or bright yellow. Default style has outline.
                 
             elif style_name == "cyberpunk_neon":
-                # Neon Pink for active, 50% opacity Cyber Cyan for other words with tilt rotation
                 anim_dur_max = 0.150
                 color_active = "FF00FF" # Pink
                 color_other = "FFFF00"  # Cyan
@@ -465,30 +427,22 @@ def _write_ass(
                 anim_effect = f"\\pos({pos_x},{pos_y})\\fad(100,0)"
                 
             elif style_name == "vibrant_gradient":
-                # Orange gradient to yellow pop, inactive words greyed out
                 anim_dur_max = 0.180
                 color_other = "808080"  # Grey
-                alpha_other = "60"      # Semitransparent
-                active_tags = "\\c&H00008CFF&\\fscx100\\fscy100\\t(0,100,\\c&H0000FFFF&\\fscx115\\fscy115)\\t(100,180,\\fscx100\\fscy100)"
-                static_active_tags = "\\c&H0000FFFF&"
+                color_active = "00A5FF" # Orange
+                active_tags = f"\\c&H{color_active}&\\fscx105\\fscy105\\t(0,100,\\c&H00FFFF&\\fscx120\\fscy120)\\t(100,180,\\fscx100\\fscy100)"
+                static_active_tags = "\\c&H00FFFF&"
                 anim_effect = f"\\pos({pos_x},{pos_y})\\fad(100,0)"
                 
             elif style_name == "cinematic_swing":
-                # Elegant swing-in with tilt rotation and soft light grey background
                 anim_dur_max = 0.200
-                color_other = "D0D0D0"  # Soft light grey
-                alpha_other = "20"      # Dimmed
-                active_tags = "\\c&H0000FFFF&\\frz-8\\fscx95\\fscy95\\t(0,120,\\frz4\\fscx112\\fscy112)\\t(120,200,\\frz0\\fscx100\\fscy100)"
-                static_active_tags = "\\c&H0000FFFF&"
+                color_active = "00E5FF" # Gold
+                color_other = "A0A0A0"  # Dim white
+                active_tags = f"\\c&H{color_active}&\\org({pos_x},{pos_y+50})\\frx60\\t(0,200,\\frx0)"
+                static_active_tags = f"\\c&H{color_active}&"
                 anim_effect = f"\\pos({pos_x},{pos_y})\\fad(120,0)"
                 
             elif style_name == "karaoke_glow":
-                # Glowing neon yellow outline with soft blur, inactive words dimmed
-                anim_dur_max = 0.150
-                color_other = "D0D0D0"
-                alpha_other = "30"
-                active_tags = "\\c&H0000FFFF&\\shad1\\3c&H00FFFF&\\blur3\\fscx100\\fscy100\\t(0,100,\\fscx115\\fscy115)\\t(100,150,\\fscx100\\fscy100)"
-                static_active_tags = "\\c&H0000FFFF&\\shad1\\3c&H00FFFF&\\blur3"
                 anim_effect = f"\\pos({pos_x},{pos_y})\\fad(80,0)"
                 
             elif style_name == "minimal_fade":

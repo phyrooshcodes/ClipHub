@@ -15,8 +15,8 @@ from typing import List, Dict, Tuple, Optional
 
 logger = logging.getLogger(__name__)
 
-TARGET_ASPECT_W = 9
-TARGET_ASPECT_H = 16
+TARGET_ASPECT_W = 1
+TARGET_ASPECT_H = 1
 
 
 class OneEuroFilter:
@@ -129,14 +129,12 @@ def compute_crop_coords(
     if fps <= 0 or not math.isfinite(fps):
         fps = 30.0
 
-    # Calculate exact 9:16 crop dimensions
-    crop_h = src_h
-    crop_w = int(src_h * (9.0 / 16.0))
-    if crop_w % 2 != 0: crop_w += 1
-    if crop_w > src_w:
-        crop_w = src_w
-        crop_h = min(src_h, int(src_w * (16.0 / 9.0)))
-        if crop_h % 2 != 0: crop_h -= 1
+    # Calculate exact 1:1 square crop dimensions
+    crop_h = min(src_h, src_w)
+    crop_w = crop_h
+    if crop_w % 2 != 0:
+        crop_w -= 1
+        crop_h -= 1
 
     start_s = max(0.0, start_ms / 1000.0)
     end_s = max(start_s + 1.0, end_ms / 1000.0)
@@ -152,7 +150,7 @@ def compute_crop_coords(
 
     logger.info(
         f"[FaceTracker] Source: {src_w}x{src_h} | "
-        f"9:16 Crop: {crop_w}x{crop_h} at {fps:.2f}fps (YuNet={yunet is not None}, Range={start_s:.1f}s-{end_s:.1f}s)"
+        f"1:1 Square Crop: {crop_w}x{crop_h} at {fps:.2f}fps (YuNet={yunet is not None}, Range={start_s:.1f}s-{end_s:.1f}s)"
     )
 
     # Decode directly using FFmpeg pipe (instant multi-threaded seek & resize)
@@ -188,20 +186,51 @@ def compute_crop_coords(
                 _, faces = yunet.detect(frame_arr)
                 if faces is not None and len(faces) > 0:
                     face_detected = True
-                    # Pick largest face
-                    faces = sorted(faces, key=lambda f: f[2] * f[3], reverse=True)
-                    fx, fy, fw, fh = faces[0][:4]
-                    orig_cx = (fx + fw / 2.0) * (src_w / float(scale_w))
-                    last_face_x = orig_cx
+                    # Filter confident faces
+                    valid_faces = [f for f in faces if len(f) <= 4 or f[4] >= 0.30]
+                    if not valid_faces:
+                        valid_faces = faces
+                    
+                    if len(valid_faces) == 1:
+                        fx, fy, fw, fh = valid_faces[0][:4]
+                        orig_cx = (fx + fw / 2.0) * (src_w / float(scale_w))
+                        last_face_x = orig_cx
+                    else:
+                        # Multi-person scene: check if conversation group fits in 1:1 window
+                        min_fx = min(f[0] for f in valid_faces)
+                        max_fx = max(f[0] + f[2] for f in valid_faces)
+                        span_orig = (max_fx - min_fx) * (src_w / float(scale_w))
+                        if span_orig <= crop_w:
+                            # Both/all people fit inside 1:1 crop! Center on group midpoint
+                            orig_cx = ((min_fx + max_fx) / 2.0) * (src_w / float(scale_w))
+                            last_face_x = orig_cx
+                        else:
+                            # Group is wider than crop -> track largest/primary speaker
+                            sorted_faces = sorted(valid_faces, key=lambda f: f[2] * f[3], reverse=True)
+                            fx, fy, fw, fh = sorted_faces[0][:4]
+                            orig_cx = (fx + fw / 2.0) * (src_w / float(scale_w))
+                            last_face_x = orig_cx
             elif cascade:
                 gray = cv2.cvtColor(frame_arr, cv2.COLOR_BGR2GRAY)
                 faces = cascade.detectMultiScale(gray, scaleFactor=1.15, minNeighbors=4, minSize=(30, 30))
                 if len(faces) > 0:
                     face_detected = True
-                    faces = sorted(faces, key=lambda f: f[2] * f[3], reverse=True)
-                    fx, fy, fw, fh = faces[0]
-                    orig_cx = (fx + fw / 2.0) * (src_w / float(scale_w))
-                    last_face_x = orig_cx
+                    if len(faces) == 1:
+                        fx, fy, fw, fh = faces[0]
+                        orig_cx = (fx + fw / 2.0) * (src_w / float(scale_w))
+                        last_face_x = orig_cx
+                    else:
+                        min_fx = min(f[0] for f in faces)
+                        max_fx = max(f[0] + f[2] for f in faces)
+                        span_orig = (max_fx - min_fx) * (src_w / float(scale_w))
+                        if span_orig <= crop_w:
+                            orig_cx = ((min_fx + max_fx) / 2.0) * (src_w / float(scale_w))
+                            last_face_x = orig_cx
+                        else:
+                            sorted_faces = sorted(faces, key=lambda f: f[2] * f[3], reverse=True)
+                            fx, fy, fw, fh = sorted_faces[0]
+                            orig_cx = (fx + fw / 2.0) * (src_w / float(scale_w))
+                            last_face_x = orig_cx
 
             sampled_xs.append(last_face_x)
     except Exception as e:
