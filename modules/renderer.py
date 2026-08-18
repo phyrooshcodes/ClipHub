@@ -71,7 +71,7 @@ def render_clip(
     has_avatar = os.path.exists(avatar_path)
 
     # Helper to generate smooth 2D balloon floating drift expressions
-    def make_balloon_floating_expr(duration: float, w_av: int = 932, h_av: int = 1400):
+    def make_balloon_floating_expr(duration: float, is_intro: bool = False, w_av: int = 932, h_av: int = 1400):
         t_in = 0.45
         t_out = 0.45
         t_exit = max(t_in + 0.1, duration - t_out)
@@ -80,22 +80,37 @@ def render_clip(
         y_off = 1920
         travel = y_off - y_rest
 
-        # Organic 2D balloon floating motion (half-speed, multi-frequency gentle drift)
-        x_expr = (
-            f"if(lt(t,{t_in:.3f}), {x_pos_base}, "
-            f"if(lt(t,{t_exit:.3f}), "
-            f"{x_pos_base} + 14 * sin(1.4 * (t - {t_in:.3f})) + 8 * cos(0.8 * (t - {t_in:.3f})), "
-            f"{x_pos_base}"
-            f"))"
-        )
-        y_expr = (
-            f"if(lt(t,{t_in:.3f}), "
-            f"{y_off} - {travel} * sin(t/{t_in:.3f}*1.570796), "
-            f"if(lt(t,{t_exit:.3f}), "
-            f"{y_rest} + 10 * sin(1.1 * (t - {t_in:.3f})) + 6 * sin(2.1 * (t - {t_in:.3f}) + 0.8), "
-            f"{y_rest} + {travel} * (1 - cos((t-{t_exit:.3f})/{t_out:.3f}*1.570796))"
-            f"))"
-        )
+        if is_intro:
+            # Starts on screen at Frame 0 (0.0s) so video thumbnail is guaranteed to show the teacher!
+            x_expr = (
+                f"if(lt(t,{t_exit:.3f}), "
+                f"{x_pos_base} + 14 * sin(1.4 * t) + 8 * cos(0.8 * t), "
+                f"{x_pos_base}"
+                f")"
+            )
+            y_expr = (
+                f"if(lt(t,{t_exit:.3f}), "
+                f"{y_rest} + 10 * sin(1.1 * t) + 6 * sin(2.1 * t + 0.8), "
+                f"{y_rest} + {travel} * (1 - cos((t-{t_exit:.3f})/{t_out:.3f}*1.570796))"
+                f")"
+            )
+        else:
+            # Mid-clip commentary: slides up smoothly from bottom, floats during explanation, slides down
+            x_expr = (
+                f"if(lt(t,{t_in:.3f}), {x_pos_base}, "
+                f"if(lt(t,{t_exit:.3f}), "
+                f"{x_pos_base} + 14 * sin(1.4 * (t - {t_in:.3f})) + 8 * cos(0.8 * (t - {t_in:.3f})), "
+                f"{x_pos_base}"
+                f"))"
+            )
+            y_expr = (
+                f"if(lt(t,{t_in:.3f}), "
+                f"{y_off} - {travel} * sin(t/{t_in:.3f}*1.570796), "
+                f"if(lt(t,{t_exit:.3f}), "
+                f"{y_rest} + 10 * sin(1.1 * (t - {t_in:.3f})) + 6 * sin(2.1 * (t - {t_in:.3f}) + 0.8), "
+                f"{y_rest} + {travel} * (1 - cos((t-{t_exit:.3f})/{t_out:.3f}*1.570796))"
+                f"))"
+            )
         return x_expr, y_expr
 
     # If Explainer AI Events present, use High-Performance Segmented Render
@@ -137,7 +152,7 @@ def render_clip(
             _run_ffmpeg(cmd)
 
         # Helper to render avatar freeze segment
-        def render_avatar_segment(freeze_t: float, audio_path: str, duration: float, out_file: str):
+        def render_avatar_segment(freeze_t: float, audio_path: str, duration: float, out_file: str, is_intro: bool = False):
             cmd = ["ffmpeg", "-y", "-ss", f"{start_s + freeze_t:.3f}", "-i", input_video, "-i", audio_path]
             clk_idx = -1
             av_idx = -1
@@ -151,7 +166,7 @@ def render_clip(
                 av_idx = inp_cnt
                 inp_cnt += 1
             
-            x_expr, y_expr = make_balloon_floating_expr(duration)
+            x_expr, y_expr = make_balloon_floating_expr(duration, is_intro=is_intro)
             fc = [
                 f"[0:v]trim=start=0:end=0.04,scale=1080:1920:flags=lanczos,setsar=1,boxblur=15:3,eq=brightness=-0.08:contrast=1.05,tpad=stop_mode=clone:stop_duration={duration:.3f},trim=start=0:end={duration:.3f},fps=60,setpts=PTS-STARTPTS[bg]"
             ]
@@ -180,7 +195,7 @@ def render_clip(
         # 1. Render Hook
         if hook_ev and os.path.exists(hook_ev["audio_path"]):
             hook_file = os.path.join(temp_segs_dir, f"seg_{seg_idx:02d}_hook.mp4")
-            render_avatar_segment(0.0, hook_ev["audio_path"], hook_ev["duration"], hook_file)
+            render_avatar_segment(0.0, hook_ev["audio_path"], hook_ev["duration"], hook_file, is_intro=True)
             segment_files.append(hook_file)
             seg_idx += 1
 
@@ -198,7 +213,7 @@ def render_clip(
             if os.path.exists(cev["audio_path"]):
                 comm_file = os.path.join(temp_segs_dir, f"seg_{seg_idx:02d}_comm.mp4")
                 freeze_t = max(0.0, t_ins - 0.05)
-                render_avatar_segment(freeze_t, cev["audio_path"], cev["duration"], comm_file)
+                render_avatar_segment(freeze_t, cev["audio_path"], cev["duration"], comm_file, is_intro=False)
                 segment_files.append(comm_file)
                 seg_idx += 1
             last_t = t_ins
@@ -231,6 +246,18 @@ def render_clip(
                 "-c", "copy", "-movflags", "+faststart", output_path
             ]
         _run_ffmpeg(concat_cmd)
+
+        # 5. Extract cover thumbnail image with the presenter at frame 0
+        try:
+            thumb_path = f"{os.path.splitext(output_path)[0]}_thumb.jpg"
+            cmd_thumb = [
+                "ffmpeg", "-y", "-ss", "0.05", "-i", output_path,
+                "-vframes", "1", "-q:v", "2", thumb_path
+            ]
+            _run_ffmpeg(cmd_thumb)
+            logger.info(f"[Renderer] 📸 Saved cover thumbnail: {thumb_path}")
+        except Exception as e:
+            logger.warning(f"[Renderer] Could not extract cover thumbnail: {e}")
 
         # Cleanup segments
         try:

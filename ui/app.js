@@ -2331,6 +2331,7 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById('publish-progress-percent').textContent = '0%';
     document.getElementById('publish-progress-fill').style.width = '0%';
     document.getElementById('publish-console-output').innerHTML = '';
+    document.getElementById('btn-confirm-publish').classList.add('hidden');
     document.getElementById('btn-publish-done').classList.add('hidden');
     modal.classList.remove('hidden');
 
@@ -2398,7 +2399,7 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
     
-        // Publish Single Clip
+    // Publish Single Clip
     if (e.target.closest('.btn-publish')) {
       const btn = e.target.closest('.btn-publish');
       const clipPath = btn.getAttribute('data-clip');
@@ -2431,6 +2432,8 @@ document.addEventListener("DOMContentLoaded", () => {
       
       selectionView.classList.remove('hidden');
       progressView.classList.add('hidden');
+      document.getElementById('btn-confirm-publish').classList.remove('hidden');
+      document.getElementById('btn-publish-done').classList.add('hidden');
       modal.classList.remove('hidden');
       
       const btnConfirm = document.getElementById('btn-confirm-publish');
@@ -2451,6 +2454,7 @@ document.addEventListener("DOMContentLoaded", () => {
         
         selectionView.classList.add('hidden');
         progressView.classList.remove('hidden');
+        document.getElementById('btn-confirm-publish').classList.add('hidden');
         document.getElementById('publish-progress-status').textContent = 'Starting upload...';
         document.getElementById('publish-progress-percent').textContent = '0%';
         document.getElementById('publish-progress-fill').style.width = '0%';
@@ -2564,6 +2568,7 @@ document.addEventListener("DOMContentLoaded", () => {
             }
             
             if(updateModal) {
+              document.getElementById('btn-confirm-publish').classList.add('hidden');
               const doneBtn = document.getElementById('btn-publish-done');
               doneBtn.classList.remove('hidden');
               const newDoneBtn = doneBtn.cloneNode(true);
