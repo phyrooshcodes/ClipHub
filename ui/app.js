@@ -1620,7 +1620,16 @@ document.addEventListener("DOMContentLoaded", () => {
     const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${location.host}/ws/${jobId}`;
     
+    // Poll for script updates live during pipeline execution
+    const scriptPoll = setInterval(() => {
+      fetchJobScript(jobId);
+    }, 3000);
+    fetchJobScript(jobId);
+
     currentWs = new WebSocket(wsUrl);
+    currentWs.onclose = () => {
+      clearInterval(scriptPoll);
+    };
     currentWs.onmessage = (event) => {
       let data;
       try { data = JSON.parse(event.data); }
@@ -1640,11 +1649,13 @@ document.addEventListener("DOMContentLoaded", () => {
         if (data.raw) {
           appendLog(`<span class="log-info" style="color:var(--text-muted)">[Log]</span> ${data.raw}`);
         }
+        fetchJobScript(jobId);
       } else if (data.type === 'clip_start') {
         pipelineClip = { current: data.clip_num, total: data.total };
         if (data.raw) {
           appendLog(`<span class="log-info" style="color:var(--text-muted)">[Log]</span> ${data.raw}`);
         }
+        fetchJobScript(jobId);
       } else if (data.type === 'video_metadata') {
         if (!data.error) {
           const trySet = (id, txt) => { const el = document.getElementById(id); if (el) el.innerText = txt; };
@@ -1671,6 +1682,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (data.raw) {
           appendLog(`<span class="log-info" style="color:var(--text-muted)">[Log]</span> ${data.raw}`);
         }
+        fetchJobScript(jobId);
       } else if (data.type === 'progress') {
         const stageMap = {
           'demux': 'step-demux',
@@ -1684,6 +1696,7 @@ document.addEventListener("DOMContentLoaded", () => {
         updateProgress(domId, data.step.toUpperCase(), data.percent);
         appendLog(`<span class="log-info">[System]</span> ${data.log}`);
       } else if (data.type === 'error') {
+        clearInterval(scriptPoll);
         appendLog(`<span class="log-error">[Error]</span> ${data.message}`);
         updateProgress(null, 'Pipeline failed', 0);
         if (data.message === 'Job not found.') {
@@ -1693,13 +1706,17 @@ document.addEventListener("DOMContentLoaded", () => {
       } else if (data.type === 'log') {
         appendLog(`<span class="log-info" style="color:var(--text-muted)">[Log]</span> ${data.raw}`);
       } else if (data.type === 'warning') {
-        // Previously silently dropped — this is where GPU-fallback / retry
-        // notices show up, which is exactly the info that was missing
-        // during long "stuck" stages.
         appendLog(`<span class="log-warning">[Warning]</span> ${data.raw}`);
       } else if (data.type === 'phase_1_complete') {
         appendLog(`<span class="log-highlight">[System]</span> Phase 1 analysis complete.`);
+        if (data.metadata) {
+          renderScriptPreview(data.metadata);
+        } else {
+          fetchJobScript(jobId);
+        }
       } else if (data.type === 'done') {
+        clearInterval(scriptPoll);
+        fetchJobScript(jobId);
         if (!data.success) {
           appendLog('[Error] Pipeline failed. Check the preceding log entries.');
           updateProgress(null, 'Pipeline failed', 0);
@@ -1712,127 +1729,78 @@ document.addEventListener("DOMContentLoaded", () => {
     };
   }
 
-  function showHumanReviewUI(jobId, metadata) {
-    document.getElementById('section-progress').classList.add('hidden');
-    const reviewSection = document.getElementById('section-human-review');
-    if (reviewSection) reviewSection.classList.remove('hidden');
-    
+  async function fetchJobScript(jobId) {
+    if (!jobId) return;
+    try {
+      const res = await fetch(`/api/script/${jobId}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.script && data.script.length > 0) {
+        renderScriptPreview(data.script);
+      }
+    } catch(e) {
+      console.warn("fetchJobScript error:", e);
+    }
+  }
+
+  function renderScriptPreview(metadata) {
     const container = document.getElementById('review-cards-container');
-    if (!container) return;
-    container.innerHTML = '';
+    if (!container || !metadata || metadata.length === 0) return;
     
+    let html = '';
     metadata.forEach((clip, idx) => {
-      const card = document.createElement('div');
-      card.className = 'review-card';
-      
       const startSec = (clip.start_ms || 0) / 1000;
       const endSec = (clip.end_ms || 0) / 1000;
       const timeStr = `${Math.floor(startSec / 60)}:${Math.floor(startSec % 60).toString().padStart(2, '0')} - ${Math.floor(endSec / 60)}:${Math.floor(endSec % 60).toString().padStart(2, '0')}`;
-      const scoreStr = clip.hook_score ? `Score: ${clip.hook_score}` : '';
-      
-      let html = `<div class="rc-header"><span>Clip ${idx + 1}: ${escapeHtml(clip.title || 'Untitled')} <small style="color:var(--text-muted);font-weight:400;margin-left:8px;">(${timeStr} · ${scoreStr})</small></span><div class="rc-actions"><select class="rc-select" data-idx="${idx}"><option>Keep</option><option>Discard</option></select></div></div>`;
-      
-      if (clip.editorial_data) {
-        const hookText = typeof clip.editorial_data.hook === 'object' ? (clip.editorial_data.hook?.text || '') : (clip.editorial_data.hook || '');
-        const takeawayText = typeof clip.editorial_data.takeaway === 'object' ? (clip.editorial_data.takeaway?.text || '') : (clip.editorial_data.takeaway || '');
+      const scoreStr = clip.hook_score ? `${clip.hook_score}/100` : '—';
+      const rawTitle = clip.title || (`Viral Clip #${idx + 1}`);
+      const cleanTitle = rawTitle.replace(/^(?:clip[_\s\-]*\d+[_\s\-]*|\d+[\.\:\-]\s*)+/i, '').trim() || rawTitle;
 
-        if (clip.editorial_data.hook) {
-          html += `<div style="margin-bottom:12px;">
-            <label style="display:block; margin-bottom:5px; font-weight:600; color:var(--brand-purple); font-size:12px;">AI Hook</label>
-            <textarea class="review-hook rc-text" data-idx="${idx}" style="width:100%; height:60px; background:var(--bg-app); border:1px solid var(--border-light); padding:8px; border-radius:4px; font-family:inherit;">${escapeHtml(hookText)}</textarea>
-          </div>`;
-        }
-        
+      let hookText = '';
+      let commentaryText = '';
+
+      if (clip.editorial_data) {
+        hookText = typeof clip.editorial_data.hook === 'object' ? (clip.editorial_data.hook?.text || '') : (clip.editorial_data.hook || '');
         if (clip.editorial_data.commentary_segments && clip.editorial_data.commentary_segments.length > 0) {
-          html += `<div style="margin-bottom:12px;">
-            <label style="display:block; margin-bottom:5px; font-weight:600; color:var(--brand-purple); font-size:12px;">AI Commentary</label>`;
-          clip.editorial_data.commentary_segments.forEach((seg, sIdx) => {
-            html += `<textarea class="review-commentary rc-text" data-idx="${idx}" data-sidx="${sIdx}" style="width:100%; height:60px; margin-bottom:8px; background:var(--bg-app); border:1px solid var(--border-light); padding:8px; border-radius:4px; font-family:inherit;">${escapeHtml(seg.text || '')}</textarea>`;
-          });
-          html += `</div>`;
-        }
-        
-        if (clip.editorial_data.takeaway) {
-          html += `<div style="margin-bottom:12px;">
-            <label style="display:block; margin-bottom:5px; font-weight:600; color:var(--brand-purple); font-size:12px;">AI Takeaway</label>
-            <textarea class="review-takeaway rc-text" data-idx="${idx}" style="width:100%; height:60px; background:var(--bg-app); border:1px solid var(--border-light); padding:8px; border-radius:4px; font-family:inherit;">${escapeHtml(takeawayText)}</textarea>
-          </div>`;
+          commentaryText = clip.editorial_data.commentary_segments.map(s => s.text || '').filter(Boolean).join(' ');
         }
       }
-      
-      card.innerHTML = html;
-      container.appendChild(card);
+
+      if (!hookText && clip.hook_text) hookText = clip.hook_text;
+      if (!commentaryText && clip.commentary_text) commentaryText = clip.commentary_text;
+
+      html += `
+        <div class="script-preview-card" style="background: rgba(18, 18, 20, 0.75); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 10px; padding: 14px; margin-bottom: 14px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid rgba(255, 255, 255, 0.06); flex-wrap: wrap; gap: 6px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span class="clip-num-badge" style="background: rgba(99, 102, 241, 0.15); color: #818cf8; border: 1px solid rgba(99, 102, 241, 0.3); padding: 2px 8px; border-radius: 8px; font-weight: 700; font-size: 0.72rem;">Clip #${idx + 1}</span>
+              <strong style="color: #f3f4f6; font-size: 0.9rem;">${escapeHtml(cleanTitle)}</strong>
+            </div>
+            <span style="font-size: 0.75rem; color: #9ca3af;">${timeStr} · <span style="color:#f59e0b; font-weight:600;"><i class="ri-fire-fill"></i> Score: ${scoreStr}</span></span>
+          </div>
+
+          ${hookText ? `
+            <div style="margin-bottom: 10px; background: rgba(99, 102, 241, 0.08); border-left: 3px solid #6366f1; padding: 10px 12px; border-radius: 6px;">
+              <div style="font-size: 0.7rem; font-weight: 700; color: #818cf8; text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.5px;">
+                <i class="ri-mic-line"></i> Opening Hook (Presenter Intro)
+              </div>
+              <p style="margin: 0; font-size: 0.84rem; line-height: 1.45; color: #e5e7eb;">${escapeHtml(hookText)}</p>
+            </div>
+          ` : ''}
+
+          ${commentaryText ? `
+            <div style="background: rgba(16, 185, 129, 0.08); border-left: 3px solid #10b981; padding: 10px 12px; border-radius: 6px;">
+              <div style="font-size: 0.7rem; font-weight: 700; color: #34d399; text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.5px;">
+                <i class="ri-chat-voice-line"></i> Explainer Commentary (Pause Breakdown)
+              </div>
+              <p style="margin: 0; font-size: 0.84rem; line-height: 1.45; color: #e5e7eb;">${escapeHtml(commentaryText)}</p>
+            </div>
+          ` : ''}
+        </div>
+      `;
     });
-    
-    const approveBtn = document.getElementById('btn-approve-review');
-    if (approveBtn) {
-      approveBtn.onclick = async () => {
-        // Gather updated data
-        document.querySelectorAll('.review-hook').forEach(ta => {
-          const idx = parseInt(ta.getAttribute('data-idx'));
-          if (metadata[idx] && metadata[idx].editorial_data) {
-            if (typeof metadata[idx].editorial_data.hook === 'object') {
-              metadata[idx].editorial_data.hook.text = ta.value;
-            } else {
-              metadata[idx].editorial_data.hook = ta.value;
-            }
-          }
-        });
-        document.querySelectorAll('.review-commentary').forEach(ta => {
-          const idx = parseInt(ta.getAttribute('data-idx'));
-          const sIdx = parseInt(ta.getAttribute('data-sidx'));
-          if (metadata[idx] && metadata[idx].editorial_data && metadata[idx].editorial_data.commentary_segments && metadata[idx].editorial_data.commentary_segments[sIdx]) {
-            metadata[idx].editorial_data.commentary_segments[sIdx].text = ta.value;
-          }
-        });
-        document.querySelectorAll('.review-takeaway').forEach(ta => {
-          const idx = parseInt(ta.getAttribute('data-idx'));
-          if (metadata[idx] && metadata[idx].editorial_data) {
-            if (typeof metadata[idx].editorial_data.takeaway === 'object') {
-              metadata[idx].editorial_data.takeaway.text = ta.value;
-            } else {
-              metadata[idx].editorial_data.takeaway = ta.value;
-            }
-          }
-        });
-        
-        approveBtn.disabled = true;
-        approveBtn.innerHTML = '<i class="ri-loader-4-line spin"></i> Submitting...';
-        
-        try {
-          const discarded = new Set(
-            [...document.querySelectorAll('.rc-select')]
-              .filter(select => select.value === 'Discard')
-              .map(select => Number(select.dataset.idx))
-          );
-          const approvedMetadata = metadata.filter((_, idx) => !discarded.has(idx));
-          if (approvedMetadata.length === 0) {
-            Toast.show("At least one clip must be kept for Phase 2 rendering.", "warning");
-            approveBtn.disabled = false;
-            approveBtn.innerHTML = '<i class="ri-magic-line"></i> <span id="btn-proceed-text">Generate Clip</span>';
-            return;
-          }
-          const res = await fetch(`/api/submit-review/${jobId}`, {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify(approvedMetadata)
-          });
-          const data = await res.json();
-          if (data.status === 'ok') {
-            updateProgress('step-render', "Rendering Clips (Phase 2)", 80);
-            connectPipelineWS(jobId);
-          } else {
-            Toast.show("Error: " + (data.error || "Failed to submit review"), "error");
-            approveBtn.disabled = false;
-            approveBtn.innerHTML = '<i class="ri-magic-line"></i> <span id="btn-proceed-text">Generate Clip</span>';
-          }
-        } catch (e) {
-          Toast.show("Failed to submit review: " + e.message, "error");
-          approveBtn.disabled = false;
-          approveBtn.innerHTML = '<i class="ri-magic-line"></i> <span id="btn-proceed-text">Generate Clip</span>';
-        }
-      };
-    }
+
+    container.innerHTML = html;
   }
 
   async function fetchClips(jobId) {
@@ -2674,5 +2642,20 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById('btn-close-publish-modal')?.addEventListener('click', () => {
     document.getElementById('modal-publish').classList.add('hidden');
   });
+
+  // On page load: attempt to load active or latest job script
+  const savedJobId = localStorage.getItem('currentJobId');
+  if (savedJobId) {
+    fetchJobScript(savedJobId);
+  } else {
+    fetch('/history')
+      .then(r => r.json())
+      .then(d => {
+        if (d.history && d.history.length > 0 && d.history[0].job_id) {
+          fetchJobScript(d.history[0].job_id);
+        }
+      })
+      .catch(() => {});
+  }
 
 });

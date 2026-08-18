@@ -160,28 +160,25 @@
           </div>
         </div>
 
-        <!-- TOP RIGHT: Editorial Script -->
+        <!-- TOP RIGHT: AI Script & Explainer -->
         <div class="panel panel-script" id="section-human-review">
           <div class="panel-header between">
             <div class="panel-header-title">
-              <i class="ri-article-line"></i>
-              <h3>EDITORIAL SCRIPT</h3>
+              <i class="ri-sparkling-fill" style="color:var(--brand-purple);"></i>
+              <h3>AI SCRIPT &amp; EXPLAINER</h3>
             </div>
+            <span class="header-pill" style="font-size:10px; padding:2px 8px; font-weight:600;"><i class="ri-eye-line"></i> Read-Only</span>
           </div>
           <div class="panel-tabs">
-            <button class="tab active"><i class="ri-file-text-line"></i> SCRIPT SEGMENTS</button>
+            <button class="tab active"><i class="ri-file-text-line"></i> GENERATED NARRATIVES</button>
           </div>
-          <div class="script-content" id="review-cards-container">
-            <!-- Script segments will be injected here by app.js -->
+          <div class="script-content" id="review-cards-container" style="padding:15px; max-height:420px; overflow-y:auto;">
+            <!-- Script segments will be injected here dynamically by app.js -->
             <div class="empty-script">
               <div class="empty-icon"><i class="ri-file-list-3-line"></i></div>
               <h4>No Script Generated</h4>
-              <p>Upload a video to analyze transcript, detect viral hooks, and review narrative commentary segments.</p>
+              <p>When an AI clipping job runs, the generated hook introductions and narrative commentary breakdowns will appear here in real-time.</p>
             </div>
-          </div>
-          <div class="script-footer">
-            <button class="btn-outline-dashed" id="btn-add-segment"><i class="ri-add-line"></i> Add New Segment</button>
-            <button id="btn-approve-review" class="hidden"></button>
           </div>
         </div>
 

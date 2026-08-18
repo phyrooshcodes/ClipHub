@@ -558,6 +558,24 @@ async def run_pipeline_ws(websocket: WebSocket, job_id: str):
         try: await websocket.close()
         except: pass
 
+@router.get("/api/script/{job_id}")
+async def get_job_script(job_id: str):
+    # Retrieve clips_metadata.json from output or temp directory
+    out_file = OUTPUT_DIR / job_id / "clips_metadata.json"
+    temp_file = Path("temp") / f"processing_{job_id}" / "clips_metadata.json"
+    data = []
+    if out_file.exists():
+        try:
+            with open(out_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception: pass
+    elif temp_file.exists():
+        try:
+            with open(temp_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception: pass
+    return {"job_id": job_id, "script": data}
+
 @router.get("/clips")
 async def list_clips_endpoint():
     return {"clips": _list_clips()}
