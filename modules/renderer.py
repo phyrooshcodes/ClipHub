@@ -7,9 +7,9 @@ import platform
 
 logger = logging.getLogger(__name__)
 
-NVENC_PRESET   = "p4"
-NVENC_CQ       = "28"
-AUDIO_BITRATE  = "192k"
+NVENC_PRESET   = "p5"
+NVENC_CQ       = "19"
+AUDIO_BITRATE  = "320k"
 _nvenc_available = None
 
 def check_nvenc_available() -> bool:
@@ -55,7 +55,7 @@ def render_clip(
     fps = crop_coords.get("fps", 30.0)
     use_dynamic = len(dynamic_crop_x) > 0
     use_nvenc = check_nvenc_available() if encoder == "auto" else (encoder == "h264_nvenc")
-    enc_args = ["-c:v", "h264_nvenc", "-preset", NVENC_PRESET, "-cq", NVENC_CQ, "-r", "60", "-fps_mode", "cfr"] if use_nvenc else ["-c:v", "libx264", "-preset", "fast", "-crf", "23", "-r", "60", "-fps_mode", "cfr"]
+    enc_args = ["-c:v", "h264_nvenc", "-preset", NVENC_PRESET, "-cq", NVENC_CQ, "-b:v", "10M", "-maxrate", "14M", "-bufsize", "20M", "-r", "60", "-fps_mode", "cfr"] if use_nvenc else ["-c:v", "libx264", "-preset", "medium", "-crf", "18", "-r", "60", "-fps_mode", "cfr"]
 
     safe_sub_path = None
     if subtitle_path and os.path.exists(subtitle_path):

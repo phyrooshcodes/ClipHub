@@ -151,7 +151,14 @@
               <i class="ri-sparkling-fill" style="color:var(--brand-purple);"></i>
               <h3>AI SCRIPT &amp; EXPLAINER</h3>
             </div>
-            <span class="header-pill" style="font-size:10px; padding:2px 8px; font-weight:600;"><i class="ri-eye-line"></i> Read-Only</span>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <select class="script-job-select" id="script-job-selector" title="Select Previous Job to Inspect Script">
+                <option value="">Loading previous jobs...</option>
+              </select>
+              <button id="btn-fullscreen-script" title="Expand Fullscreen Detailed Script View">
+                <i class="ri-fullscreen-line"></i>
+              </button>
+            </div>
           </div>
           <div class="panel-tabs">
             <button class="tab active"><i class="ri-file-text-line"></i> GENERATED NARRATIVES</button>
@@ -160,8 +167,8 @@
             <!-- Script segments will be injected here dynamically by app.js -->
             <div class="empty-script">
               <div class="empty-icon"><i class="ri-file-list-3-line"></i></div>
-              <h4>No Script Generated</h4>
-              <p>When an AI clipping job runs, the generated hook introductions and narrative commentary breakdowns will appear here in real-time.</p>
+              <h4>No Script Selected</h4>
+              <p>Select a previous job from the dropdown above or run a new video clipping job to inspect full narrative scripts in real-time.</p>
             </div>
           </div>
         </div>
@@ -789,6 +796,39 @@
         <div class="modal-footer" style="padding:14px 20px; border-top:1px solid var(--border-light); display:flex; justify-content:flex-end; gap:10px;">
           <button id="btn-publish-done" class="btn-outline-dashed hidden" style="padding:8px 16px;">Done</button>
           <button id="btn-confirm-publish" class="btn-primary-gradient" style="padding:8px 20px;"><i class="ri-upload-cloud-line"></i> Confirm & Upload</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- FULLSCREEN SCRIPT & DIALOGUES MODAL -->
+    <div class="modal hidden" id="modal-script-fullscreen">
+      <div class="modal-overlay" id="overlay-fs-script"></div>
+      <div class="modal-card" style="max-width: 1040px; width: 94%; max-height: 90vh; display: flex; flex-direction: column; background: var(--bg-panel); border: 1px solid var(--border-medium); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); overflow: hidden;">
+        <div class="modal-header between" style="padding: 16px 24px; border-bottom: 1px solid var(--border-light); background: var(--bg-card); display: flex; align-items: center; justify-content: space-between;">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <i class="ri-sparkling-fill" style="color: var(--brand-purple); font-size: 22px;"></i>
+            <div>
+              <h3 style="margin: 0; font-size: 1.1rem; font-weight: 700; color: var(--text-main);">AI Explainer Scripts &amp; Dialogues</h3>
+              <small style="color: var(--text-muted); font-size: 0.78rem;">Full detailed view of opening hooks, teacher breakdowns, and timestamps</small>
+            </div>
+          </div>
+          <button class="modal-close" id="btn-close-fs-script" style="background: transparent; border: none; font-size: 22px; color: var(--text-muted); cursor: pointer;"><i class="ri-close-line"></i></button>
+        </div>
+        
+        <div style="padding: 12px 24px; border-bottom: 1px solid var(--border-light); display: flex; gap: 14px; align-items: center; background: var(--bg-panel-inset); flex-wrap: wrap;">
+          <div style="flex: 1; min-width: 240px; position: relative;">
+            <i class="ri-search-line" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 15px;"></i>
+            <input type="text" id="fs-script-search" placeholder="Search dialogues, hooks, or topics..." style="width: 100%; padding: 8px 12px 8px 36px; border-radius: var(--radius-sm); border: 1px solid var(--border-light); background: var(--bg-card); color: var(--text-main); font-size: 13px; outline: none; box-sizing: border-box;">
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <label style="font-size: 12px; color: var(--text-muted); font-weight: 600;">Job:</label>
+            <select class="script-job-select" id="fs-job-selector" style="padding: 7px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-light); background: var(--bg-card); color: var(--text-main); font-size: 13px; outline: none;">
+            </select>
+          </div>
+        </div>
+
+        <div class="modal-body" id="fs-script-cards-container" style="flex: 1; overflow-y: auto; padding: 24px; display: flex; flex-direction: column; gap: 16px;">
+          <!-- Injected dynamically by app.js -->
         </div>
       </div>
     </div>

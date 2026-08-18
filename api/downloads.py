@@ -61,11 +61,12 @@ async def prepare_download():
 
 async def _run_ytdl(job: DownloadJob, python_exe: str, save_path: str):
     env = os.environ.copy()
+    ffmpeg_bin = shutil.which("ffmpeg") or r"C:\ffmpeg\bin\ffmpeg.exe"
+    ffmpeg_dir = str(Path(ffmpeg_bin).parent) if (ffmpeg_bin and Path(ffmpeg_bin).exists()) else ""
     local_bin = str(BASE_DIR / "bin")
-    c_ffmpeg = r"C:\ffmpeg\bin"
     node_dir = r"C:\Program Files\nodejs"
     current_path = env.get("PATH", "")
-    paths_to_add = [p for p in [local_bin, c_ffmpeg, node_dir] if Path(p).exists() and p not in current_path]
+    paths_to_add = [p for p in [local_bin, ffmpeg_dir, node_dir] if p and Path(p).exists() and p not in current_path]
     if paths_to_add:
         env["PATH"] = os.pathsep.join(paths_to_add) + os.pathsep + current_path
 
@@ -145,6 +146,10 @@ async def _run_ytdl(job: DownloadJob, python_exe: str, save_path: str):
             "--output", save_path,
             "--newline", "--no-playlist", "--no-part", "--", job.url
         ]
+        if ffmpeg_dir:
+            primary_cmd.insert(4, "--ffmpeg-location")
+            primary_cmd.insert(5, ffmpeg_dir)
+
         success = await run_command_stream(primary_cmd)
         
         # Resilient fallback if 403 Forbidden or DASH signing throttled
@@ -158,6 +163,10 @@ async def _run_ytdl(job: DownloadJob, python_exe: str, save_path: str):
                 "--output", save_path,
                 "--newline", "--no-playlist", "--no-part", "--", job.url
             ]
+            if ffmpeg_dir:
+                fallback_cmd.insert(4, "--ffmpeg-location")
+                fallback_cmd.insert(5, ffmpeg_dir)
+
             success = await run_command_stream(fallback_cmd)
 
         if success and Path(save_path).exists():

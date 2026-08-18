@@ -1734,14 +1734,132 @@ document.addEventListener("DOMContentLoaded", () => {
     };
   }
 
+  let currentLoadedScript = [];
+  let currentScriptJobId = null;
+
+  async function populateScriptJobSelector() {
+    try {
+      const res = await fetch('/history');
+      if (!res.ok) return;
+      const data = await res.json();
+      const history = data.history || [];
+      
+      const selectors = [
+        document.getElementById('script-job-selector'),
+        document.getElementById('fs-job-selector')
+      ].filter(Boolean);
+
+      if (history.length === 0) {
+        selectors.forEach(sel => {
+          sel.innerHTML = '<option value="">No previous jobs</option>';
+        });
+        return;
+      }
+
+      let optionsHtml = '';
+      history.forEach((job, idx) => {
+        const d = job.created ? new Date(job.created * 1000) : new Date();
+        const dateStr = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+        const rawName = job.filename || `Job ${job.job_id.slice(0, 8)}`;
+        const cleanName = rawName.replace(/^job_|\.mp4$/gi, '');
+        const clipCount = job.clip_count || (job.clips ? job.clips.length : 0);
+        const label = `${cleanName} (${clipCount} clips · ${dateStr})`;
+        optionsHtml += `<option value="${job.job_id}">${escapeHtml(label)}</option>`;
+      });
+
+      selectors.forEach(sel => {
+        sel.innerHTML = optionsHtml;
+        if (currentScriptJobId) {
+          sel.value = currentScriptJobId;
+        }
+      });
+
+      // If no job selected yet, pick the first one
+      if (!currentScriptJobId && history.length > 0) {
+        currentScriptJobId = history[0].job_id;
+        selectors.forEach(sel => sel.value = currentScriptJobId);
+        fetchJobScript(currentScriptJobId);
+      }
+    } catch(e) {
+      console.warn("populateScriptJobSelector error:", e);
+    }
+  }
+
+  // Bind change listeners to script job selectors
+  const jobSel = document.getElementById('script-job-selector');
+  const fsJobSel = document.getElementById('fs-job-selector');
+  
+  if (jobSel) {
+    jobSel.addEventListener('change', function() {
+      currentScriptJobId = this.value;
+      if (fsJobSel) fsJobSel.value = this.value;
+      fetchJobScript(this.value);
+    });
+  }
+  
+  if (fsJobSel) {
+    fsJobSel.addEventListener('change', function() {
+      currentScriptJobId = this.value;
+      if (jobSel) jobSel.value = this.value;
+      fetchJobScript(this.value);
+    });
+  }
+
+  // Fullscreen Script Modal Bindings
+  const modalFsScript = document.getElementById('modal-script-fullscreen');
+  const btnOpenFsScript = document.getElementById('btn-fullscreen-script');
+  const btnCloseFsScript = document.getElementById('btn-close-fs-script');
+  const overlayFsScript = document.getElementById('overlay-fs-script');
+  const searchFsScript = document.getElementById('fs-script-search');
+
+  function openFullscreenScript() {
+    if (modalFsScript) {
+      modalFsScript.classList.remove('hidden');
+      if (fsJobSel && currentScriptJobId) fsJobSel.value = currentScriptJobId;
+      renderFullscreenScriptCards(currentLoadedScript);
+    }
+  }
+
+  function closeFullscreenScript() {
+    if (modalFsScript) modalFsScript.classList.add('hidden');
+  }
+
+  btnOpenFsScript?.addEventListener('click', openFullscreenScript);
+  btnCloseFsScript?.addEventListener('click', closeFullscreenScript);
+  overlayFsScript?.addEventListener('click', closeFullscreenScript);
+
+  searchFsScript?.addEventListener('input', function() {
+    const query = this.value.toLowerCase().trim();
+    if (!query) {
+      renderFullscreenScriptCards(currentLoadedScript);
+      return;
+    }
+    const filtered = currentLoadedScript.filter((clip, idx) => {
+      const title = (clip.title || `clip ${idx + 1}`).toLowerCase();
+      let hook = '';
+      let comm = '';
+      if (clip.editorial_data) {
+        hook = typeof clip.editorial_data.hook === 'object' ? (clip.editorial_data.hook?.text || '') : (clip.editorial_data.hook || '');
+        if (clip.editorial_data.commentary_segments) {
+          comm = clip.editorial_data.commentary_segments.map(s => s.text || '').join(' ');
+        }
+      }
+      return title.includes(query) || hook.toLowerCase().includes(query) || comm.toLowerCase().includes(query);
+    });
+    renderFullscreenScriptCards(filtered);
+  });
+
   async function fetchJobScript(jobId) {
     if (!jobId) return;
+    currentScriptJobId = jobId;
     try {
       const res = await fetch(`/api/script/${jobId}`);
       if (!res.ok) return;
       const data = await res.json();
-      if (data.script && data.script.length > 0) {
-        renderScriptPreview(data.script);
+      currentLoadedScript = data.script || [];
+      renderScriptPreview(currentLoadedScript);
+      if (modalFsScript && !modalFsScript.classList.contains('hidden')) {
+        renderFullscreenScriptCards(currentLoadedScript);
       }
     } catch(e) {
       console.warn("fetchJobScript error:", e);
@@ -1750,7 +1868,17 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function renderScriptPreview(metadata) {
     const container = document.getElementById('review-cards-container');
-    if (!container || !metadata || metadata.length === 0) return;
+    if (!container) return;
+    if (!metadata || metadata.length === 0) {
+      container.innerHTML = `
+        <div class="empty-script">
+          <div class="empty-icon"><i class="ri-file-list-3-line"></i></div>
+          <h4>No Script Generated For This Job</h4>
+          <p>This job either used raw clipping or has no AI commentary script associated.</p>
+        </div>
+      `;
+      return;
+    }
     
     let html = '';
     metadata.forEach((clip, idx) => {
@@ -1799,6 +1927,79 @@ document.addEventListener("DOMContentLoaded", () => {
                 <i class="ri-chat-voice-line"></i> Explainer Commentary (Pause Breakdown)
               </div>
               <p style="margin: 0; font-size: 0.84rem; line-height: 1.45; color: #e5e7eb;">${escapeHtml(commentaryText)}</p>
+            </div>
+          ` : ''}
+        </div>
+      `;
+    });
+
+    container.innerHTML = html;
+  }
+
+  function renderFullscreenScriptCards(metadata) {
+    const container = document.getElementById('fs-script-cards-container');
+    if (!container) return;
+    if (!metadata || metadata.length === 0) {
+      container.innerHTML = `
+        <div class="empty-script" style="padding: 40px; text-align: center;">
+          <div class="empty-icon" style="font-size: 36px; margin-bottom: 12px;"><i class="ri-file-search-line"></i></div>
+          <h4 style="font-size: 1.1rem; color: var(--text-main);">No Matching Dialogues Found</h4>
+          <p style="color: var(--text-muted);">Try adjusting your search query or select another job.</p>
+        </div>
+      `;
+      return;
+    }
+
+    let html = '';
+    metadata.forEach((clip, idx) => {
+      const startSec = (clip.start_ms || 0) / 1000;
+      const endSec = (clip.end_ms || 0) / 1000;
+      const timeStr = `${Math.floor(startSec / 60)}:${Math.floor(startSec % 60).toString().padStart(2, '0')} - ${Math.floor(endSec / 60)}:${Math.floor(endSec % 60).toString().padStart(2, '0')}`;
+      const scoreStr = clip.hook_score ? `${clip.hook_score}/100` : '—';
+      const rawTitle = clip.title || (`Viral Clip #${idx + 1}`);
+      const cleanTitle = rawTitle.replace(/^(?:clip[_\s\-]*\d+[_\s\-]*|\d+[\.\:\-]\s*)+/i, '').trim() || rawTitle;
+
+      let hookText = '';
+      let commentaryText = '';
+
+      if (clip.editorial_data) {
+        hookText = typeof clip.editorial_data.hook === 'object' ? (clip.editorial_data.hook?.text || '') : (clip.editorial_data.hook || '');
+        if (clip.editorial_data.commentary_segments && clip.editorial_data.commentary_segments.length > 0) {
+          commentaryText = clip.editorial_data.commentary_segments.map(s => s.text || '').filter(Boolean).join(' ');
+        }
+      }
+
+      if (!hookText && clip.hook_text) hookText = clip.hook_text;
+      if (!commentaryText && clip.commentary_text) commentaryText = clip.commentary_text;
+
+      html += `
+        <div class="fs-script-card">
+          <div class="fs-card-header">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <span class="clip-num-badge" style="background: rgba(99, 102, 241, 0.15); color: #818cf8; border: 1px solid rgba(99, 102, 241, 0.3); padding: 4px 10px; border-radius: 8px; font-weight: 700; font-size: 0.8rem;">Clip #${idx + 1}</span>
+              <strong style="color: var(--text-main); font-size: 1.05rem;">${escapeHtml(cleanTitle)}</strong>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <span style="font-size: 0.82rem; color: var(--text-muted);"><i class="ri-time-line"></i> ${timeStr}</span>
+              <span style="font-size: 0.82rem; color: #f59e0b; font-weight: 600; background: rgba(245, 158, 11, 0.1); padding: 2px 8px; border-radius: 6px;"><i class="ri-fire-fill"></i> Score: ${scoreStr}</span>
+            </div>
+          </div>
+
+          ${hookText ? `
+            <div class="fs-dialogue-block fs-dialogue-hook">
+              <div class="fs-dialogue-label" style="color: #818cf8;">
+                <i class="ri-mic-line"></i> <span>Opening Hook (Frame 0 — Anime Teacher Intro)</span>
+              </div>
+              <p class="fs-dialogue-text">"${escapeHtml(hookText)}"</p>
+            </div>
+          ` : ''}
+
+          ${commentaryText ? `
+            <div class="fs-dialogue-block fs-dialogue-comm">
+              <div class="fs-dialogue-label" style="color: #34d399;">
+                <i class="ri-chat-voice-line"></i> <span>Mid-Clip Concept Breakdown (Video Freeze-Frame Explanation)</span>
+              </div>
+              <p class="fs-dialogue-text">"${escapeHtml(commentaryText)}"</p>
             </div>
           ` : ''}
         </div>
@@ -2648,19 +2849,12 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById('modal-publish').classList.add('hidden');
   });
 
-  // On page load: attempt to load active or latest job script
-  const savedJobId = localStorage.getItem('currentJobId');
-  if (savedJobId) {
-    fetchJobScript(savedJobId);
-  } else {
-    fetch('/history')
-      .then(r => r.json())
-      .then(d => {
-        if (d.history && d.history.length > 0 && d.history[0].job_id) {
-          fetchJobScript(d.history[0].job_id);
-        }
-      })
-      .catch(() => {});
-  }
+  // On page load: populate script job selector and load scripts
+  populateScriptJobSelector();
 
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      closeFullscreenScript();
+    }
+  });
 });
