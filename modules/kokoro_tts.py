@@ -13,6 +13,13 @@ VOICES_URL = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/mode
 import asyncio
 import threading
 
+# Silence phonemizer internal token-count alignment warnings during TTS phonemization
+try:
+    import phonemizer.logger
+    phonemizer.logger.get_logger('quiet')
+except Exception:
+    pass
+
 _kokoro_instance = None
 _kokoro_lock = threading.Lock()
 
