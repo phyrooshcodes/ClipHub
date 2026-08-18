@@ -370,13 +370,15 @@ def _write_ass(
             
             if style_name in ("aftereffect_preset", "ae_rise_fade", "aftereffects_preset"):
                 # ⭐ VIP PRESET: Authentic After Effects Style 1 (Word-by-Word Rise & Fade In)
-                # Position Y: +40px -> 0px | Opacity: 0% -> 100% | Zero Bounce / Pure Silky Deceleration
+                # Position Y: +36px -> 0px | Opacity: 0% -> 100% | Zero Bounce / Pure Silky Deceleration
+                # Active word: Electric Cyan / Ice Blue (&HFFFF00& in ASS BGR) matching UI card
+                # Inactive words: Clean Studio White (&HFFFFFF&) at 50% alpha (&H50&)
                 anim_dur_max = 0.160
-                color_active = "00FFFF"       # Vivid luminous yellow/gold highlight
-                color_other = "E2E8F0"        # Clean high-end studio platinum
-                alpha_other = "45"            # 45% transparency for non-active words
-                active_tags = "\\c&H0000FFFF&\\3c&H00000000&\\shad2\\blur1.0"
-                static_active_tags = "\\c&H0000FFFF&\\3c&H00000000&\\shad2\\blur1.0"
+                color_active = "FFFF00"       # Electric Cyan in ASS BGR (Blue=FF, Green=FF, Red=00)
+                color_other = "FFFFFF"        # Pure Studio White
+                alpha_other = "50"            # 50% transparency for non-active words
+                active_tags = "\\c&HFFFF00&\\3c&H00000000&\\shad2\\blur1.0"
+                static_active_tags = "\\c&HFFFF00&\\3c&H00000000&\\shad2\\blur1.0"
                 anim_effect = f"\\move({pos_x},{pos_y + 36},{pos_x},{pos_y},0,160)\\fad(90,0)"
 
             elif style_name == "kinetic_slide":

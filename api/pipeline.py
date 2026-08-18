@@ -546,7 +546,7 @@ async def run_pipeline_ws(websocket: WebSocket, job_id: str):
             "--input", job.path, "--output-dir", str(job_dir),
             "--model", config.get("model", "small"),
             "--max-clips", str(config.get("max_clips", 10)),
-            "--caption-style", config.get("caption_style", "kinetic_slide"),
+            "--caption-style", config.get("caption_style", "aftereffect_preset"),
             "--font-preset", config.get("font_preset", "default"),
             "--font-name", config.get("font_name", ""),
             "--font-size", str(config.get("font_size", 48)),

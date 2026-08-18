@@ -580,7 +580,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Settings Modal & Caption Studio Architecture
   const configCaptionStyle = document.getElementById('config-caption-style');
-  const savedCaptionStyle = localStorage.getItem('captionStyle') || 'kinetic_slide';
+  const savedCaptionStyle = localStorage.getItem('captionStyle') || 'aftereffect_preset';
   if (configCaptionStyle) {
     configCaptionStyle.value = savedCaptionStyle;
     configCaptionStyle.addEventListener('change', (e) => {
@@ -761,7 +761,7 @@ document.addEventListener("DOMContentLoaded", () => {
     } else {
       document.getElementById('caption-studio-title').innerHTML = `Step 2: Choose Your <span style="color:var(--brand-purple);">Caption Style</span>`;
       document.getElementById('caption-studio-subtitle').textContent = `Select a viral typography & animation preset below.`;
-      const curStyle = localStorage.getItem('captionStyle') || 'kinetic_slide';
+      const curStyle = localStorage.getItem('captionStyle') || 'aftereffect_preset';
       const curObj = CAPTION_STYLES_DATA.find(s => s.id === curStyle);
       const name = curObj ? curObj.name : 'Selected Style';
       if (btnText) btnText.textContent = `Generate Clips (${name})`;
@@ -1541,7 +1541,7 @@ document.addEventListener("DOMContentLoaded", () => {
         // Send config (model, caption_style, etc) FIRST before initiating connections
         async function sendConfig(jobId) {
           const model = document.getElementById('config-model')?.value || 'small';
-          const captionStyle = localStorage.getItem('captionStyle') || document.getElementById('config-caption-style')?.value || 'kinetic_slide';
+          const captionStyle = localStorage.getItem('captionStyle') || document.getElementById('config-caption-style')?.value || 'aftereffect_preset';
           const commentaryMode = document.getElementById('config-commentary-mode')?.value || 'hook_commentary';
           const commentaryVoice = document.getElementById('config-commentary-voice')?.value || 'af_sarah';
           try {
