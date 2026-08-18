@@ -64,18 +64,20 @@ def align_editorial_timeline(
                 "text": clean_hook
             })
 
-    # 2. AI Commentary Segment (Video pauses on freeze-frame while AI explains concept)
+    # 2. AI Commentary Segments (Video pauses on freeze-frame while Dr. Mei explains concepts)
     comm_segments = editorial_data.get("commentary_segments", [])
-    duration_comm = 0.0
-    t_insert_src = None
+    valid_comm_events = []
 
     if comm_segments and isinstance(comm_segments, list):
-        seg = comm_segments[0]
-        comm_text = seg.get("text", "").strip()
-        insert_text = seg.get("insert_after_text", "").strip()
-        
-        if comm_text:
-            # Find insertion point in source words
+        for seg_idx, seg in enumerate(comm_segments):
+            if not isinstance(seg, dict):
+                continue
+            comm_text = seg.get("text", "").strip()
+            insert_text = seg.get("insert_after_text", "").strip()
+            if not comm_text:
+                continue
+
+            t_insert_src = None
             if insert_text:
                 clean_tokens = [re.sub(r'[^\w]', '', t.lower()) for t in insert_text.split() if re.sub(r'[^\w]', '', t.lower())]
                 n_tokens = len(clean_tokens)
@@ -85,45 +87,66 @@ def align_editorial_timeline(
                         if window == clean_tokens:
                             t_insert_src = source_words[i + n_tokens - 1]["end"] - clip_start_s
                             break
-                            
-            # Fallback to 40% into clip if no match found
-            if t_insert_src is None or t_insert_src < 3.0 or t_insert_src > clip_duration - 4.0:
-                t_insert_src = max(3.0, clip_duration * 0.40)
-                
+
+            if t_insert_src is None or t_insert_src < 2.0 or t_insert_src > clip_duration - 2.0:
+                prop = (seg_idx + 1) / (len(comm_segments) + 1)
+                t_insert_src = max(2.5, min(clip_duration - 2.5, clip_duration * prop))
+
             safe_text = "".join(c if c.isalnum() else "_" for c in comm_text[:20])
-            comm_audio_path = os.path.join(temp_dir, f"commentary_{clip['start_ms']}_{safe_text}.wav")
-            duration_comm = generate_tts_sync(comm_text, voice_id, comm_audio_path)
-            
-            if duration_comm > 0:
-                comm_timeline_start = duration_hook + t_insert_src
-                comm_words = transcribe_audio(comm_audio_path, model_size="tiny", language="en")
-                for w in comm_words:
-                    w["start"] += comm_timeline_start + clip_start_s
-                    w["end"] += comm_timeline_start + clip_start_s
-                    w["is_ai"] = True
-                    ai_words.append(w)
-                    
-                ai_audio_events.append({
-                    "type": "commentary",
-                    "audio_path": comm_audio_path,
-                    "duration": duration_comm,
+            comm_audio_path = os.path.join(temp_dir, f"commentary_{clip['start_ms']}_{seg_idx}_{safe_text}.wav")
+            dur = generate_tts_sync(comm_text, voice_id, comm_audio_path)
+            if dur > 0:
+                valid_comm_events.append({
                     "source_time": t_insert_src,
-                    "start_s": comm_timeline_start,
-                    "end_s": comm_timeline_start + duration_comm,
-                    "text": comm_text
+                    "audio_path": comm_audio_path,
+                    "duration": dur,
+                    "text": comm_text,
+                    "seg_idx": seg_idx
                 })
 
+    # Sort valid commentary events chronologically by source_time
+    valid_comm_events.sort(key=lambda x: x["source_time"])
+
+    # Ensure clean temporal spacing between multiple commentary pauses
+    last_t = 0.0
+    for cev in valid_comm_events:
+        if cev["source_time"] <= last_t + 2.5:
+            cev["source_time"] = min(clip_duration - 1.5, last_t + 2.5)
+        last_t = cev["source_time"]
+
+    # Calculate cumulative timeline offsets for AI commentary segments and transcribe their words
+    current_cumulative_shift = duration_hook
+    for cev in valid_comm_events:
+        comm_timeline_start = current_cumulative_shift + cev["source_time"]
+        comm_words = transcribe_audio(cev["audio_path"], model_size="tiny", language="en")
+        for w in comm_words:
+            w["start"] += comm_timeline_start + clip_start_s
+            w["end"] += comm_timeline_start + clip_start_s
+            w["is_ai"] = True
+            ai_words.append(w)
+
+        ai_audio_events.append({
+            "type": "commentary",
+            "audio_path": cev["audio_path"],
+            "duration": cev["duration"],
+            "source_time": cev["source_time"],
+            "start_s": comm_timeline_start,
+            "end_s": comm_timeline_start + cev["duration"],
+            "text": cev["text"]
+        })
+        current_cumulative_shift += cev["duration"]
+
     # 3. Source Words Shifting:
-    # Shift source words so they never collide with AI hook or AI commentary
+    # Each source word is shifted by duration_hook + sum of durations of all commentary pauses before it
     shifted_source_words = []
     for w in source_words:
         w_copy = dict(w)
         rel_start = w["start"] - clip_start_s
-        
         shift = duration_hook
-        if t_insert_src is not None and duration_comm > 0 and rel_start >= t_insert_src:
-            shift += duration_comm
-            
+        for cev in valid_comm_events:
+            if rel_start >= cev["source_time"]:
+                shift += cev["duration"]
+
         w_copy["start"] += shift
         w_copy["end"] += shift
         shifted_source_words.append(w_copy)
