@@ -88,13 +88,13 @@ def render_clip(
             # Starts on screen at Frame 0 (0.0s) so video thumbnail is guaranteed to show the teacher!
             x_expr = (
                 f"if(lt(t,{t_exit:.3f}), "
-                f"{x_pos_base} + 14 * sin(1.4 * t) + 8 * cos(0.8 * t), "
+                f"{x_pos_base} + 8.4 * sin(0.98 * t) + 4.8 * cos(0.56 * t), "
                 f"{x_pos_base}"
                 f")"
             )
             y_expr = (
                 f"if(lt(t,{t_exit:.3f}), "
-                f"{y_rest} + 10 * sin(1.1 * t) + 6 * sin(2.1 * t + 0.8), "
+                f"{y_rest} + 6.0 * sin(0.77 * t) + 3.6 * sin(1.47 * t + 0.8), "
                 f"{y_rest} + {travel} * (1 - cos((t-{t_exit:.3f})/{t_out:.3f}*1.570796))"
                 f")"
             )
@@ -103,7 +103,7 @@ def render_clip(
             x_expr = (
                 f"if(lt(t,{t_in:.3f}), {x_pos_base}, "
                 f"if(lt(t,{t_exit:.3f}), "
-                f"{x_pos_base} + 14 * sin(1.4 * (t - {t_in:.3f})) + 8 * cos(0.8 * (t - {t_in:.3f})), "
+                f"{x_pos_base} + 8.4 * sin(0.98 * (t - {t_in:.3f})) + 4.8 * cos(0.56 * (t - {t_in:.3f})), "
                 f"{x_pos_base}"
                 f"))"
             )
@@ -111,7 +111,7 @@ def render_clip(
                 f"if(lt(t,{t_in:.3f}), "
                 f"{y_off} - {travel} * sin(t/{t_in:.3f}*1.570796), "
                 f"if(lt(t,{t_exit:.3f}), "
-                f"{y_rest} + 10 * sin(1.1 * (t - {t_in:.3f})) + 6 * sin(2.1 * (t - {t_in:.3f}) + 0.8), "
+                f"{y_rest} + 6.0 * sin(0.77 * (t - {t_in:.3f})) + 3.6 * sin(1.47 * (t - {t_in:.3f}) + 0.8), "
                 f"{y_rest} + {travel} * (1 - cos((t-{t_exit:.3f})/{t_out:.3f}*1.570796))"
                 f"))"
             )
