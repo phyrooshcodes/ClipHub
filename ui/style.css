@@ -261,23 +261,22 @@ html, body {
 .sidebar.collapsed .sidebar-header {
   padding: 0 16px;
   justify-content: center;
+  position: relative;
 }
 
 .sidebar.collapsed .logo-box {
   margin-right: 0;
+  cursor: pointer;
+  transition: transform 0.18s ease, filter 0.18s ease;
+}
+
+.sidebar.collapsed .logo-box:hover {
+  transform: scale(1.06);
+  filter: drop-shadow(0 0 8px rgba(99, 102, 241, 0.45));
 }
 
 .sidebar.collapsed .btn-sidebar-toggle {
-  position: absolute;
-  top: 14px;
-  right: -14px;
-  background: var(--bg-sidebar);
-  border: 1px solid var(--border-light);
-  box-shadow: var(--shadow-sm);
-  z-index: 30;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
+  display: none !important;
 }
 
 .sidebar.collapsed .sidebar-nav {

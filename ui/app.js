@@ -136,6 +136,15 @@ const SidebarManager = {
       this.toggle();
     });
 
+    // Logo click in collapsed mode expands sidebar
+    this.sidebarEl.querySelector('.logo-box')?.addEventListener('click', (e) => {
+      if (this.sidebarEl.classList.contains('collapsed')) {
+        e.preventDefault();
+        e.stopPropagation();
+        this.toggle();
+      }
+    });
+
     // Keyboard shortcut Ctrl+B or Cmd+B
     window.addEventListener('keydown', (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
