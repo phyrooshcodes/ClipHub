@@ -134,21 +134,26 @@ async def _run_ytdl(job: DownloadJob, python_exe: str, save_path: str):
 
     try:
         job.add_event({"type": "ytdl_start", "url": job.url})
+        node_str = f"node:{node_bin}" if Path(str(node_bin)).exists() else "node"
+
         # Primary high-definition 1080p command
         primary_cmd = [
             python_exe, "-m", "yt_dlp",
-            "--remote-components", "ejs:github",
-            "--js-runtimes", f"node:{node_bin}" if Path(str(node_bin)).exists() else "node",
+            "--no-playlist",
+            "--force-overwrites",
             "--format", "bestvideo[height<=1080]+bestaudio/bestvideo+bestaudio/best[height<=1080]/best",
             "--merge-output-format", "mp4",
             "--retries", "5",
             "--fragment-retries", "5",
-            "--output", save_path,
-            "--newline", "--no-playlist", "--no-part", "--", job.url
+            "--newline",
+            "--no-part",
+            "-o", save_path,
         ]
         if ffmpeg_dir:
-            primary_cmd.insert(4, "--ffmpeg-location")
-            primary_cmd.insert(5, ffmpeg_dir)
+            primary_cmd.extend(["--ffmpeg-location", ffmpeg_dir])
+        if Path(str(node_bin)).exists():
+            primary_cmd.extend(["--js-runtimes", node_str])
+        primary_cmd.extend(["--", job.url])
 
         success = await run_command_stream(primary_cmd)
         
@@ -157,15 +162,20 @@ async def _run_ytdl(job: DownloadJob, python_exe: str, save_path: str):
             job.add_event({"type": "ytdl_log", "raw": "[Info] High-definition DASH stream restricted. Switching to Android/Web stream fallback..."})
             fallback_cmd = [
                 python_exe, "-m", "yt_dlp",
-                "--extractor-args", "youtube:player_client=android,web",
+                "--no-playlist",
+                "--force-overwrites",
+                "--extractor-args", "youtube:player_client=ios,android,web",
                 "--format", "best[height<=1080]/best",
                 "--merge-output-format", "mp4",
-                "--output", save_path,
-                "--newline", "--no-playlist", "--no-part", "--", job.url
+                "--retries", "5",
+                "--newline",
+                "-o", save_path,
             ]
             if ffmpeg_dir:
-                fallback_cmd.insert(4, "--ffmpeg-location")
-                fallback_cmd.insert(5, ffmpeg_dir)
+                fallback_cmd.extend(["--ffmpeg-location", ffmpeg_dir])
+            if Path(str(node_bin)).exists():
+                fallback_cmd.extend(["--js-runtimes", node_str])
+            fallback_cmd.extend(["--", job.url])
 
             success = await run_command_stream(fallback_cmd)
 
