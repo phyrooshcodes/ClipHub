@@ -29,7 +29,7 @@ def generate_products(transcript):
     
     api_key = os.environ.get("NVIDIA_API_KEY", "").strip()
     base_url = os.environ.get("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1")
-    model = os.environ.get("NVIDIA_MODEL", "meta/llama-3.3-70b-instruct")
+    model = os.environ.get("NVIDIA_MODEL", "z-ai/glm-5.2")
 
     if not api_key:
         base_url = "http://localhost:1234/v1"

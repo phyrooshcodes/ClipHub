@@ -10,8 +10,8 @@ load_dotenv()
 
 NVIDIA_API_KEY = os.environ.get("NVIDIA_API_KEY", "")
 NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1"
-MODEL_NAME = "meta/llama-3.1-70b-instruct"
-MODEL_FALLBACKS = ["meta/llama-3.1-70b-instruct", "meta/llama-3.3-70b-instruct", "meta/llama-3.1-8b-instruct"]
+MODEL_NAME = "z-ai/glm-5.2"
+MODEL_FALLBACKS = ["z-ai/glm-5.2", "meta/llama-3.1-8b-instruct"]
 
 # We request JSON mode from the LLM
 SYSTEM_PROMPT = """You are Dr. Mei, a brilliant, charismatic anime female presenter and teacher with a Master's degree in neuroscience, psychology, biology, and human performance.
