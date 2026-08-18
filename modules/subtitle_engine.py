@@ -347,6 +347,75 @@ def _write_ass(
             lines.append(f"Dialogue: 0,{start_ts},{end_ts},Kinetic,,0,0,0,,{text}")
             continue
 
+        # ─── Style: aftereffect_preset (Authentic Adobe After Effects Style 1) ───
+        # Exact parameters from tutorial:
+        # - Independent per-word horizontal positioning: previous words NEVER bounce when new words rise
+        # - Non-linear Ease-Out Deceleration (Ease High: 20%, Ease Low: 100%): snappy launch from +42px, buttery cushion into baseline
+        # - Simultaneous smooth alpha wipe (0% -> 100%)
+        # - Active word: Electric Cyan (&HFFFF00& in ASS BGR)
+        # - Inactive/previous words: Clean Studio White (&HFFFFFF&) at 50% opacity (&H50&) locked at baseline
+        if style_name in ("aftereffect_preset", "ae_rise_fade", "aftereffects_preset"):
+            effective_font_size = font_size or 48
+            avg_char_w = effective_font_size * 0.58
+            space_w = effective_font_size * 0.35
+            
+            clean_words = [_sanitize_word(w.get("word", "")).upper() for w in group_words]
+            total_w = sum(len(cw) * avg_char_w for cw in clean_words) + max(0, len(clean_words) - 1) * space_w
+            start_x = 540 - (total_w / 2)
+            
+            word_coords = []
+            curr_x = start_x
+            for cw, w in zip(clean_words, group_words):
+                w_len = len(cw) * avg_char_w
+                center_x = curr_x + (w_len / 2)
+                word_coords.append({
+                    "word": cw,
+                    "start": w["start"],
+                    "end": w["end"],
+                    "x": int(round(center_x)),
+                    "y": 960
+                })
+                curr_x += w_len + space_w
+
+            anim_dur = 0.180  # 180ms ease-out rise
+            y_base = 960
+            y_offset = 42
+
+            for wc in word_coords:
+                w_start = wc["start"]
+                w_end = wc["end"]
+                px = wc["x"]
+                py = wc["y"]
+
+                # 1. Non-linear Ease-Out Rising Entrance:
+                # Starts fast from +42px, decelerates exponentially into baseline (960px)
+                t0_ts = _seconds_to_ass_time(w_start)
+                t1_ts = _seconds_to_ass_time(w_start + anim_dur)
+                anim_event = (
+                    f"{{\\move({px},{py + y_offset},{px},{py},0,180)"
+                    f"\\fad(50,0)\\c&HFFFF00&\\3c&H00000000&\\shad2\\blur1.0}}{wc['word']}"
+                )
+                lines.append(f"Dialogue: 1,{t0_ts},{t1_ts},Kinetic,,0,0,0,,{anim_event}")
+
+                # 2. Active Spoken Phase:
+                # Sits motionless at baseline in Electric Cyan while spoken
+                if w_end > w_start + anim_dur:
+                    t_act_end = _seconds_to_ass_time(w_end)
+                    active_still = f"{{\\pos({px},{py})\\c&HFFFF00&\\3c&H00000000&\\shad2\\blur1.0}}{wc['word']}"
+                    lines.append(f"Dialogue: 1,{t1_ts},{t_act_end},Kinetic,,0,0,0,,{active_still}")
+
+                # 3. Post-Spoken Resting Baseline Phase:
+                # STAYS 100% DEAD STILL at baseline in Studio White (50% alpha) until the phrase ends.
+                # ZERO BOUNCE on any previous words!
+                post_start = max(w_start + anim_dur, w_end)
+                if group_end > post_start:
+                    t_post_start = _seconds_to_ass_time(post_start)
+                    t_post_end = _seconds_to_ass_time(group_end)
+                    post_still = f"{{\\pos({px},{py})\\alpha&H50&\\c&HFFFFFF&\\3c&H00000000&\\shad2\\blur1.0}}{wc['word']}"
+                    lines.append(f"Dialogue: 1,{t_post_start},{t_post_end},Kinetic,,0,0,0,,{post_still}")
+
+            continue
+
         # ─── Styles: Word-by-Word State Machine ───
         for j, w in enumerate(group_words):
             w_start = w["start"]
@@ -368,20 +437,7 @@ def _write_ass(
             static_active_tags = ""
             anim_effect = ""
             
-            if style_name in ("aftereffect_preset", "ae_rise_fade", "aftereffects_preset"):
-                # ⭐ VIP PRESET: Authentic After Effects Style 1 (Word-by-Word Rise & Fade In)
-                # Position Y: +36px -> 0px | Opacity: 0% -> 100% | Zero Bounce / Pure Silky Deceleration
-                # Active word: Electric Cyan / Ice Blue (&HFFFF00& in ASS BGR) matching UI card
-                # Inactive words: Clean Studio White (&HFFFFFF&) at 50% alpha (&H50&)
-                anim_dur_max = 0.160
-                color_active = "FFFF00"       # Electric Cyan in ASS BGR (Blue=FF, Green=FF, Red=00)
-                color_other = "FFFFFF"        # Pure Studio White
-                alpha_other = "50"            # 50% transparency for non-active words
-                active_tags = "\\c&HFFFF00&\\3c&H00000000&\\shad2\\blur1.0"
-                static_active_tags = "\\c&HFFFF00&\\3c&H00000000&\\shad2\\blur1.0"
-                anim_effect = f"\\move({pos_x},{pos_y + 36},{pos_x},{pos_y},0,160)\\fad(90,0)"
-
-            elif style_name == "kinetic_slide":
+            if style_name == "kinetic_slide":
                 # Default Improved: Smooth slide-up with a bounce/scale-pop on entry
                 anim_dur_max = 0.150
                 active_tags = "\\c&H00FFFF&\\fscx100\\fscy100\\t(0,80,\\fscx120\\fscy120)\\t(80,150,\\fscx100\\fscy100)"
