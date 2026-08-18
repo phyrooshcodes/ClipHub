@@ -2138,52 +2138,6 @@ body.dark-theme .tag {
 }
 
 /* ── TOAST NOTIFICATIONS ────────────────────────────────── */
-#toast-container {
-  position: fixed;
-  bottom: 24px;
-  right: 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}e: 11px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.btn-outline.btn-sm:hover, .btn-copy:hover {
-  background: var(--bg-hover);
-  color: var(--text-main);
-}
-
-/* ── CAPTION STUDIO STYLE CARDS ─────────────────────────── */
-.caption-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 14px;
-}
-
-.caption-style-card {
-  background: var(--bg-card);
-  border: 2px solid var(--border-light);
-  border-radius: var(--radius-md);
-  padding: 14px;
-  cursor: pointer;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  transition: all 0.15s;
-}
-
-.caption-style-card:hover {
-  border-color: #94a3b8;
-  transform: translateY(-1px);
-}
-
-.caption-style-card.selected {
-  border-color: var(--brand-primary);
-  background: var(--brand-primary-light);
-  box-shadow: 0 0 0 2px var(--brand-primary-glow);
-}
 
 /* ── TOAST NOTIFICATIONS ────────────────────────────────── */
 #toast-container {

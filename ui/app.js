@@ -471,8 +471,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const modal = document.getElementById('modal-gallery');
     if (modal) {
       modal.classList.remove('hidden');
-      if (currentJobId) fetchClips(currentJobId);
-      else fetchHistory();
+      fetchGalleryClips(currentJobId);
     }
   });
 
@@ -489,7 +488,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const modal = document.getElementById('modal-history');
     if (modal) {
       modal.classList.remove('hidden');
-      fetchHistory();
+      renderHistory();
     }
   });
 
@@ -1281,6 +1280,7 @@ document.addEventListener("DOMContentLoaded", () => {
       tabCaption.classList.remove('active');
       histContainer.classList.remove('hidden');
       capHistContainer.classList.add('hidden');
+      renderHistory();
     });
 
     tabCaption.addEventListener('click', () => {
@@ -1837,7 +1837,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
   async function fetchClips(jobId) {
     try {
-      const res = await fetch(`/clips/${jobId}`);
+      const url = jobId ? `/clips/${jobId}` : '/clips';
+      const res = await fetch(url);
       const data = await res.json();
       
       localStorage.removeItem('currentJobId');
@@ -1853,10 +1854,39 @@ document.addEventListener("DOMContentLoaded", () => {
           mainPlayer.src = clips[0].url;
           mainPlayer.classList.remove('hidden');
           document.getElementById('dropzone')?.classList.add('hidden');
-          document.getElementById('player-title').textContent = clips[0].title || "Generated Clip";
+          const titleEl = document.getElementById('player-title');
+          if (titleEl) titleEl.textContent = clips[0].title || "Generated Clip";
         }
       }
     } catch(e) { console.error(e); }
+  }
+
+  async function fetchGalleryClips(jobId = null) {
+    const container = document.getElementById('clips-container');
+    if (container) {
+      container.innerHTML = `
+        <div style="grid-column: 1/-1; text-align:center; padding:50px 20px; color:var(--text-muted);">
+          <i class="ri-loader-4-line spin" style="font-size:32px; color:var(--brand-purple); display:block; margin-bottom:12px;"></i>
+          <p style="font-size:0.95rem; font-weight:500; color:#f3f4f6;">Loading Clip Gallery...</p>
+        </div>`;
+    }
+    try {
+      const url = jobId ? `/clips/${jobId}` : '/clips';
+      const res = await fetch(url);
+      const data = await res.json();
+      const clips = data.clips || [];
+      renderClips(clips);
+    } catch(e) {
+      console.error("Gallery fetch failed:", e);
+      if (container) {
+        container.innerHTML = `
+          <div style="grid-column: 1/-1; text-align:center; padding:50px 20px; color:var(--text-muted);">
+            <i class="ri-error-warning-line" style="font-size:36px; color:#ef4444; margin-bottom:12px; display:block;"></i>
+            <h4 style="color:#f3f4f6; margin-bottom:6px;">Failed to Load Gallery</h4>
+            <p style="font-size:0.85rem;">Could not connect to clip storage service.</p>
+          </div>`;
+      }
+    }
   }
 
   function escapeHtml(str) {
@@ -1867,8 +1897,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function renderClips(clips) {
     const container = document.getElementById('clips-container');
+    if(!container) return;
     if(!clips || clips.length === 0) {
-      container.innerHTML = '<p class="text-muted">No clips generated.</p>';
+      container.innerHTML = `
+        <div style="grid-column: 1/-1; text-align:center; padding:60px 20px; color:var(--text-muted); background:rgba(255,255,255,0.02); border:1px dashed rgba(255,255,255,0.1); border-radius:12px;">
+          <i class="ri-film-line" style="font-size:40px; color:var(--brand-purple); opacity:0.6; margin-bottom:12px; display:block;"></i>
+          <h4 style="color:#f3f4f6; margin-bottom:6px; font-size:1.1rem;">No Clips Generated Yet</h4>
+          <p style="font-size:0.88rem; max-width:400px; margin:0 auto 16px; color:#9ca3af;">Upload a long-form video or select an existing file from Recent Videos to automatically extract viral vertical clips.</p>
+        </div>`;
       return;
     }
     
@@ -1906,7 +1942,7 @@ document.addEventListener("DOMContentLoaded", () => {
       html += `
         <div class="clip-card" style="opacity:0; transform:translateY(30px);">
           <div style="position:relative;">
-            <video src="${clip.url}" class="clip-video" controls></video>
+            <video src="${clip.url}" class="clip-video" controls preload="metadata"></video>
           </div>
           <div class="clip-body">
             <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
@@ -2086,7 +2122,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
   async function renderHistory() {
     const container = document.getElementById('history-container');
-    container.innerHTML = '<p class="text-muted">Loading history...</p>';
+    if (!container) return;
+    container.innerHTML = `
+      <div style="text-align:center; padding:50px 20px; color:var(--text-muted);">
+        <i class="ri-loader-4-line spin" style="font-size:32px; color:var(--brand-purple); display:block; margin-bottom:12px;"></i>
+        <p style="font-size:0.95rem; font-weight:500; color:#f3f4f6;">Loading Processing History...</p>
+      </div>`;
     
     try {
       const res = await fetch('/history');
@@ -2094,15 +2135,22 @@ document.addEventListener("DOMContentLoaded", () => {
       const historyJobs = data.history || [];
       
       if(historyJobs.length === 0) {
-        container.innerHTML = '<p class="text-muted">No processing history found.</p>';
+        container.innerHTML = `
+          <div style="text-align:center; padding:60px 20px; color:var(--text-muted); background:rgba(255,255,255,0.02); border:1px dashed rgba(255,255,255,0.1); border-radius:12px;">
+            <i class="ri-history-line" style="font-size:40px; color:var(--brand-purple); opacity:0.6; margin-bottom:12px; display:block;"></i>
+            <h4 style="color:#f3f4f6; margin-bottom:6px; font-size:1.1rem;">No Processing History Found</h4>
+            <p style="font-size:0.88rem; max-width:400px; margin:0 auto; color:#9ca3af;">Your past clipping jobs and generated reels will be recorded and organized here.</p>
+          </div>`;
         return;
       }
       
       let html = '';
+      let renderedAnyJob = false;
       
       historyJobs.forEach((job) => {
         const clips = job.clips || [];
         if (clips.length === 0) return;
+        renderedAnyJob = true;
         
         const createdDate = job.created ? new Date(job.created * 1000).toLocaleString() : 'Recent';
         const videoName = job.filename || job.job_id;
@@ -2141,7 +2189,7 @@ document.addEventListener("DOMContentLoaded", () => {
           clipsHtml += `
             <div class="clip-card" style="opacity:0; transform:translateY(20px);">
               <div style="position:relative;">
-                <video src="${clip.url}" class="clip-video" controls></video>
+                <video src="${clip.url}" class="clip-video" controls preload="metadata"></video>
               </div>
               <div class="clip-body">
                 <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
@@ -2181,12 +2229,22 @@ document.addEventListener("DOMContentLoaded", () => {
                 <i class="ri-rocket-line"></i> Mass Post Video Clips (${clips.length})
               </button>
             </div>
-            <div id="job-grid-${escapeHtml(job.job_id)}" class="clips-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px;">
+            <div id="job-grid-${escapeHtml(job.job_id)}" class="clips-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 20px;">
               ${clipsHtml}
             </div>
           </div>
         `;
       });
+      
+      if (!renderedAnyJob) {
+        container.innerHTML = `
+          <div style="text-align:center; padding:60px 20px; color:var(--text-muted); background:rgba(255,255,255,0.02); border:1px dashed rgba(255,255,255,0.1); border-radius:12px;">
+            <i class="ri-history-line" style="font-size:40px; color:var(--brand-purple); opacity:0.6; margin-bottom:12px; display:block;"></i>
+            <h4 style="color:#f3f4f6; margin-bottom:6px; font-size:1.1rem;">No Clips Found in History</h4>
+            <p style="font-size:0.88rem; max-width:400px; margin:0 auto; color:#9ca3af;">No completed video clips were found in your output storage.</p>
+          </div>`;
+        return;
+      }
       
       container.innerHTML = html;
       if (typeof gsap !== 'undefined') {
@@ -2194,8 +2252,13 @@ document.addEventListener("DOMContentLoaded", () => {
       }
       
     } catch(e) {
-      console.error(e);
-      container.innerHTML = '<p class="text-muted">Failed to load history.</p>';
+      console.error("renderHistory error:", e);
+      container.innerHTML = `
+        <div style="text-align:center; padding:50px 20px; color:var(--text-muted);">
+          <i class="ri-error-warning-line" style="font-size:36px; color:#ef4444; margin-bottom:12px; display:block;"></i>
+          <h4 style="color:#f3f4f6; margin-bottom:6px;">Failed to Load History</h4>
+          <p style="font-size:0.85rem;">Could not retrieve job records from server.</p>
+        </div>`;
     }
   }
 
