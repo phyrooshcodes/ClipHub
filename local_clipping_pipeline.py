@@ -112,14 +112,16 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--caption-style",
-        default="kinetic_slide",
+        default="aftereffect_preset",
         choices=[
+            "aftereffect_preset", "ae_rise_fade", "aftereffects_preset",
             "kinetic_slide", "tiktok_pop", "cyberpunk_neon", "smooth_wave", "vibrant_gradient",
             "cinematic_swing", "karaoke_glow", "minimal_fade", "future_cyber", "hormozi_gold",
             "mrbeast_lightning", "fire_ember", "emerald_money", "glitch_matrix", "neon_purple_rain",
             "bold_impact_red", "sunset_vibes", "pastel_dream", "stomp_kinetic"
         ],
         help="Caption animation style:\n"
+             "  aftereffect_preset -> VIP Word-by-Word Rise & Fade In (After Effects)\n"
              "  kinetic_slide      -> smooth slide & bounce (default)\n"
              "  hormozi_gold       -> Alex Hormozi signature warm gold punch\n"
              "  mrbeast_lightning  -> electric cyan with energetic tilt\n"
