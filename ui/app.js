@@ -324,12 +324,14 @@ document.addEventListener("DOMContentLoaded", () => {
   let pipelineClip = { current: 0, total: 0 };
 
   const pipelineStageMap = {
-    1: { id: 'step-demux',  name: 'Audio Demux',        percent: 20 },
-    2: { id: 'step-asr',    name: 'ASR Transcription',  percent: 40 },
-    3: { id: 'step-hook',   name: 'Hook Detection',     percent: 58 },
-    4: { id: 'step-face',   name: 'Face Tracking',      percent: 68 },
-    5: { id: 'step-subs',   name: 'Generating Subtitles', percent: 76 },
-    6: { id: 'step-render', name: 'NVENC Rendering',    percent: 84 }
+    1:   { id: 'step-demux',  name: 'Audio Extraction',     percent: 15 },
+    2:   { id: 'step-asr',    name: 'Speech Transcription',  percent: 32 },
+    3:   { id: 'step-hook',   name: 'Viral Hook Detection', percent: 48 },
+    3.5: { id: 'step-hook',   name: 'AI Commentary Writing',percent: 62 },
+    4:   { id: 'step-face',   name: 'Face Tracking Framing',percent: 74 },
+    4.5: { id: 'step-subs',   name: 'AI Voice Synthesis',   percent: 82 },
+    5:   { id: 'step-subs',   name: 'Kinetic Subtitles',    percent: 88 },
+    6:   { id: 'step-render', name: 'GPU NVENC Rendering',  percent: 94 }
   };
 
   // GSAP Initial Setup - Ensure visibility gracefully

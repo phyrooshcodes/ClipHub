@@ -85,18 +85,57 @@ def get_video_metadata(video_path: str) -> dict:
     return meta
 
 def _parse_log_line(text: str) -> dict:
-    m = re.search(r"STAGE\s+(\d+)/6[^─\-]*[\-─]\s*(.+?)(?:\s*[═=]+\s*$|\s*$)", text)
-    if m: return {"type": "stage", "stage": int(m.group(1)), "label": m.group(2).strip()}
-    m = re.search(r"CLIP\s+(\d+)/(\d+)", text)
-    if m: return {"type": "clip_start", "clip_num": int(m.group(1)), "total": int(m.group(2))}
-    m = re.search(r"\[(\d+)/6\]\s+(.+)", text)
-    if m: return {"type": "substage", "substage": int(m.group(1)), "label": m.group(2).strip()}
+    # 1. Match STAGE X/6 or STAGE X.Y/6
+    m = re.search(r"STAGE\s+([\d\.]+)/6[^─\-]*[\-─]\s*(.+?)(?:\s*[═=]+\s*$|\s*$)", text, re.IGNORECASE)
+    if m:
+        stg_str = m.group(1)
+        stg = float(stg_str) if "." in stg_str else int(stg_str)
+        return {"type": "stage", "stage": stg, "label": m.group(2).strip()}
+    
+    # 2. Match bracketed substages [4/6], [4.5/6], [5/6], [6/6]
+    m = re.search(r"\[([\d\.]+)/6\]\s+(.+)", text)
+    if m:
+        stg_str = m.group(1)
+        stg = float(stg_str) if "." in stg_str else int(stg_str)
+        return {"type": "substage", "substage": stg, "label": m.group(2).strip()}
+    
+    # 3. Match clip progress
+    m = re.search(r"CLIP\s+(\d+)/(\d+)", text, re.IGNORECASE)
+    if m:
+        return {"type": "clip_start", "clip_num": int(m.group(1)), "total": int(m.group(2))}
+    
+    # 4. Match Commentary / AI generation markers
+    if "[CommentaryGenerator]" in text or "Generating commentary" in text or "AI Commentary" in text:
+        m_clip = re.search(r"clip\s+(\d+)", text, re.IGNORECASE)
+        clip_lbl = f"AI Commentary (Clip {m_clip.group(1)})" if m_clip else "AI Commentary Generation"
+        return {"type": "stage", "stage": 3.5, "label": clip_lbl}
+    
+    if "[HookDetector]" in text or "Detecting viral hooks" in text:
+        return {"type": "stage", "stage": 3, "label": "Hook Detection"}
+
+    if "[FaceTracker]" in text or "Face detected" in text:
+        return {"type": "substage", "substage": 4, "label": "Face Tracking & Framing"}
+
+    if "Generating TTS" in text or "TTS generated" in text or "Building Editorial Timeline" in text:
+        return {"type": "substage", "substage": 4.5, "label": "AI Speech Synthesis"}
+
+    if "[SubtitleEngine]" in text or "subtitle groups" in text:
+        return {"type": "substage", "substage": 5, "label": "Kinetic Subtitles"}
+
+    if "[Renderer]" in text or "Explainer Clip" in text or "Assembling" in text:
+        return {"type": "substage", "substage": 6, "label": "NVENC Video Rendering"}
+
     m = re.search(r"Done.*?(?:→|->)\s*(output[/\\].+?\.mp4)", text, re.IGNORECASE)
-    if m: return {"type": "clip_ready", "path": m.group(1)}
+    if m:
+        return {"type": "clip_ready", "path": m.group(1)}
+
     low = text.lower()
-    if "error" in low or "failed" in low or "traceback" in low:
-        return {"type": "warning"}
-    return {"type": "log"}
+    if "error" in low or "traceback" in low:
+        return {"type": "warning", "raw": text}
+    if "warning" in low or "failed" in low or "timeout" in low or "timed out" in low:
+        return {"type": "warning", "raw": text}
+
+    return {"type": "log", "raw": text}
 
 def clean_clip_title(raw_title: str) -> str:
     if not raw_title: return "Untitled Clip"
