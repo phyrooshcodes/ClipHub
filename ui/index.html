@@ -175,8 +175,11 @@
 
         <!-- BOTTOM LEFT: Pipeline Progress -->
         <div class="panel panel-pipeline" id="panel-pipeline-wrapper">
-          <div class="panel-tabs">
+          <div class="panel-tabs between" style="display:flex; justify-content:space-between; align-items:center;">
             <button class="tab active">ACTIVE JOB</button>
+            <button class="btn-terminate-job hidden" id="btn-terminate-job" type="button" title="Safely Abort & Terminate Running Pipeline Job">
+              <i class="ri-stop-circle-line"></i> Terminate Job
+            </button>
           </div>
           <div class="pipeline-body">
             <div class="job-info">
@@ -829,6 +832,44 @@
 
         <div class="modal-body" id="fs-script-cards-container" style="flex: 1; overflow-y: auto; padding: 24px; display: flex; flex-direction: column; gap: 16px;">
           <!-- Injected dynamically by app.js -->
+        </div>
+      </div>
+    </div>
+
+    <!-- TERMINATION DOUBLE-CONFIRMATION MODAL -->
+    <div id="modal-confirm-terminate" class="modal-backdrop hidden">
+      <div class="modal-overlay" id="overlay-confirm-terminate"></div>
+      <div class="modal-card" style="max-width: 460px; text-align:center; padding: 28px 24px; background: var(--bg-card); border: 1px solid var(--border-medium); border-radius: var(--radius-lg); box-shadow: var(--shadow-xl); position: relative; z-index: 10001;">
+        <div style="width: 56px; height: 56px; border-radius: 50%; background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.25); display: flex; align-items: center; justify-content: center; margin: 0 auto 16px auto;">
+          <i class="ri-error-warning-fill" style="font-size: 28px; color: #ef4444;"></i>
+        </div>
+        
+        <!-- Step 1: Initial Warning -->
+        <div id="terminate-step-1">
+          <h3 style="font-size: 1.15rem; font-weight: 700; margin-bottom: 8px; color: var(--text-main);">Terminate Active Job?</h3>
+          <p style="font-size: 0.88rem; color: var(--text-muted); line-height: 1.5; margin-bottom: 24px;">
+            This will immediately stop transcription, AI hook detection, and video rendering for <strong id="terminate-job-name" style="color:var(--text-main);">the running pipeline</strong>.
+          </p>
+          <div style="display: flex; gap: 12px; justify-content: center;">
+            <button class="btn-outline-dashed" id="btn-cancel-terminate" type="button" style="padding: 9px 18px; font-size: 13px;">Keep Running</button>
+            <button class="btn-danger-confirm" id="btn-proceed-terminate-step2" type="button" style="padding: 9px 20px; font-size: 13px; background: #dc2626; color: #ffffff; border: none; border-radius: var(--radius-sm); font-weight: 600; cursor: pointer;">
+              Yes, Continue to Terminate (1/2) <i class="ri-arrow-right-line"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- Step 2: Final Critical Confirmation -->
+        <div id="terminate-step-2" class="hidden">
+          <h3 style="font-size: 1.15rem; font-weight: 700; margin-bottom: 8px; color: #ef4444;">Final Confirmation Required (2/2)</h3>
+          <p style="font-size: 0.88rem; color: var(--text-muted); line-height: 1.5; margin-bottom: 24px;">
+            Are you 100% sure you want to permanently abort? All temporary processing and background threads will be killed immediately.
+          </p>
+          <div style="display: flex; gap: 12px; justify-content: center;">
+            <button class="btn-outline-dashed" id="btn-back-terminate" type="button" style="padding: 9px 18px; font-size: 13px;">Go Back</button>
+            <button class="btn-danger-confirm" id="btn-confirm-kill-job" type="button" style="padding: 9px 22px; font-size: 13px; background: #b91c1c; color: #ffffff; border: none; border-radius: var(--radius-sm); font-weight: 700; cursor: pointer; box-shadow: 0 0 16px rgba(220, 38, 38, 0.45);">
+              <i class="ri-close-circle-fill"></i> Abort & Kill Process
+            </button>
+          </div>
         </div>
       </div>
     </div>

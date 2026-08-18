@@ -1442,12 +1442,16 @@ document.addEventListener("DOMContentLoaded", () => {
     });
     document.querySelectorAll('.stepper .step-connector').forEach(c => c.classList.remove('completed'));
     document.getElementById('step-download')?.classList.add('hidden');
+    document.getElementById('btn-terminate-job')?.classList.add('hidden');
     
     const stageName = document.getElementById('proc-stage-name');
     if (stageName) stageName.textContent = 'Pipeline Ready';
     
     const statusBadge = document.getElementById('pipeline-status-badge');
-    if (statusBadge) statusBadge.textContent = 'Standby';
+    if (statusBadge) {
+      statusBadge.textContent = 'Standby';
+      statusBadge.style.color = '';
+    }
 
     const jobMeta = document.getElementById('proc-job-meta');
     if (jobMeta) jobMeta.textContent = 'Select or drop a video file above to begin';
@@ -1464,13 +1468,17 @@ document.addEventListener("DOMContentLoaded", () => {
     const stageName = document.getElementById('proc-stage-name');
     if (stageName) stageName.textContent = 'Initializing Pipeline...';
     const statusBadge = document.getElementById('pipeline-status-badge');
-    if (statusBadge) statusBadge.textContent = 'Active';
+    if (statusBadge) {
+      statusBadge.textContent = 'Active';
+      statusBadge.style.color = '';
+    }
 
     document.getElementById('proc-filename').textContent = typeof fileOrUrl === 'string' ? fileOrUrl : fileOrUrl.name;
     if (isYoutube) document.getElementById('proc-filename').textContent = "YouTube Video";
     
     resetSteps();
     if (statusBadge) statusBadge.textContent = 'Active';
+    document.getElementById('btn-terminate-job')?.classList.remove('hidden');
     
     const launchPipeline = async () => {
       sectionUpload.classList.add('hidden');
@@ -2845,6 +2853,105 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  // ─── Pipeline Job Termination System (Double Confirmation) ───
+  const btnTerminateJob = document.getElementById('btn-terminate-job');
+  const modalConfirmTerminate = document.getElementById('modal-confirm-terminate');
+  const terminateStep1 = document.getElementById('terminate-step-1');
+  const terminateStep2 = document.getElementById('terminate-step-2');
+  const btnCancelTerminate = document.getElementById('btn-cancel-terminate');
+  const btnBackTerminate = document.getElementById('btn-back-terminate');
+  const btnProceedTerminateStep2 = document.getElementById('btn-proceed-terminate-step2');
+  const btnConfirmKillJob = document.getElementById('btn-confirm-kill-job');
+  const overlayConfirmTerminate = document.getElementById('overlay-confirm-terminate');
+  const terminateJobName = document.getElementById('terminate-job-name');
+
+  function openTerminateModal() {
+    if (!currentJobId) {
+      Toast.show("No active job to terminate.", "info");
+      return;
+    }
+    const fnEl = document.getElementById('proc-filename');
+    const curName = fnEl ? fnEl.textContent : 'running pipeline';
+    if (terminateJobName) terminateJobName.textContent = curName;
+    
+    // Reset to step 1
+    terminateStep1?.classList.remove('hidden');
+    terminateStep2?.classList.add('hidden');
+    modalConfirmTerminate?.classList.remove('hidden');
+  }
+
+  function closeTerminateModal() {
+    modalConfirmTerminate?.classList.add('hidden');
+  }
+
+  btnTerminateJob?.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    openTerminateModal();
+  });
+
+  btnProceedTerminateStep2?.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    terminateStep1?.classList.add('hidden');
+    terminateStep2?.classList.remove('hidden');
+  });
+
+  btnBackTerminate?.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    terminateStep2?.classList.add('hidden');
+    terminateStep1?.classList.remove('hidden');
+  });
+
+  btnCancelTerminate?.addEventListener('click', closeTerminateModal);
+  overlayConfirmTerminate?.addEventListener('click', closeTerminateModal);
+
+  btnConfirmKillJob?.addEventListener('click', async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!currentJobId) {
+      closeTerminateModal();
+      return;
+    }
+
+    const jid = currentJobId;
+    btnConfirmKillJob.disabled = true;
+    btnConfirmKillJob.innerHTML = `<i class="ri-loader-4-line spin"></i> Aborting Process...`;
+
+    try {
+      await fetch(`/api/cancel/${jid}`, { method: 'POST' });
+      appendLog(`<span class="log-warning" style="color:#ef4444;">[System]</span> Pipeline process aborted and terminated by user.`);
+      Toast.show("Pipeline job safely terminated.", "info");
+    } catch(err) {
+      console.error("Cancel job error:", err);
+      Toast.show("Termination signal sent.", "info");
+    }
+
+    if (currentWs) {
+      try { currentWs.close(); } catch(e) {}
+    }
+
+    localStorage.removeItem('currentJobId');
+    localStorage.removeItem('currentJobId_ts');
+    localStorage.removeItem('ytUrl');
+    currentJobId = null;
+
+    closeTerminateModal();
+    btnTerminateJob?.classList.add('hidden');
+    
+    const statusBadge = document.getElementById('pipeline-status-badge');
+    if (statusBadge) {
+      statusBadge.textContent = 'Cancelled';
+      statusBadge.style.color = '#ef4444';
+    }
+    const stageName = document.getElementById('proc-stage-name');
+    if (stageName) stageName.textContent = 'Job Terminated';
+
+    btnConfirmKillJob.disabled = false;
+    btnConfirmKillJob.innerHTML = `<i class="ri-close-circle-fill"></i> Abort & Kill Process`;
+  });
+
   // Handle modal close
   document.getElementById('btn-close-publish-modal')?.addEventListener('click', () => {
     document.getElementById('modal-publish').classList.add('hidden');
@@ -2856,6 +2963,7 @@ document.addEventListener("DOMContentLoaded", () => {
   window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
       closeFullscreenScript();
+      closeTerminateModal();
     }
   });
 });
