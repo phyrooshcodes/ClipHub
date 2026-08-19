@@ -54,6 +54,7 @@ credentials/
 !tauri.conf.json
 !obscura-ui/**/*.json
 !assets/avatars/characters_meta.json
+!assets/covers/covers_meta.json
 
 # Application State & Browser Profiles
 .state/

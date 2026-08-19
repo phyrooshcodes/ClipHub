@@ -494,6 +494,13 @@
                   <option value="anime_presenter.png">Kai (Anime Sensei)</option>
                 </select>
               </label>
+              <label style="display:flex; flex-direction:column; gap:4px; font-size:12px; color:var(--text-muted);">
+                Universal Cover Thumbnail
+                <select id="config-cover-select" style="padding:8px; border:1px solid var(--border-light); border-radius:4px; background:var(--bg-app); font-family:inherit;">
+                  <option value="none">No Universal Thumbnail (Video Frame 0.0s)</option>
+                  <option value="default_cover.jpg" selected>Master Universal Cover</option>
+                </select>
+              </label>
             </div>
             
             <!-- AI Explainer Character / Avatar Section -->
@@ -508,6 +515,22 @@
                 </button>
               </div>
               <div id="settings-characters-grid" class="character-selection-grid" style="margin-top:4px;">
+                <!-- Populated dynamically via JS -->
+              </div>
+            </div>
+
+            <!-- Universal Cover Thumbnails Section -->
+            <div style="display:flex; flex-direction:column; gap:8px; margin-top:6px;">
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                  <span style="font-weight:600; font-size:13px; color:var(--text-main);"><i class="ri-image-line" style="color:var(--brand-primary); margin-right:4px;"></i> Universal Cover Thumbnails</span>
+                  <p style="font-size:11px; color:var(--text-muted); margin-top:1px;">Covers burned as social previews or select 'No Universal Thumbnail'</p>
+                </div>
+                <button type="button" id="btn-upload-cover-settings" class="btn-outline-dashed" style="padding:4px 10px; font-size:11.5px; display:flex; align-items:center; gap:5px; cursor:pointer;">
+                  <i class="ri-upload-cloud-2-line" style="color:#f59e0b;"></i> Upload Cover
+                </button>
+              </div>
+              <div id="settings-covers-grid" class="cover-selection-grid" style="margin-top:4px;">
                 <!-- Populated dynamically via JS -->
               </div>
             </div>
@@ -777,6 +800,22 @@
               </div>
             </div>
 
+            <!-- 🖼️ Universal Cover Thumbnail Selection Section -->
+            <div id="cover-studio-section" class="cover-studio-container" style="margin-bottom: 24px;">
+              <div class="cover-section-header" style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; padding-bottom:8px; border-bottom:1px solid var(--border-light);">
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <span class="vip-badge-pill" style="background: linear-gradient(135deg, #f59e0b 0%, #ef4444 100%); color:#fff; box-shadow: 0 0 12px rgba(245, 158, 11, 0.4);"><i class="ri-image-fill"></i> COVER THUMBNAIL</span>
+                  <span style="font-size:0.85rem; color:var(--text-main); font-weight:700; letter-spacing:0.3px;">Choose Universal Thumbnail</span>
+                </div>
+                <button type="button" id="btn-upload-cover-studio" class="btn-outline-dashed" style="padding:3px 8px; font-size:11px; display:flex; align-items:center; gap:4px; cursor:pointer;">
+                  <i class="ri-add-line"></i> Upload New Cover
+                </button>
+              </div>
+              <div id="studio-covers-grid" class="cover-studio-grid">
+                <!-- Cover cards rendered dynamically -->
+              </div>
+            </div>
+
             <!-- ⭐ VIP Master Preset Section -->
             <div class="vip-presets-container" style="margin-bottom: 24px;">
               <div class="vip-section-header" style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; padding-bottom:8px; border-bottom:1px solid rgba(255,215,0,0.2);">
@@ -848,6 +887,39 @@
         <div class="modal-footer" style="padding:14px 20px; border-top:1px solid var(--border-light); display:flex; justify-content:flex-end; gap:10px;">
           <button id="btn-cancel-char-upload" class="btn-outline-dashed" style="padding:8px 16px;">Cancel</button>
           <button id="btn-confirm-char-upload" class="btn-primary-gradient" style="padding:8px 20px;" disabled><i class="ri-check-line"></i> Save Character</button>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Upload Cover Modal -->
+    <div id="modal-upload-cover" class="modal-backdrop hidden">
+      <div class="modal-card" style="max-width: 440px;">
+        <div class="modal-header">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <i class="ri-image-add-line" style="font-size:1.2rem; color:#f59e0b;"></i>
+            <h3>Upload Universal Cover Thumbnail</h3>
+          </div>
+          <button class="close-modal" id="btn-close-upload-cover-modal"><i class="ri-close-line"></i></button>
+        </div>
+        <div class="modal-body" style="padding:20px; display:flex; flex-direction:column; gap:14px;">
+          <div id="cover-upload-preview-box" style="width:100%; height:180px; border:2px dashed var(--border-light); border-radius:10px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; cursor:pointer; background:var(--bg-app); position:relative; overflow:hidden;">
+            <img id="cover-upload-preview-img" class="hidden" style="max-height:100%; max-width:100%; object-fit:cover; border-radius:6px;" alt="Cover Preview">
+            <div id="cover-upload-placeholder" style="display:flex; flex-direction:column; align-items:center; gap:6px;">
+              <i class="ri-image-add-line" style="font-size:2rem; color:#f59e0b;"></i>
+              <span style="font-size:13px; font-weight:600;">Click to choose thumbnail cover image</span>
+              <small style="color:var(--text-muted);">JPG, PNG, WEBP (9:16 or high-res vertical recommended)</small>
+            </div>
+          </div>
+          <input type="file" id="modal-cover-file-input" accept="image/png,image/jpeg,image/webp" class="hidden">
+          
+          <div>
+            <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">Cover Name / Title</label>
+            <input type="text" id="modal-cover-name-input" placeholder="e.g. Neon Podcast Cover, Viral Hook Aesthetic..." style="width:100%; padding:8px 12px; border:1px solid var(--border-light); border-radius:6px; font-family:inherit; background:var(--bg-card); color:var(--text-main); box-sizing:border-box;">
+          </div>
+        </div>
+        <div class="modal-footer" style="padding:14px 20px; border-top:1px solid var(--border-light); display:flex; justify-content:flex-end; gap:10px;">
+          <button id="btn-cancel-cover-upload" class="btn-outline-dashed" style="padding:8px 16px;">Cancel</button>
+          <button id="btn-confirm-cover-upload" class="btn-primary-gradient" style="padding:8px 20px;" disabled><i class="ri-check-line"></i> Save Cover</button>
         </div>
       </div>
     </div>

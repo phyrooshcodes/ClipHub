@@ -199,6 +199,11 @@ def parse_args() -> argparse.Namespace:
         help="Presenter character avatar ID or image filename in assets/avatars/ (default: anime_presenter.png)."
     )
     parser.add_argument(
+        "--cover",
+        default="default_cover.jpg",
+        help="Universal thumbnail cover ID/filename in assets/covers/ or 'none' to extract from video (default: default_cover.jpg)."
+    )
+    parser.add_argument(
         "--intro-duration",
         type=float,
         default=2.5,
@@ -645,7 +650,8 @@ def run_pipeline(args: argparse.Namespace) -> None:
             commentary_voice=getattr(args, "commentary_voice", "af_sarah"),
             intro_duration=getattr(args, "intro_duration", 2.5),
             ai_audio_events=ai_audio_events,
-            character=getattr(args, "character", "anime_presenter.png")
+            character=getattr(args, "character", "anime_presenter.png"),
+            cover_choice=getattr(args, "cover", "default_cover.jpg")
         )
 
         # Keep publishing independent from generation: enqueue only. The

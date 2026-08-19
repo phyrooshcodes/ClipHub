@@ -53,7 +53,9 @@ def render_clip(
     commentary_voice: str = "af_sarah", intro_duration: float = 2.5,
     ai_audio_events: List[Dict[str, Any]] = None,
     character: Optional[str] = None,
-    avatar_path: Optional[str] = None
+    avatar_path: Optional[str] = None,
+    cover_choice: Optional[str] = "default_cover.jpg",
+    cover_path: Optional[str] = None
 ):
     ai_audio_events = ai_audio_events or []
     
@@ -313,24 +315,28 @@ def render_clip(
         except Exception as e:
             if use_nvenc and "nvenc" in str(e).lower():
                 logger.warning("[Renderer] ⚠️ NVENC failed in segmented explainer render. Retrying with CPU encoder...")
-                return render_clip(input_video, output_path, start_ms, end_ms, crop_coords, subtitle_path, music_choice, clip_index, "libx264", editorial_data, commentary_voice, intro_duration, ai_audio_events, character, avatar_path)
+                return render_clip(input_video, output_path, start_ms, end_ms, crop_coords, subtitle_path, music_choice, clip_index, "libx264", editorial_data, commentary_voice, intro_duration, ai_audio_events, character, avatar_path, cover_choice, cover_path)
             raise e
 
         # 5. Generate pristine clean 1080x1920 cover thumbnail image
         try:
             thumb_path = f"{os.path.splitext(output_path)[0]}_thumb.jpg"
-            default_cover_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "assets", "covers", "default_cover.jpg"))
-            if os.path.exists(default_cover_path):
+            resolved_cover = cover_path
+            if resolved_cover is None and cover_choice is not None:
+                from modules.cover_manager import resolve_cover_path
+                resolved_cover = resolve_cover_path(cover_choice)
+
+            if resolved_cover and os.path.exists(resolved_cover):
                 import shutil
-                shutil.copyfile(default_cover_path, thumb_path)
-                logger.info(f"[Renderer] 📸 Applied master anime teacher cover thumbnail: {thumb_path}")
+                shutil.copyfile(resolved_cover, thumb_path)
+                logger.info(f"[Renderer] 📸 Applied universal cover thumbnail ({os.path.basename(resolved_cover)}): {thumb_path}")
             else:
                 cmd_thumb = [
                     "ffmpeg", "-y", "-ss", "0.0", "-i", output_path,
                     "-vframes", "1", "-q:v", "1", thumb_path
                 ]
                 _run_ffmpeg(cmd_thumb)
-                logger.info(f"[Renderer] 📸 Saved clean cover thumbnail from video: {thumb_path}")
+                logger.info(f"[Renderer] 📸 Saved dynamic video frame thumbnail (0.0s): {thumb_path}")
         except Exception as e:
             logger.warning(f"[Renderer] Could not generate cover thumbnail: {e}")
 
@@ -454,7 +460,7 @@ def render_clip(
     except Exception as e:
         if use_nvenc and "nvenc" in str(e).lower():
             logger.warning("[Renderer] ⚠️ NVENC hardware encoder failed. Falling back to CPU encoder...")
-            return render_clip(input_video, output_path, start_ms, end_ms, crop_coords, subtitle_path, music_choice, clip_index, "libx264", editorial_data, commentary_voice, intro_duration, ai_audio_events, character, avatar_path)
+            return render_clip(input_video, output_path, start_ms, end_ms, crop_coords, subtitle_path, music_choice, clip_index, "libx264", editorial_data, commentary_voice, intro_duration, ai_audio_events, character, avatar_path, cover_choice, cover_path)
         raise e
     finally:
         if use_dynamic and 'sendcmd_path' in locals() and os.path.exists(sendcmd_path):
@@ -467,18 +473,22 @@ def render_clip(
     # Generate pristine clean 1080x1920 cover thumbnail image
     try:
         thumb_path = f"{os.path.splitext(output_path)[0]}_thumb.jpg"
-        default_cover_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "assets", "covers", "default_cover.jpg"))
-        if os.path.exists(default_cover_path):
+        resolved_cover = cover_path
+        if resolved_cover is None and cover_choice is not None:
+            from modules.cover_manager import resolve_cover_path
+            resolved_cover = resolve_cover_path(cover_choice)
+
+        if resolved_cover and os.path.exists(resolved_cover):
             import shutil
-            shutil.copyfile(default_cover_path, thumb_path)
-            logger.info(f"[Renderer] 📸 Applied master anime teacher cover thumbnail: {thumb_path}")
+            shutil.copyfile(resolved_cover, thumb_path)
+            logger.info(f"[Renderer] 📸 Applied universal cover thumbnail ({os.path.basename(resolved_cover)}): {thumb_path}")
         else:
             cmd_thumb = [
                 "ffmpeg", "-y", "-ss", "0.0", "-i", output_path,
                 "-vframes", "1", "-q:v", "1", thumb_path
             ]
             _run_ffmpeg(cmd_thumb)
-            logger.info(f"[Renderer] 📸 Saved clean cover thumbnail from video: {thumb_path}")
+            logger.info(f"[Renderer] 📸 Saved dynamic video frame thumbnail (0.0s): {thumb_path}")
     except Exception as e:
         logger.warning(f"[Renderer] Could not generate cover thumbnail: {e}")
 

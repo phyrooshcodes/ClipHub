@@ -325,6 +325,7 @@ class JobConfigModel(BaseModel):
     commentary_mode: Literal["off", "hook_only", "hook_commentary", "full_editorial"] = "hook_commentary"
     commentary_voice: str = "af_sarah"
     character: str = "anime_presenter.png"
+    cover: str = "default_cover.jpg"
     language: str = ""
     auto_publish: bool = False
     music: str = "auto"
@@ -572,6 +573,8 @@ async def run_pipeline_ws(websocket: WebSocket, job_id: str):
             cmd += ["--commentary-voice", config.get("commentary_voice")]
         if config.get("character"):
             cmd += ["--character", str(config.get("character"))]
+        if config.get("cover") is not None:
+            cmd += ["--cover", str(config.get("cover"))]
         lang = (config.get("language") or "").strip()
         if lang:
             cmd += ["--language", lang]

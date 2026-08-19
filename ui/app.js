@@ -509,6 +509,7 @@ document.addEventListener("DOMContentLoaded", () => {
     refreshNvidiaKeyStatus();
     refreshSocialStatus();
     loadCharacters();
+    loadCovers();
   });
 
   document.getElementById('btn-close-settings')?.addEventListener('click', () => {
@@ -852,6 +853,253 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
+  // ─── Cover Thumbnail Management Architecture ──────────────────
+  let availableCovers = [];
+  let stagedCoverUploadFile = null;
+
+  const configCoverSelect = document.getElementById('config-cover-select');
+  if (configCoverSelect) {
+    configCoverSelect.addEventListener('change', (e) => {
+      localStorage.setItem('selectedCover', e.target.value);
+      renderSettingsCoversGrid();
+      renderStudioCoversGrid();
+    });
+  }
+
+  async function loadCovers() {
+    try {
+      const res = await fetch('/api/covers');
+      const data = await res.json();
+      if (data && Array.isArray(data.covers)) {
+        availableCovers = data.covers;
+        renderCoverSelectDropdown();
+        renderSettingsCoversGrid();
+        renderStudioCoversGrid();
+      }
+    } catch (e) {
+      console.error("[Covers] Failed to load covers:", e);
+    }
+  }
+
+  function renderCoverSelectDropdown() {
+    if (!configCoverSelect) return;
+    const current = localStorage.getItem('selectedCover') || 'default_cover.jpg';
+    configCoverSelect.innerHTML = '';
+    availableCovers.forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c.id;
+      opt.textContent = c.name + (c.is_none ? ' (No Universal)' : (c.is_builtin ? ' (Built-in)' : ''));
+      if (c.id === current) opt.selected = true;
+      configCoverSelect.appendChild(opt);
+    });
+  }
+
+  function createCoverCard(c, isSelected, inStudio = false) {
+    const card = document.createElement('div');
+    card.className = `cover-card ${isSelected ? 'selected' : ''}`;
+    card.setAttribute('data-cover-id', c.id);
+
+    const isNone = c.id === 'none' || c.is_none;
+    const badgeText = isNone ? 'Video Frame' : (c.is_builtin ? 'Built-in' : 'Custom');
+    const isCustom = !c.is_builtin && !isNone;
+
+    const imgBlock = isNone ? `
+      <div class="cover-card-img-wrap">
+        <div class="cover-none-icon-box">
+          <i class="ri-movie-line" style="font-size:26px; color:#f59e0b;"></i>
+          <span style="font-size:10px; color:var(--text-muted); font-weight:600;">Frame 0.0s</span>
+        </div>
+      </div>
+    ` : `
+      <div class="cover-card-img-wrap">
+        <img src="${c.url}" class="cover-card-img" alt="${c.name}">
+      </div>
+    `;
+
+    card.innerHTML = `
+      ${isCustom && !inStudio ? `<button type="button" class="cover-delete-btn" title="Delete Cover" data-delete-id="${c.id}"><i class="ri-delete-bin-line"></i></button>` : ''}
+      ${imgBlock}
+      <div class="cover-card-name" title="${c.name}">${c.name}</div>
+      <div style="display:flex; align-items:center; justify-content:space-between; width:100%; margin-top:4px;">
+        <span class="cover-card-badge">${badgeText}</span>
+        <span class="cover-check" style="font-size:12px; font-weight:800; color:${isSelected ? '#f59e0b' : 'transparent'};">✓</span>
+      </div>
+    `;
+
+    if (isCustom && !inStudio) {
+      const delBtn = card.querySelector('.cover-delete-btn');
+      if (delBtn) {
+        delBtn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          if (confirm(`Are you sure you want to delete cover "${c.name}"?`)) {
+            try {
+              const res = await fetch(`/api/covers/${encodeURIComponent(c.id)}`, { method: 'DELETE' });
+              const resData = await res.json();
+              if (resData.success) {
+                Toast.show(`Cover "${c.name}" deleted.`, "info");
+                if (localStorage.getItem('selectedCover') === c.id) {
+                  localStorage.setItem('selectedCover', 'default_cover.jpg');
+                }
+                await loadCovers();
+              } else {
+                Toast.show(resData.error || "Failed to delete", "error");
+              }
+            } catch (err) {
+              Toast.show("Delete error: " + err.message, "error");
+            }
+          }
+        });
+      }
+    }
+
+    card.addEventListener('click', () => {
+      localStorage.setItem('selectedCover', c.id);
+      if (configCoverSelect) configCoverSelect.value = c.id;
+      renderSettingsCoversGrid();
+      renderStudioCoversGrid();
+      Toast.show(isNone ? "Cover set to Video Frame (No Universal)" : `Cover: ${c.name}`, "info");
+    });
+
+    return card;
+  }
+
+  function renderSettingsCoversGrid() {
+    const grid = document.getElementById('settings-covers-grid');
+    if (!grid) return;
+    grid.innerHTML = '';
+    const selected = localStorage.getItem('selectedCover') || 'default_cover.jpg';
+
+    availableCovers.forEach(c => {
+      grid.appendChild(createCoverCard(c, c.id === selected, false));
+    });
+
+    const addCard = document.createElement('div');
+    addCard.className = 'cover-add-card';
+    addCard.innerHTML = `
+      <i class="ri-image-add-line" style="font-size:24px; color:#f59e0b;"></i>
+      <span style="font-size:12px; font-weight:600; color:var(--text-main);">Upload Cover</span>
+      <small style="font-size:10px; color:var(--text-muted);">JPG, PNG, WEBP</small>
+    `;
+    addCard.addEventListener('click', () => openCoverUploadModal());
+    grid.appendChild(addCard);
+  }
+
+  function renderStudioCoversGrid() {
+    const grid = document.getElementById('studio-covers-grid');
+    if (!grid) return;
+    grid.innerHTML = '';
+    const selected = localStorage.getItem('selectedCover') || 'default_cover.jpg';
+
+    availableCovers.forEach(c => {
+      grid.appendChild(createCoverCard(c, c.id === selected, true));
+    });
+
+    const addCard = document.createElement('div');
+    addCard.className = 'cover-add-card';
+    addCard.innerHTML = `
+      <i class="ri-image-add-line" style="font-size:22px; color:#f59e0b;"></i>
+      <span style="font-size:11.5px; font-weight:600; color:var(--text-main);">+ Add Cover</span>
+      <small style="font-size:10px; color:var(--text-muted);">Upload Image</small>
+    `;
+    addCard.addEventListener('click', () => openCoverUploadModal());
+    grid.appendChild(addCard);
+  }
+
+  // Upload Cover Modal Controls
+  const modalUploadCover = document.getElementById('modal-upload-cover');
+  const modalCoverFileInput = document.getElementById('modal-cover-file-input');
+  const modalCoverNameInput = document.getElementById('modal-cover-name-input');
+  const coverUploadPreviewBox = document.getElementById('cover-upload-preview-box');
+  const coverUploadPreviewImg = document.getElementById('cover-upload-preview-img');
+  const coverUploadPlaceholder = document.getElementById('cover-upload-placeholder');
+  const btnConfirmCoverUpload = document.getElementById('btn-confirm-cover-upload');
+  const btnCancelCoverUpload = document.getElementById('btn-cancel-cover-upload');
+  const btnCloseUploadCoverModal = document.getElementById('btn-close-upload-cover-modal');
+
+  function openCoverUploadModal() {
+    stagedCoverUploadFile = null;
+    if (modalCoverFileInput) modalCoverFileInput.value = '';
+    if (modalCoverNameInput) modalCoverNameInput.value = '';
+    if (coverUploadPreviewImg) {
+      coverUploadPreviewImg.src = '';
+      coverUploadPreviewImg.classList.add('hidden');
+    }
+    if (coverUploadPlaceholder) coverUploadPlaceholder.classList.remove('hidden');
+    if (btnConfirmCoverUpload) {
+      btnConfirmCoverUpload.disabled = true;
+      btnConfirmCoverUpload.innerHTML = `<i class="ri-check-line"></i> Save Cover`;
+    }
+    if (modalUploadCover) modalUploadCover.classList.remove('hidden');
+  }
+
+  function closeCoverUploadModal() {
+    if (modalUploadCover) modalUploadCover.classList.add('hidden');
+  }
+
+  btnCancelCoverUpload?.addEventListener('click', closeCoverUploadModal);
+  btnCloseUploadCoverModal?.addEventListener('click', closeCoverUploadModal);
+  document.getElementById('btn-upload-cover-settings')?.addEventListener('click', openCoverUploadModal);
+  document.getElementById('btn-upload-cover-studio')?.addEventListener('click', openCoverUploadModal);
+
+  coverUploadPreviewBox?.addEventListener('click', () => {
+    modalCoverFileInput?.click();
+  });
+
+  modalCoverFileInput?.addEventListener('change', (e) => {
+    if (e.target.files.length) {
+      stagedCoverUploadFile = e.target.files[0];
+      const reader = new FileReader();
+      reader.onload = (re) => {
+        if (coverUploadPreviewImg) {
+          coverUploadPreviewImg.src = re.target.result;
+          coverUploadPreviewImg.classList.remove('hidden');
+        }
+        if (coverUploadPlaceholder) coverUploadPlaceholder.classList.add('hidden');
+      };
+      reader.readAsDataURL(stagedCoverUploadFile);
+
+      if (modalCoverNameInput && !modalCoverNameInput.value.trim()) {
+        const rawName = stagedCoverUploadFile.name.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " ");
+        modalCoverNameInput.value = rawName.split(" ").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+      }
+      if (btnConfirmCoverUpload) btnConfirmCoverUpload.disabled = false;
+    }
+  });
+
+  btnConfirmCoverUpload?.addEventListener('click', async () => {
+    if (!stagedCoverUploadFile) {
+      Toast.show("Please select a cover image first.", "error");
+      return;
+    }
+    const coverName = modalCoverNameInput?.value?.trim() || "";
+    btnConfirmCoverUpload.disabled = true;
+    btnConfirmCoverUpload.innerHTML = `<i class="ri-loader-4-line spin"></i> Saving...`;
+
+    try {
+      const fd = new FormData();
+      fd.append('file', stagedCoverUploadFile);
+      if (coverName) fd.append('name', coverName);
+
+      const res = await fetch('/api/covers/upload', {
+        method: 'POST',
+        body: fd
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.detail || data.error || "Failed to upload cover");
+      }
+
+      Toast.show(`Cover "${data.cover.name}" saved!`, "success");
+      localStorage.setItem('selectedCover', data.cover.id);
+      closeCoverUploadModal();
+      await loadCovers();
+    } catch (err) {
+      Toast.show("Upload failed: " + err.message, "error");
+      btnConfirmCoverUpload.disabled = false;
+      btnConfirmCoverUpload.innerHTML = `<i class="ri-check-line"></i> Save Cover`;
+    }
+  });
+
   let currentPendingJob = null;
 
   const VIP_CAPTION_STYLES_DATA = [
@@ -990,17 +1238,21 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById('standalone-caption-result')?.classList.add('hidden');
 
     const charSection = document.getElementById('character-studio-section');
+    const coverSection = document.getElementById('cover-studio-section');
     const btnText = document.getElementById('btn-proceed-modal-text');
     if (isStandaloneTool) {
       if (charSection) charSection.classList.add('hidden');
+      if (coverSection) coverSection.classList.add('hidden');
       document.getElementById('caption-studio-title').innerHTML = `Add Viral Captions: <span style="color:var(--brand-purple);">Choose Style</span>`;
       document.getElementById('caption-studio-subtitle').textContent = `Select the animation style to burn onto your uploaded clip!`;
       if (btnText) btnText.textContent = `Burn Captions Onto Video`;
     } else {
       if (charSection) charSection.classList.remove('hidden');
+      if (coverSection) coverSection.classList.remove('hidden');
       renderStudioCharactersGrid();
-      document.getElementById('caption-studio-title').innerHTML = `Step 2: Choose <span style="color:var(--brand-purple);">Presenter & Style</span>`;
-      document.getElementById('caption-studio-subtitle').textContent = `Select your AI explainer character and motion typography preset below.`;
+      renderStudioCoversGrid();
+      document.getElementById('caption-studio-title').innerHTML = `Step 2: Choose <span style="color:var(--brand-purple);">Presenter, Cover & Style</span>`;
+      document.getElementById('caption-studio-subtitle').textContent = `Select your AI presenter, universal cover thumbnail, and motion typography preset below.`;
       const curStyle = localStorage.getItem('captionStyle') || 'aftereffect_preset';
       const curObj = CAPTION_STYLES_DATA.find(s => s.id === curStyle);
       const name = curObj ? curObj.name : 'Selected Style';
@@ -1785,6 +2037,7 @@ document.addEventListener("DOMContentLoaded", () => {
           const commentaryMode = document.getElementById('config-commentary-mode')?.value || 'hook_commentary';
           const commentaryVoice = document.getElementById('config-commentary-voice')?.value || 'af_sarah';
           const character = localStorage.getItem('selectedCharacter') || document.getElementById('config-character-select')?.value || 'anime_presenter.png';
+          const cover = localStorage.getItem('selectedCover') || document.getElementById('config-cover-select')?.value || 'default_cover.jpg';
           try {
             await fetch(`/config/${jobId}`, {
               method: 'POST',
@@ -1795,6 +2048,7 @@ document.addEventListener("DOMContentLoaded", () => {
                  commentary_mode: commentaryMode,
                  commentary_voice: commentaryVoice,
                  character: character,
+                 cover: cover,
                  phase: 'all'
               })
             });
@@ -3249,9 +3503,10 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById('modal-publish').classList.add('hidden');
   });
 
-  // On page load: populate script job selector, characters, and load scripts
+  // On page load: populate script job selector, characters, covers, and load scripts
   populateScriptJobSelector();
   loadCharacters();
+  loadCovers();
 
   window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {

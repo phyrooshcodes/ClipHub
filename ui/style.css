@@ -2606,5 +2606,156 @@ body.dark-theme .tag {
   transform: translateY(-2px);
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   🖼️ UNIVERSAL COVER THUMBNAIL STUDIO & SETTINGS CARDS
+   ═══════════════════════════════════════════════════════════════════════════ */
+.cover-studio-grid, .cover-selection-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 14px;
+}
+
+.cover-card {
+  background: var(--bg-card);
+  border: 1.5px solid var(--border-light);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  position: relative;
+  transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+}
+
+.cover-card:hover {
+  border-color: var(--brand-primary);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.cover-card.selected {
+  border-color: #f59e0b !important;
+  background: linear-gradient(145deg, rgba(69, 39, 10, 0.5), rgba(15, 23, 42, 0.8)) !important;
+  box-shadow: 0 0 20px rgba(245, 158, 11, 0.35) !important;
+}
+
+.cover-card-img-wrap {
+  width: 100%;
+  height: 120px;
+  border-radius: 8px;
+  background: radial-gradient(circle, rgba(245, 158, 11, 0.12) 0%, rgba(0, 0, 0, 0.5) 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 8px;
+  overflow: hidden;
+  position: relative;
+}
+
+.cover-card-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 6px;
+  transition: transform 0.25s ease;
+}
+
+.cover-card:hover .cover-card-img {
+  transform: scale(1.05);
+}
+
+.cover-none-icon-box {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px dashed var(--border-light);
+  border-radius: 6px;
+}
+
+.cover-card-name {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-main);
+  margin-bottom: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.cover-card-badge {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 2px 6px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-muted);
+}
+
+.cover-card.selected .cover-card-badge {
+  background: rgba(245, 158, 11, 0.25);
+  color: #f59e0b;
+}
+
+.cover-delete-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(239, 68, 68, 0.85);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  border: none;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.2s, transform 0.2s;
+  z-index: 10;
+}
+
+.cover-card:hover .cover-delete-btn {
+  opacity: 1;
+}
+
+.cover-delete-btn:hover {
+  background: #dc2626;
+  transform: scale(1.15);
+}
+
+.cover-add-card {
+  border: 1.5px dashed var(--border-light);
+  background: rgba(255, 255, 255, 0.02);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 165px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.cover-add-card:hover {
+  border-color: #f59e0b;
+  background: rgba(245, 158, 11, 0.06);
+  transform: translateY(-2px);
+}
+
+
 
 
