@@ -206,7 +206,9 @@ async def save_nvidia_key(payload: dict):
 
 @router.get("/api/music/tracks")
 async def get_music_tracks():
-    return []
+    from modules.bg_music import list_available_tracks
+    return list_available_tracks()
+
 
 def _parse_subprocess_json(stdout_str: str) -> dict:
     cleaned = stdout_str.strip()

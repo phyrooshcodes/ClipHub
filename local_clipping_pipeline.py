@@ -205,6 +205,17 @@ def parse_args() -> argparse.Namespace:
         help="Queue each completed clip for personal Instagram publishing in the background."
     )
     parser.add_argument(
+        "--music",
+        default="auto",
+        help="Background music mode ('auto' for intelligent mood-matched soundtrack, 'none' to disable, or specific track name/filename)."
+    )
+    parser.add_argument(
+        "--music-volume",
+        type=float,
+        default=0.14,
+        help="Background music volume relative to dialogue (0.0 to 1.0, default: 0.14)."
+    )
+    parser.add_argument(
         "--phase",
         default="all",
         choices=["1", "2", "all"],
@@ -453,11 +464,23 @@ def run_pipeline(args: argparse.Namespace) -> None:
                 ctx_words = [w for w in words if ctx_start <= w["start"] <= ctx_end]
                 surrounding_context = " ".join([w["word"].strip() for w in ctx_words])
                 
-                logger.info(f"   Generating commentary for clip {i+1}...")
+                # Pass kai_why from hook detection so Kai knows the emotional purpose of this clip
+                kai_why = clip.get("kai_why", "")
+                speaker_info = clip.get("speaker", "Podcast Speaker")
+                hook_explanation = clip.get("hook_explanation", "")
+                if not kai_why and hook_explanation:
+                    kai_why = hook_explanation  # Fallback: use hook_explanation as context
+
+                logger.info(f"   Generating Kai commentary for clip {i+1}: '{clip.get('title', 'Unknown')}'")
+                if kai_why:
+                    logger.info(f"   Kai's brief: {kai_why[:120]}..." if len(kai_why) > 120 else f"   Kai's brief: {kai_why}")
+
                 editorial_data = generate_commentary(
                     clip_transcript=clip_transcript,
                     surrounding_context=surrounding_context,
-                    topic=clip.get("title", "Unknown")
+                    topic=clip.get("hook_type", clip.get("title", "General")),
+                    speaker_info=speaker_info,
+                    kai_why=kai_why
                 )
                 
                 # Enforce modes
@@ -501,12 +524,14 @@ def run_pipeline(args: argparse.Namespace) -> None:
     # ─── STAGES 4-6: Per-Clip Processing ─────────────────────
     from modules.face_tracker   import compute_crop_coords
     from modules.subtitle_engine import generate_ass_subtitles
+    from modules.music_director import MusicDirector
     from modules.renderer import (
         render_clip,
         check_nvenc_available
     )
 
     use_nvenc = check_nvenc_available()
+    music_director = MusicDirector(base_volume=getattr(args, "music_volume", 0.14))
     rendered_clips = []
 
     # Clean old .mp4 clips in output_dir from previous runs to prevent gallery pollution
@@ -560,6 +585,23 @@ def run_pipeline(args: argparse.Namespace) -> None:
             )
             clip["ai_audio_events"] = ai_audio_events
 
+        # ─── Stage 4.8: Soundtrack Selection ─────────────────
+        music_choice = None
+        music_arg = getattr(args, "music", "auto")
+        if music_arg.lower() not in ("none", "off", "0", "false"):
+            clip_total_duration_s = (end_ms - start_ms) / 1000.0
+            if ai_audio_events:
+                clip_total_duration_s += sum(ev.get("duration", 0.0) for ev in ai_audio_events)
+
+            music_choice = music_director.choose_track(
+                clip=clip,
+                clip_words=clip_words,
+                clip_duration_s=clip_total_duration_s,
+                volume=getattr(args, "music_volume", 0.14),
+                explicit_choice=music_arg if music_arg.lower() != "auto" else None
+            )
+            clip["music_choice"] = music_choice
+
         # ─── Stage 5: Subtitle Generation ────────────────────
         logger.info(f"   [5/6] Generating kinetic subtitles ...")
         clip_title_str = "" if args.no_title else title
@@ -591,6 +633,7 @@ def run_pipeline(args: argparse.Namespace) -> None:
             end_ms=end_ms,
             crop_coords=crop_coords,
             subtitle_path=sub_path,
+            music_choice=music_choice,
             clip_index=idx,
             encoder="auto" if use_nvenc else "libx264",
             editorial_data=editorial_data,

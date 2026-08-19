@@ -124,9 +124,7 @@ def render_clip(
         segment_files = []
         seg_idx = 0
 
-        hook_ev = next((ev for ev in ai_audio_events if ev.get("type") == "hook"), None)
-        comm_events = [ev for ev in ai_audio_events if ev.get("type") == "commentary"]
-        comm_events.sort(key=lambda x: x.get("source_time", 0.0))
+
 
         # Helper to render cropped host segment
         def render_host_segment(t_from: float, t_to: float, out_file: str):
@@ -178,60 +176,135 @@ def render_clip(
             _run_ffmpeg(cmd)
 
         try:
-            logger.info(f"[Renderer] Rendering {len(ai_audio_events)} explainer segments (NVENC={use_nvenc}) ...")
-            # 1. Render Hook
+            hook_ev    = next((ev for ev in ai_audio_events if ev.get("type") == "hook"),    None)
+            closing_ev = next((ev for ev in ai_audio_events if ev.get("type") == "closing"), None)
+            # Keep legacy commentary support (in case old cached clips flow through)
+            comm_events = [ev for ev in ai_audio_events if ev.get("type") == "commentary"]
+
+            logger.info(
+                f"[Renderer] Clip structure — "
+                f"hook={'✓' if hook_ev else '✗'}  "
+                f"host={duration_s:.1f}s  "
+                f"closing={'✓' if closing_ev else '✗'}"
+            )
+
+            # ── Segment 1: Kai Intro Hook (avatar freeze-frame before speaker) ──
             if hook_ev and os.path.exists(hook_ev["audio_path"]):
                 hook_file = os.path.join(temp_segs_dir, f"seg_{seg_idx:02d}_hook.mp4")
                 render_avatar_segment(0.0, hook_ev["audio_path"], hook_ev["duration"], hook_file, is_intro=True)
                 segment_files.append(hook_file)
                 seg_idx += 1
 
-            # 2. Render Commentary Segments
-            last_t = 0.0
-            for c_idx, cev in enumerate(comm_events):
-                t_ins = min(duration_s, max(last_t + 0.1, cev.get("source_time", duration_s * 0.4)))
-                # Host Part
+            # ── Segment 2: Full host clip, completely uninterrupted ────────────
+            if comm_events:
+                # Legacy path: clip was processed with old mid-clip commentary structure
+                logger.info("[Renderer] Legacy mid-clip commentary detected — rendering as interrupted segments.")
+                last_t = 0.0
+                for c_idx, cev in enumerate(comm_events):
+                    t_ins = min(duration_s, max(last_t + 0.1, cev.get("source_time", duration_s * 0.4)))
+                    host_file = os.path.join(temp_segs_dir, f"seg_{seg_idx:02d}_host.mp4")
+                    render_host_segment(last_t, t_ins, host_file)
+                    if os.path.exists(host_file):
+                        segment_files.append(host_file)
+                        seg_idx += 1
+                    if os.path.exists(cev["audio_path"]):
+                        comm_file = os.path.join(temp_segs_dir, f"seg_{seg_idx:02d}_comm.mp4")
+                        render_avatar_segment(max(0.0, t_ins - 0.05), cev["audio_path"], cev["duration"], comm_file, is_intro=False)
+                        segment_files.append(comm_file)
+                        seg_idx += 1
+                    last_t = t_ins
+                if last_t < duration_s:
+                    tail_file = os.path.join(temp_segs_dir, f"seg_{seg_idx:02d}_tail.mp4")
+                    render_host_segment(last_t, duration_s, tail_file)
+                    if os.path.exists(tail_file):
+                        segment_files.append(tail_file)
+                        seg_idx += 1
+            else:
+                # New path: speaker plays completely uninterrupted
                 host_file = os.path.join(temp_segs_dir, f"seg_{seg_idx:02d}_host.mp4")
-                render_host_segment(last_t, t_ins, host_file)
+                render_host_segment(0.0, duration_s, host_file)
                 if os.path.exists(host_file):
                     segment_files.append(host_file)
                     seg_idx += 1
-                # Commentary Part
-                if os.path.exists(cev["audio_path"]):
-                    comm_file = os.path.join(temp_segs_dir, f"seg_{seg_idx:02d}_comm.mp4")
-                    freeze_t = max(0.0, t_ins - 0.05)
-                    render_avatar_segment(freeze_t, cev["audio_path"], cev["duration"], comm_file, is_intro=False)
-                    segment_files.append(comm_file)
-                    seg_idx += 1
-                last_t = t_ins
 
-            # 3. Render Host Tail
-            if last_t < duration_s:
-                tail_file = os.path.join(temp_segs_dir, f"seg_{seg_idx:02d}_tail.mp4")
-                render_host_segment(last_t, duration_s, tail_file)
-                if os.path.exists(tail_file):
-                    segment_files.append(tail_file)
-                    seg_idx += 1
+            # ── Segment 3: Kai Closing Explanation (avatar freeze after speaker) ─
+            if closing_ev and os.path.exists(closing_ev["audio_path"]):
+                # Freeze on the last frame of the source clip for the closing
+                freeze_t = max(0.0, duration_s - 0.05)
+                closing_file = os.path.join(temp_segs_dir, f"seg_{seg_idx:02d}_closing.mp4")
+                render_avatar_segment(freeze_t, closing_ev["audio_path"], closing_ev["duration"], closing_file, is_intro=False)
+                segment_files.append(closing_file)
+                seg_idx += 1
 
-            # 4. Concat all segments and apply subtitles
+
+            # 4. Concat all segments, mix background music (if selected), and apply subtitles
             list_file = os.path.join(temp_segs_dir, "concat_list.txt")
             with open(list_file, "w", encoding="utf-8") as f:
                 for sfile in segment_files:
                     clean_sfile = os.path.abspath(sfile).replace("\\", "/").replace("'", "'\\''")
                     f.write(f"file '{clean_sfile}'\n")
 
-            logger.info(f"[Renderer] Assembling {len(segment_files)} segments with subtitles -> {output_path}")
+            has_music = bool(
+                music_choice and isinstance(music_choice, dict) and 
+                music_choice.get("path") and os.path.exists(music_choice["path"])
+            )
+
+            total_clip_duration = (hook_ev["duration"] if hook_ev else 0.0) + duration_s + (closing_ev["duration"] if closing_ev else 0.0)
+
+            logger.info(
+                f"[Renderer] Assembling {len(segment_files)} segments "
+                f"(Total: {total_clip_duration:.1f}s, BGM={'✓ ' + music_choice.get('name', '') if has_music else '✗'}) -> {output_path}"
+            )
+
             concat_cmd = ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", list_file]
-            if safe_sub_path:
+
+            if has_music:
+                m_path = music_choice["path"]
+                m_start = max(0.0, float(music_choice.get("start_s", 0.0)))
+                m_vol = float(music_choice.get("volume", 0.14))
+                fade_in = float(music_choice.get("fade_in_s", 0.8))
+                fade_out = float(music_choice.get("fade_out_s", 1.2))
+                fade_out_st = max(0.1, total_clip_duration - fade_out)
+
+                concat_cmd += ["-stream_loop", "-1", "-ss", f"{m_start:.3f}", "-i", m_path]
+
+                fc = []
+                if safe_sub_path:
+                    fc.append(f"[0:v]ass='{safe_sub_path}'[v_out]")
+                else:
+                    fc.append(f"[0:v]null[v_out]")
+
+                fc.append(
+                    f"[1:a]aformat=channel_layouts=stereo:sample_rates=48000,"
+                    f"volume={m_vol:.3f},"
+                    f"afade=t=in:st=0:d={fade_in:.2f}:curve=log,"
+                    f"afade=t=out:st={fade_out_st:.2f}:d={fade_out:.2f}:curve=log[bgm]"
+                )
+                fc.append(
+                    f"[0:a]aformat=channel_layouts=stereo:sample_rates=48000[dialogue];"
+                    f"[dialogue][bgm]amix=inputs=2:duration=first:dropout_transition=0:weights=1.0 1.0,"
+                    f"alimiter=limit=0.98[a_out]"
+                )
+
                 concat_cmd += [
-                    "-vf", f"ass='{safe_sub_path}'",
+                    "-filter_complex", ";".join(fc),
+                    "-map", "[v_out]",
+                    "-map", "[a_out]"
                 ] + enc_args + [
                     "-c:a", "aac", "-b:a", "192k", "-ac", "2", "-ar", "48000", "-movflags", "+faststart", output_path
                 ]
             else:
-                concat_cmd += [
-                    "-c", "copy", "-movflags", "+faststart", output_path
-                ]
+                if safe_sub_path:
+                    concat_cmd += [
+                        "-vf", f"ass='{safe_sub_path}'",
+                    ] + enc_args + [
+                        "-c:a", "aac", "-b:a", "192k", "-ac", "2", "-ar", "48000", "-movflags", "+faststart", output_path
+                    ]
+                else:
+                    concat_cmd += [
+                        "-c", "copy", "-movflags", "+faststart", output_path
+                    ]
+
             _run_ffmpeg(concat_cmd)
         except Exception as e:
             if use_nvenc and "nvenc" in str(e).lower():
@@ -275,18 +348,40 @@ def render_clip(
     command = ["ffmpeg", "-y", "-ss", f"{start_s:.3f}", "-t", f"{duration_s:.3f}", "-i", input_video]
     input_idx = 1
     
-    import av
-    has_audio = False
+    has_audio = True
     try:
+        import av
         with av.open(input_video) as container:
             has_audio = len(container.streams.audio) > 0
     except Exception:
-        pass
+        try:
+            probe_cmd = ["ffprobe", "-v", "error", "-select_streams", "a", "-show_entries", "stream=codec_type", "-of", "csv=p=0", input_video]
+            probe_res = subprocess.run(probe_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            has_audio = "audio" in probe_res.stdout.lower()
+        except Exception:
+            has_audio = True
 
     silent_audio_idx = -1
     if not has_audio:
         command += ["-f", "lavfi", "-i", f"anullsrc=r=48000:cl=stereo:d={duration_s:.3f}"]
         silent_audio_idx = input_idx
+        input_idx += 1
+
+    has_music = bool(
+        music_choice and isinstance(music_choice, dict) and 
+        music_choice.get("path") and os.path.exists(music_choice["path"])
+    )
+    music_input_idx = -1
+    if has_music:
+        m_path = music_choice["path"]
+        m_start = max(0.0, float(music_choice.get("start_s", 0.0)))
+        m_vol = float(music_choice.get("volume", 0.14))
+        fade_in = float(music_choice.get("fade_in_s", 0.8))
+        fade_out = float(music_choice.get("fade_out_s", 1.2))
+        fade_out_st = max(0.1, duration_s - fade_out)
+
+        command += ["-stream_loop", "-1", "-ss", f"{m_start:.3f}", "-i", m_path]
+        music_input_idx = input_idx
         input_idx += 1
 
     canvas_idx = -1
@@ -316,7 +411,20 @@ def render_clip(
 
     a_head = f"{silent_audio_idx}:a" if not has_audio else "0:a"
     if has_audio:
-        filter_complex.append(f"[{a_head}]loudnorm=I=-14:LRA=7:TP=-1.5,alimiter=limit=0.95[final_audio]")
+        filter_complex.append(f"[{a_head}]loudnorm=I=-14:LRA=7:TP=-1.5,alimiter=limit=0.95[speech_audio]")
+        a_head = "speech_audio"
+
+    if has_music and music_input_idx >= 0:
+        filter_complex.append(
+            f"[{music_input_idx}:a]aformat=channel_layouts=stereo:sample_rates=48000,"
+            f"volume={m_vol:.3f},"
+            f"afade=t=in:st=0:d={fade_in:.2f}:curve=log,"
+            f"afade=t=out:st={fade_out_st:.2f}:d={fade_out:.2f}:curve=log[bgm]"
+        )
+        filter_complex.append(
+            f"[{a_head}][bgm]amix=inputs=2:duration=first:dropout_transition=0:weights=1.0 1.0,"
+            f"alimiter=limit=0.98[final_audio]"
+        )
         a_head = "final_audio"
 
     if safe_sub_path:

@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import re
 from typing import Dict, List, Optional
 from openai import OpenAI
 from dotenv import load_dotenv
@@ -18,65 +19,81 @@ MODEL_FALLBACKS = [
     ).split(",") if m.strip()
 ]
 
-# ─── Dr. Mei Master Persona V2.1 (Human Life Translator — Clip-Anchored) ─────
-SYSTEM_PROMPT = """You are Dr. Mei, a sharp, warm, and captivating human performance coach and co-host. Your mission is to translate the science being discussed in the clip into its direct, undeniable impact on the viewer's real daily life — their sleep, energy, focus, mood, relationships, habits, and decisions.
+# ─── Kai — The Self-Improvement Tutor Persona ────────────────────────────────
+# Kai is NOT a commentator who adds footnotes. She is a wise, grounded older
+# sister / tutor who has been through hard times. She speaks directly to people
+# who feel lost, stuck, overwhelmed, or misunderstood — especially teenagers
+# and young adults. She listens to what the guest in the clip says, absorbs it,
+# and only speaks when she genuinely has something meaningful to add — a
+# reframe, a truth the listener needs to hear, or a direct call to action that
+# clicks because of where they are emotionally.
+# ─────────────────────────────────────────────────────────────────────────────
 
-THE MOST IMPORTANT RULE — LEAD WITH HUMAN IMPACT, NOT CHEMISTRY:
-- Your commentary is NOT a science lecture. You are a translator.
-- Never open with a chemical name, brain region, or biological term as the headline. Open with what it MEANS for the viewer's life.
-- The speaker may explain the science — that's their job. YOUR job is to tell the viewer: "Here's exactly why this matters for YOU, right now, today."
-- Do NOT use metaphors, analogies, or hypothetical examples (STRICTLY NO "Think of your brain like...", NO "Imagine a car/engine...", NO "Picture a classroom...", NO "It's like a...").
-- Speak in plain, punchy, authoritative English. Every word must earn its place.
+SYSTEM_PROMPT = """You are Kai — a sharp, warm, and deeply human self-improvement guide.
 
-CRITICAL — CLIP-ONLY ANCHOR RULE:
-You will receive both the CLIP TRANSCRIPT and SURROUNDING CONTEXT.
-- The "hook" MUST be written based EXCLUSIVELY on what the speaker says inside the CLIP TRANSCRIPT.
-- Do NOT introduce concepts, exercises, statistics, or facts from the SURROUNDING CONTEXT into the hook or commentary.
-- If the speaker discusses eye blinks in the clip, the hook is about eye blinks and focus — NOT about a "17-minute exercise" mentioned elsewhere.
-- If the speaker discusses a supplement dosage in the clip, Dr. Mei speaks about that supplement's real-world impact — NOT about other supplements mentioned in surrounding context.
-- Surrounding context is provided ONLY as background to understand the conversation flow — it must NEVER appear in your output.
-WRONG: Dr. Mei's hook mentions "a simple 17-minute exercise" when the clip itself only talks about eye blinks.
-RIGHT: Dr. Mei's hook says "Controlling how fast you blink can literally shift how sharp your focus feels right now."
+Your audience: Teenagers, young adults, and people who feel lost, stuck, overwhelmed, or like they're falling behind in life. They don't need more information — they need someone who understands exactly where they are and speaks to them like a wise older sibling or trusted friend who has been through hard things.
 
-YOUR ROLE IN EVERY CLIP:
-1. "hook" (Opening Statement, 10–18 words):
-   Delivered on Frame 0 before the speaker talks. Must be a bold, human-impact statement that makes the viewer stop scrolling — frame it as a consequence for their life, not a science fact. Derived 100% from what is said inside the clip transcript.
-   WRONG: "Dopamine modulates your brain's reward circuitry."
-   RIGHT: "The reason you can't stop checking your phone is completely fixable."
+YOUR NATURE:
+- You have listened carefully to the full conversation clip. You absorb the speaker's message, then add YOUR voice — grounded, honest, direct.
+- You are NOT a narrator. You are the one who opens the clip and the one who closes it.
+- You NEVER speak while the speaker is talking. You speak BEFORE them and AFTER them.
+- You never repeat what the speaker said verbatim. You set up, then you land.
+- You connect the abstract idea to the raw, unspoken emotional experience of your audience.
 
-2. "commentary_segments" (Mid-Clip Translations, 1 to 2 segments):
-   When the speaker makes a key point, Dr. Mei steps in to deliver the human-impact translation.
-   - Only reference what the speaker actually said in this clip. Do not import facts from surrounding context.
-   - If the clip has 1 main idea → 1 segment. If 2 distinct ideas → 2 segments.
-   - "text" (18–30 words): State the direct real-world consequence of what the speaker just said. What does this mean the viewer should feel, do, stop doing, or understand differently about their own life? Zero analogies.
-   - "insert_after_text": The exact sentence or phrase from the CLIP TRANSCRIPT where Dr. Mei steps in.
+HOW KAI SPEAKS:
+- Short. Every word counts. No filler. No academic tone.
+- Direct address: "You", "Your", "You're", "This is why", "Here's what this actually means."
+- Honest and human — not motivational poster quotes.
+- No metaphors, no analogies, no hypotheticals.
+- Never preachy. Never condescending. Never clinical.
+- Contractions are natural: "you're", "it's", "don't", "that's".
 
-3. "takeaway" (Closing Action, 1 sentence):
-   The single most practical thing the viewer can do today, tomorrow morning, or this week based on what the clip revealed. Must be concrete and immediately actionable. (or null if none applies.)
+CLIP STRUCTURE — THIS IS HOW THE VIDEO IS BUILT:
+1. Kai opens (hook) — before the speaker says a single word
+2. Speaker talks — completely uninterrupted, their full clip plays
+3. Kai closes (closing_explanation) — after the speaker finishes
 
-TONE: Direct, warm, energizing, zero fluff. Sounds like a knowledgeable friend — not a textbook.
+You MUST write BOTH parts. The hook draws the viewer in. The closing is where the transformation happens.
+
+KAI'S OUTPUT — TWO FIELDS:
+
+1. "hook" (10–16 words max):
+   Kai's opening line. Plays before the speaker even starts talking.
+   - Name the pain point, desire, or question this clip answers for Kai's audience.
+   - Must feel like someone who truly understands you says this at the exact right moment.
+   - Derived from what the speaker says inside the clip.
+   WRONG: "Sleep affects your brain's performance metrics."
+   RIGHT: "You're not lazy. Your brain is literally running on empty right now."
+   RIGHT: "The reason nothing feels exciting anymore isn't a mood. It's fixable."
+
+2. "closing_explanation" (40–75 words):
+   Kai's voice AFTER the speaker finishes. This is where she translates everything into plain, grounded truth.
+   - Explain the speaker's core point in the simplest possible human terms — as if speaking to a smart 16-year-old who is frustrated and confused.
+   - Name the real-world implication: what does this mean for how they live tomorrow, next week?
+   - If there's an action, state it concretely. If it's a reframe, let it land cleanly.
+   - Do NOT repeat the speaker's words. Translate and advance.
+   - NO analogies. NO "think of it like...". NO jargon. Direct.
+   - This is Kai's most important moment in the clip. Make it count.
 
 OUTPUT FORMAT:
-Strictly raw JSON with NO markdown fences:
+Strictly raw JSON. No markdown fences. No extra text:
 {
-  "hook": "Bold human-impact opening derived ONLY from what is said inside the clip...",
-  "commentary_segments": [
-    {
-      "text": "Direct real-world consequence of what the speaker just explained inside the clip...",
-      "insert_after_text": "Exact sentence from CLIP TRANSCRIPT where Dr. Mei steps in"
-    }
-  ],
-  "takeaway": "One concrete actionable thing to do based on this clip..."
+  "hook": "Kai's 10-16 word opening line that stops the scroll...",
+  "closing_explanation": "Kai's 40-75 word plain-language explanation of the speaker's key point and what it means for the viewer's life..."
 }"""
+
+
 
 def generate_commentary(
     clip_transcript: str,
     surrounding_context: str,
     topic: str = "General",
-    speaker_info: str = "Unknown"
+    speaker_info: str = "Unknown",
+    kai_why: str = ""
 ) -> Dict:
     """
-    Generates editorial commentary for a clip featuring Dr. Mei's teacher persona.
+    Generates Kai's commentary for a clip.
+    kai_why: Optional description of why this clip was selected and who it speaks to.
     Returns a dictionary with 'hook', 'commentary_segments', 'takeaway', and 'qc_flag'.
     """
     key = os.environ.get("NVIDIA_API_KEY", "").strip()
@@ -95,22 +112,38 @@ def generate_commentary(
         max_retries=0
     )
 
-    user_prompt = f"""
-=== CLIP TRANSCRIPT (35–65 seconds) ===
-This is the ONLY source you may use for your hook and commentary.
+    # Build Kai's contextual awareness — why this specific clip matters to her audience
+    if not kai_why:
+        kai_why = (
+            f"This clip was selected because it speaks directly to people who feel stuck or lost in life. "
+            f"The topic — {topic} — is something many teenagers and young adults struggle with silently. "
+            f"Kai should add statements that name the hidden emotional reality behind what the speaker is saying."
+        )
+
+    user_prompt = f"""=== CLIP TRANSCRIPT ===
+This is the ONLY source for Kai's hook and commentary. Do NOT use ideas from surrounding context.
 {clip_transcript}
 
-=== SURROUNDING CONTEXT (background only — do NOT use in hook or commentary) ===
+=== CLIP TOPIC ===
+{topic}
+
+=== SPEAKER(S) ===
+{speaker_info}
+
+=== KAI'S WHY — WHY THIS CLIP WAS CHOSEN ===
+{kai_why}
+
+=== SURROUNDING CONTEXT (background flow only — NEVER use this in Kai's output) ===
 {surrounding_context}
 
-=== METADATA ===
-Topic: {topic}
-Speaker(s): {speaker_info}
-
-INSTRUCTION: Write Dr. Mei's hook, commentary_segments, and takeaway using ONLY what the speaker says in the CLIP TRANSCRIPT above. The surrounding context is strictly for understanding the conversation flow. Do not reference any concept, exercise, statistic, or supplement that only appears in the surrounding context.
+INSTRUCTION:
+Kai has listened carefully to the CLIP TRANSCRIPT above. 
+Write Kai's hook, commentary_segments, and takeaway based ONLY on what the speaker says in the clip.
+Kai speaks to people who feel lost, stuck, or overwhelmed — her words should land like someone finally saying what they needed to hear.
+Never repeat what the speaker said. Never force a statement. Only speak when it genuinely adds something.
 """
-    logger.info("Requesting editorial commentary from LLM...")
-    import re
+
+    logger.info("Requesting Kai commentary from LLM...")
     import time
 
     response_content = None
@@ -123,7 +156,7 @@ INSTRUCTION: Write Dr. Mei's hook, commentary_segments, and takeaway using ONLY 
                         {"role": "system", "content": SYSTEM_PROMPT},
                         {"role": "user", "content": user_prompt}
                     ],
-                    temperature=0.7,
+                    temperature=0.65,
                     max_tokens=1024,
                     stream=True,
                     timeout=35.0
@@ -136,14 +169,14 @@ INSTRUCTION: Write Dr. Mei's hook, commentary_segments, and takeaway using ONLY 
                         if c: chunks.append(c)
                 response_content = "".join(chunks).strip()
                 if response_content:
-                    logger.info(f"[CommentaryGenerator] Successfully generated commentary via {model_candidate}")
+                    logger.info(f"[CommentaryGenerator] Kai commentary generated via {model_candidate}")
                     break
             except Exception as e:
                 err_str = str(e).lower()
                 is_rate_limit = ("429" in err_str or "too many requests" in err_str or "rate limit" in err_str)
                 if is_rate_limit and attempt < 3:
                     wait_s = 3.5 * (attempt + 1)
-                    logger.info(f"[CommentaryGenerator] ⏳ Model {model_candidate} rate-limited (429). Giving a {wait_s:.1f}s cooldown break (attempt {attempt+1}/4)...")
+                    logger.info(f"[CommentaryGenerator] Rate-limited on {model_candidate}. Cooling down {wait_s:.1f}s (attempt {attempt+1}/4)...")
                     time.sleep(wait_s)
                     continue
                 else:
@@ -164,44 +197,51 @@ INSTRUCTION: Write Dr. Mei's hook, commentary_segments, and takeaway using ONLY 
                 try:
                     data = json.loads(response_content[start_obj:end_obj+1])
                 except Exception as e:
-                    logger.warning(f"Failed to parse commentary JSON: {e}")
+                    logger.warning(f"Failed to parse Kai commentary JSON: {e}")
 
     hook = data.get("hook", "").strip() if data.get("hook") else None
-    takeaway = data.get("takeaway", "").strip() if data.get("takeaway") else None
-    commentary_segments = data.get("commentary_segments", [])
+    closing_raw = data.get("closing_explanation", "")
+    closing_explanation = closing_raw.strip() if isinstance(closing_raw, str) else ""
 
-    # Clean up any analogy openers from commentary text
-    for seg in commentary_segments:
-        if isinstance(seg, dict) and "text" in seg:
-            txt = seg["text"].strip()
-            # Strip cliché analogy phrasing
-            txt = re.sub(r"^(Think of (your brain|it|this) like a?|Imagine (your brain|this|it) as a?|Picture this:?|It's like a?)\s*", "", txt, flags=re.IGNORECASE).strip()
-            if txt and txt[0].islower():
-                txt = txt[0].upper() + txt[1:]
-            seg["text"] = txt
+    # Strip analogy/cliché openers that slip through
+    def _clean_text(txt: str) -> str:
+        txt = re.sub(
+            r"^(Think of (your brain|it|this) like a?|Imagine (your brain|this|it) as a?|Picture this:?|It'?s like a?)\s*",
+            "", txt, flags=re.IGNORECASE
+        ).strip()
+        if txt and txt[0].islower():
+            txt = txt[0].upper() + txt[1:]
+        return txt
 
-    # Robust fallback if LLM omitted commentary_segments
-    if not commentary_segments or not isinstance(commentary_segments, list) or len(commentary_segments) == 0:
-        sentences = [s.strip() for s in re.split(r'[.!?]+', clip_transcript) if len(s.strip().split()) >= 4]
-        mid_sentence = sentences[len(sentences)//2] if sentences else clip_transcript[:60]
-        fallback_explainer = f"This neural mechanism directly explains how sensory input influences your brain's ability to maintain sustained focus."
-        commentary_segments = [{
-            "text": fallback_explainer,
-            "insert_after_text": mid_sentence
-        }]
+    if closing_explanation:
+        closing_explanation = _clean_text(closing_explanation)
 
+    # Fallbacks
     if not hook:
-        hook = f"This single biological mechanism explains why focus is so difficult to maintain."
+        hook = "What they just said? Most people never hear it this clearly."
+    if not closing_explanation:
+        sentences = [s.strip() for s in re.split(r'[.!?]+', clip_transcript) if len(s.strip().split()) >= 4]
+        closing_explanation = (
+            "Here's what that actually means for you: " + sentences[0] if sentences
+            else "Most people walk past this moment without realizing it just changed what's possible for them."
+        )
 
     return {
         "hook": hook,
-        "commentary_segments": commentary_segments,
-        "takeaway": takeaway,
+        "closing_explanation": closing_explanation,
+        # Keep for backwards compatibility with any cached clips still using commentary_segments
+        "commentary_segments": [],
         "qc_flag": "PASS"
     }
 
+
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    test_clip = "I think the most important thing is sleep. Without it, you can't function."
-    test_context = "We were talking about health routines earlier. I think the most important thing is sleep. Without it, you can't function. Diet is second."
-    print(json.dumps(generate_commentary(test_clip, test_context, "Health"), indent=2))
+    test_clip = "I think the most important thing about sleep is that it's not just rest. Your brain is literally cleaning itself during that time. The glymphatic system is flushing out toxins. And when you skip it, they build up."
+    test_context = "We were talking about health routines earlier. Sleep came up as the biggest lever."
+    test_why = "This clip speaks to teenagers who pull all-nighters thinking grinding harder is the answer. Kai should name that belief and reframe it."
+    print(json.dumps(generate_commentary(test_clip, test_context, "Sleep & Recovery", "Health Researcher", test_why), indent=2))
+
+
+

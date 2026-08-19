@@ -572,6 +572,10 @@ async def run_pipeline_ws(websocket: WebSocket, job_id: str):
             cmd += ["--language", lang]
         if config.get("auto_publish"): 
             cmd += ["--auto-publish"]
+        if config.get("music"):
+            cmd += ["--music", str(config.get("music"))]
+        if config.get("music_volume") is not None:
+            cmd += ["--music-volume", str(config.get("music_volume"))]
             
         phase = config.get("phase", "all")
         cmd += ["--phase", phase]
