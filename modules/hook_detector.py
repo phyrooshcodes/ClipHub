@@ -94,7 +94,14 @@ RIGHT: "Why You're Exhausted Even After 8 Hours of Sleep", "The Real Reason You 
 Title must be 6–12 words. No colons. No "The Importance of". No "The Benefits of".
 
 OUTPUT FORMAT:
-Output ONLY a raw, valid JSON array with NO markdown fences, preamble, or trailing text.
+First, output your exact, step-by-step thinking process inside <think>...</think> tags.
+In your thinking process:
+- Scan transcript for engagement spikes, emotional contrasts, and contrarian perspectives
+- Evaluate audience retention drop-offs
+- Reason through why specific moments will stop scrolling
+- Explain your scoring and persona framing for each candidate clip
+
+After the </think> tag, output ONLY the valid JSON array:
 
 [
   {
@@ -225,16 +232,20 @@ def _call_streaming_with_failover(
 
                 if chunk.choices and len(chunk.choices) > 0:
                     delta = chunk.choices[0].delta
+                    reasoning = getattr(delta, "reasoning_content", None)
                     content = getattr(delta, "content", None)
-                    if content:
+                    text_piece = reasoning if reasoning else content
+                    if text_piece:
                         if not first_token_received:
                             first_token_received = True
                             logger.info(f"[HookDetector] ⚡ First token received from {model} in {now - start_time:.2f}s! Streaming generation...")
-                        chunks.append(content)
+                        chunks.append(text_piece)
                         token_count += 1
                         last_token_time = now
-                        if token_count % 300 == 0:
-                            logger.info(f"[HookDetector] ⚡ Streaming generation in progress: {token_count} tokens generated ({now - start_time:.1f}s elapsed)...")
+                        # Stream real-time thinking lines to logs and WebSocket
+                        clean_piece = text_piece.replace("<think>", "").replace("</think>", "").strip()
+                        if clean_piece and ("\n" in text_piece or token_count % 15 == 0):
+                            logger.info(f"[LLM_THINKING] {clean_piece}")
 
             full_text = "".join(chunks).strip()
             if not full_text:
@@ -488,8 +499,15 @@ def detect_hooks(
             )
             raw_clips = _parse_json_response(raw_response)
             if raw_clips and len(raw_clips) >= 1:
+                # Extract raw thinking process
+                think_match = re.search(r"<think>(.*?)</think>", raw_response, re.DOTALL)
+                raw_thinking = think_match.group(1).strip() if think_match else ""
+                
                 valid_clips = _validate_and_clamp_clips(raw_clips, video_duration_seconds, words)
                 if valid_clips:
+                    for clip in valid_clips:
+                        if raw_thinking and "llm_thinking" not in clip:
+                            clip["llm_thinking"] = raw_thinking
                     valid_clips = sorted(valid_clips, key=lambda x: x.get("hook_score", 0.0), reverse=True)[:effective_max_clips]
                     logger.info(f"[HookDetector] ✅ Full-transcript query with {m} successfully extracted {len(valid_clips)} viral clips.")
                     for i, clip in enumerate(valid_clips, 1):

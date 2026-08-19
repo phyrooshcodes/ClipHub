@@ -2207,12 +2207,21 @@ document.addEventListener("DOMContentLoaded", () => {
       if (data.type === 'start') {
         updateProgress(null, "Warming up pipeline", 15);
         appendLog(`<span class="log-highlight">[System]</span> Connected to pipeline. Warming up...`);
-        startThinkingTimer();
-        liveChainOfThoughts = [{
-          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-          text: `[Pipeline Initialized] Job ${jobId} warming up AI reasoning models...`
-        }];
-        renderScriptPreview(null);
+        liveChainOfThoughts = [];
+        const timerBadge = document.getElementById('thinking-timer-badge');
+        if (timerBadge) {
+          timerBadge.textContent = 'Stage 1/6';
+          timerBadge.classList.remove('active');
+        }
+        const container = document.getElementById('review-cards-container');
+        if (container) {
+          container.innerHTML = `
+            <div class="thinking-idle-box">
+              <i class="ri-disc-line"></i>
+              <span>Pipeline initialized. Extracting audio from source video...</span>
+            </div>
+          `;
+        }
       } else if (data.type === 'stage' || data.type === 'substage') {
         // The backend parses the pipeline's real log markers into these
         // events.  This is the canonical progress source for uploaded files.
@@ -2224,27 +2233,64 @@ document.addEventListener("DOMContentLoaded", () => {
         if (data.raw) {
           appendLog(`<span class="log-info" style="color:var(--text-muted)">[Log]</span> ${data.raw}`);
         }
+
+        const timerBadge = document.getElementById('thinking-timer-badge');
+        const container = document.getElementById('review-cards-container');
+
+        if (stageNumber === 1) {
+          if (timerBadge) timerBadge.textContent = 'Stage 1/6';
+          if (container && (!liveChainOfThoughts || liveChainOfThoughts.length === 0)) {
+            container.innerHTML = `
+              <div class="thinking-idle-box">
+                <i class="ri-disc-line"></i>
+                <span>Extracting audio stream from source video (Stage 1/6)...</span>
+              </div>
+            `;
+          }
+        } else if (stageNumber === 2) {
+          if (timerBadge) timerBadge.textContent = 'Transcribing (Stage 2/6)';
+          if (container && (!liveChainOfThoughts || liveChainOfThoughts.length === 0)) {
+            container.innerHTML = `
+              <div class="thinking-idle-box">
+                <i class="ri-voiceprint-line"></i>
+                <span>Whisper ASR is transcribing speech timestamps (Stage 2/6)...<br><small style="color:var(--text-muted); margin-top:4px; display:inline-block;">LLM Thinking &amp; Hook Detection will activate in Stage 3.</small></span>
+              </div>
+            `;
+          }
+        } else if (stageNumber === 3) {
+          startThinkingTimer();
+        } else if (stageNumber >= 4) {
+          stopThinkingTimer();
+        }
         fetchJobScript(jobId);
       }
       
       // Capture live LLM thought events
       const rawText = data.raw || data.message || '';
-      if (rawText && (
-        rawText.includes('[HookDetector]') || 
-        rawText.includes('[CommentaryGenerator]') ||
-        rawText.includes('[Transcriber]') ||
-        rawText.includes('viral') ||
-        rawText.includes('Kai') ||
-        rawText.includes('tokens') ||
-        rawText.includes('LLM') ||
-        rawText.includes('Hook') ||
-        rawText.includes('commentary')
-      )) {
-        const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-        liveChainOfThoughts.unshift({ time: timeStr, text: rawText });
-        if (liveChainOfThoughts.length > 50) liveChainOfThoughts.pop();
-        if (currentJobId && typeof pipelineDone !== 'undefined' && !pipelineDone) {
-          renderScriptPreview(currentLoadedScript);
+      if (rawText && (rawText.includes('[LLM_THINKING]') || rawText.includes('[HookDetector]'))) {
+        let cleanThought = rawText.replace(/.*\[LLM_THINKING\]\s*/i, '').replace(/.*\[HookDetector\]\s*/i, '').trim();
+        if (cleanThought && !cleanThought.startsWith('---') && !cleanThought.includes('tokens generated')) {
+          if (!thinkingTimerInterval) {
+            startThinkingTimer();
+          }
+          liveChainOfThoughts.push(cleanThought);
+          if (liveChainOfThoughts.length > 30) liveChainOfThoughts.shift();
+          
+          const container = document.getElementById('review-cards-container');
+          if (container) {
+            let html = '<div class="thought-stream-container thinking-live">';
+            html += `<p class="thought-prose-p" style="color:#c084fc;"><strong>Model Reasoning Stream:</strong></p>`;
+            liveChainOfThoughts.slice(-6).forEach(t => {
+              html += `
+                <div class="thought-live-item">
+                  <span class="dot">›</span>
+                  <span>${escapeHtml(t)}</span>
+                </div>
+              `;
+            });
+            html += `<span class="thought-cursor"></span></div>`;
+            container.innerHTML = html;
+          }
         }
       } else if (data.type === 'clip_start') {
         pipelineClip = { current: data.clip_num, total: data.total };
@@ -2595,7 +2641,14 @@ document.addEventListener("DOMContentLoaded", () => {
             <span class="thought-badge-score">${scoreFormatted}/10 · ${escapeHtml(hookType)}</span>
           </div>
 
-          ${reasonText ? `
+          ${clip.llm_thinking ? `
+            <div style="margin-top:6px; padding:8px 10px; background:rgba(168,85,247,0.05); border-left:2px solid rgba(168,85,247,0.4); border-radius:4px;">
+              <span class="thought-quote-line"><span class="label" style="color:#c084fc;">Model Thinking Trace:</span></span>
+              <pre style="margin:4px 0 0 0; font-family:var(--font-mono), monospace; font-size:11px; white-space:pre-wrap; color:#cbd5e1; line-height:1.45;">${escapeHtml(clip.llm_thinking)}</pre>
+            </div>
+          ` : ''}
+
+          ${reasonText && !clip.llm_thinking ? `
             <p class="thought-prose-p" style="font-size:12px; color:#cbd5e1;">
               <strong>Selection Rationale:</strong> ${escapeHtml(reasonText)}
             </p>
