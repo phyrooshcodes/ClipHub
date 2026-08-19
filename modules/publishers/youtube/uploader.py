@@ -83,19 +83,13 @@ def initiate_upload(page: Page, video_path: str, channel_id: str | None = None) 
 
     logger.info("[YouTube] Locating video upload interface...")
     
+    # 1. Ensure the upload dialog is open
     deadline = time.monotonic() + 35.0
-    file_input = None
-    
     while time.monotonic() < deadline:
-        # Check if file input is already available (e.g. from ?d=ud or preloaded dialog)
-        for selector in FILE_INPUT_SELECTORS:
-            inp = page.locator(selector).first
-            if inp.count():
-                file_input = inp
-                break
-        if file_input:
+        select_btn = page.locator("#select-files-button, ytcp-button#select-files-button, ytcp-button:has-text('Select files'), ytcp-uploads-dialog").first
+        if select_btn.count() and select_btn.is_visible():
             break
-
+            
         # Attempt opening create / upload dialog
         if _click_any(page, CREATE_BUTTON_SELECTORS, timeout=3_000):
             page.wait_for_timeout(1_000)
@@ -105,11 +99,45 @@ def initiate_upload(page: Page, video_path: str, channel_id: str | None = None) 
 
         page.wait_for_timeout(1_000)
 
-    if not file_input:
-        file_input = _find_file_input(page, timeout=10_000)
+    # 2. Upload video file via file chooser or direct input
+    resolved_path = str(Path(video_path).resolve())
+    logger.info(f"[YouTube] Uploading video file ({resolved_path})...")
+    uploaded = False
 
-    logger.info("[YouTube] Uploading video file...")
-    file_input.set_input_files(str(Path(video_path).resolve()), timeout=30_000)
+    # Strategy A: Use expect_file_chooser clicking "Select files"
+    try:
+        select_btn = page.locator("#select-files-button, ytcp-button#select-files-button, ytcp-button:has-text('Select files')").first
+        if select_btn.count() and select_btn.is_visible():
+            with page.expect_file_chooser(timeout=8_000) as fc_info:
+                select_btn.click(timeout=4_000)
+            file_chooser = fc_info.value
+            file_chooser.set_files(resolved_path)
+            uploaded = True
+            logger.info("[YouTube] File set via Playwright FileChooser successfully.")
+    except Exception as e:
+        logger.info(f"[YouTube] FileChooser fallback: {e}")
+
+    # Strategy B: Direct input targeting inside active dialog or last input
+    if not uploaded:
+        for selector in (
+            "ytcp-uploads-dialog input[type='file']",
+            "#select-files-button input[type='file']",
+            "input[type='file'][name='Filedata']",
+            "input[type='file']"
+        ):
+            try:
+                inputs = page.locator(selector)
+                cnt = inputs.count()
+                if cnt > 0:
+                    inputs.nth(cnt - 1).set_input_files(resolved_path, timeout=10_000)
+                    uploaded = True
+                    logger.info(f"[YouTube] File set via input selector '{selector}' successfully.")
+                    break
+            except Exception as ex:
+                logger.debug(f"[YouTube] Selector '{selector}' failed: {ex}")
+
+    if not uploaded:
+        raise TimeoutError("Could not upload video file to YouTube Studio upload dialog.")
 
     logger.info("[YouTube] Processing upload...")
     

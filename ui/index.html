@@ -943,9 +943,30 @@
               <label style="font-size:12px; color:var(--text-muted); margin-top:8px;">Caption / Description</label>
               <textarea id="publish-input-caption" rows="4" style="width:100%; padding:8px 12px; border:1px solid var(--border-light); border-radius:4px; font-family:inherit;"></textarea>
               
-              <div style="display:flex; gap:16px; margin-top:10px;">
-                <label style="display:flex; align-items:center; gap:6px; font-weight:600;"><input type="checkbox" id="pub-platform-yt" checked> YouTube Shorts</label>
-                <label style="display:flex; align-items:center; gap:6px; font-weight:600;"><input type="checkbox" id="pub-platform-ig" checked> Instagram Reels</label>
+              <div style="margin-top:14px;">
+                <label style="font-size:12px; font-weight:600; color:var(--text-muted); display:block; margin-bottom:8px;">Publish Destination</label>
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+                  <label style="display:flex; align-items:center; gap:10px; padding:12px 14px; background:var(--bg-panel-inset); border:1px solid var(--border-light); border-radius:8px; cursor:pointer; user-select:none;">
+                    <input type="checkbox" id="pub-platform-yt" checked style="width:18px; height:18px; accent-color:#ef4444; cursor:pointer;">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                      <i class="ri-youtube-fill" style="color:#ef4444; font-size:1.3rem;"></i>
+                      <div>
+                        <div style="font-weight:600; font-size:13px; color:var(--text-main);">YouTube Shorts</div>
+                        <div style="font-size:11px; color:var(--text-muted);">Post to channel</div>
+                      </div>
+                    </div>
+                  </label>
+                  <label style="display:flex; align-items:center; gap:10px; padding:12px 14px; background:var(--bg-panel-inset); border:1px solid var(--border-light); border-radius:8px; cursor:pointer; user-select:none;">
+                    <input type="checkbox" id="pub-platform-ig" style="width:18px; height:18px; accent-color:#e1306c; cursor:pointer;">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                      <i class="ri-instagram-fill" style="color:#e1306c; font-size:1.3rem;"></i>
+                      <div>
+                        <div style="font-weight:600; font-size:13px; color:var(--text-main);">Instagram Reels</div>
+                        <div style="font-size:11px; color:var(--text-muted);">Post to Instagram</div>
+                      </div>
+                    </div>
+                  </label>
+                </div>
               </div>
             </div>
           </div>

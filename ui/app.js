@@ -3407,16 +3407,17 @@ document.addEventListener("DOMContentLoaded", () => {
     // Publish Single Clip
     if (e.target.closest('.btn-publish')) {
       const btn = e.target.closest('.btn-publish');
-      const clipPath = btn.getAttribute('data-clip');
+      const clipPath = btn.getAttribute('data-clip') || '';
       let products = [];
-      try { products = JSON.parse(btn.getAttribute('data-products') || '[]'); } catch(e) {}
+      try { products = JSON.parse(btn.getAttribute('data-products') || '[]'); } catch(err) {}
       
       const card = btn.closest('.clip-card');
-      const title = card ? card.querySelector('.clip-title').textContent : 'Viral Clip';
-      const caption = card ? card.querySelector('.clip-caption').textContent : 'Check out this awesome clip! #viral #fyp';
+      const title = (card?.querySelector('.clip-title')?.textContent || '').trim() || 'Viral Clip';
+      const caption = (card?.querySelector('.clip-caption')?.textContent || '').trim() || title;
       
-      const parts = clipPath.split('/');
-      if (parts.length < 3) return;
+      const cleanPath = clipPath.replace(/\\/g, '/');
+      const parts = cleanPath.split('/').filter(Boolean);
+      if (parts.length < 2) return;
       const jobId = parts[parts.length - 2];
       const filename = parts[parts.length - 1];
       
@@ -3428,46 +3429,61 @@ document.addEventListener("DOMContentLoaded", () => {
       
       // Show modal for single manual publish
       const modal = document.getElementById('modal-publish');
+      if (!modal) return;
+      
       const selectionView = document.getElementById('publish-selection-view');
       const progressView = document.getElementById('publish-progress-view');
       
-      // Sync checkboxes with global settings
-      document.getElementById('chk-pub-instagram').checked = document.getElementById('opt-instagram')?.checked ?? true;
-      document.getElementById('chk-pub-youtube').checked = document.getElementById('opt-youtube')?.checked ?? true;
+      // Populate inputs with clip data
+      const titleInput = document.getElementById('publish-input-title');
+      const captionInput = document.getElementById('publish-input-caption');
+      if (titleInput) titleInput.value = title;
+      if (captionInput) captionInput.value = caption;
       
-      selectionView.classList.remove('hidden');
-      progressView.classList.add('hidden');
-      document.getElementById('btn-confirm-publish').classList.remove('hidden');
-      document.getElementById('btn-publish-done').classList.add('hidden');
+      // Platform checkboxes (support both ID variants)
+      const chkYt = document.getElementById('pub-platform-yt') || document.getElementById('chk-pub-youtube');
+      const chkIg = document.getElementById('pub-platform-ig') || document.getElementById('chk-pub-instagram');
+      if (chkYt) chkYt.checked = document.getElementById('opt-youtube')?.checked ?? true;
+      if (chkIg) chkIg.checked = document.getElementById('opt-instagram')?.checked ?? true;
+      
+      if (selectionView) selectionView.classList.remove('hidden');
+      if (progressView) progressView.classList.add('hidden');
+      document.getElementById('btn-confirm-publish')?.classList.remove('hidden');
+      document.getElementById('btn-publish-done')?.classList.add('hidden');
       modal.classList.remove('hidden');
       
       const btnConfirm = document.getElementById('btn-confirm-publish');
-      const newBtnConfirm = btnConfirm.cloneNode(true);
-      btnConfirm.parentNode.replaceChild(newBtnConfirm, btnConfirm);
-      
-      newBtnConfirm.addEventListener('click', () => {
-        const doIg = document.getElementById('chk-pub-instagram').checked;
-        const doYt = document.getElementById('chk-pub-youtube').checked;
-        const platforms = [];
-        if(doIg) platforms.push('instagram');
-        if(doYt) platforms.push('youtube');
+      if (btnConfirm) {
+        const newBtnConfirm = btnConfirm.cloneNode(true);
+        btnConfirm.parentNode.replaceChild(newBtnConfirm, btnConfirm);
         
-        if(platforms.length === 0) {
-          Toast.show('Please select at least one platform (YouTube or Instagram).', 'warning');
-          return;
-        }
-        
-        selectionView.classList.add('hidden');
-        progressView.classList.remove('hidden');
-        document.getElementById('btn-confirm-publish').classList.add('hidden');
-        document.getElementById('publish-progress-status').textContent = 'Starting upload...';
-        document.getElementById('publish-progress-percent').textContent = '0%';
-        document.getElementById('publish-progress-fill').style.width = '0%';
-        document.getElementById('publish-console-output').innerHTML = '';
-        document.getElementById('btn-publish-done').classList.add('hidden');
-        
-        executePublish(jobId, filename, title, caption, products, platforms, btn, true);
-      });
+        newBtnConfirm.addEventListener('click', () => {
+          const doYt = (document.getElementById('pub-platform-yt') || document.getElementById('chk-pub-youtube'))?.checked ?? false;
+          const doIg = (document.getElementById('pub-platform-ig') || document.getElementById('chk-pub-instagram'))?.checked ?? false;
+          const platforms = [];
+          if (doYt) platforms.push('youtube');
+          if (doIg) platforms.push('instagram');
+          
+          if (platforms.length === 0) {
+            Toast.show('Please select at least one platform (YouTube Shorts or Instagram Reels).', 'warning');
+            return;
+          }
+          
+          const chosenTitle = (document.getElementById('publish-input-title')?.value || title).trim();
+          const chosenCaption = (document.getElementById('publish-input-caption')?.value || caption).trim();
+          
+          if (selectionView) selectionView.classList.add('hidden');
+          if (progressView) progressView.classList.remove('hidden');
+          newBtnConfirm.classList.add('hidden');
+          document.getElementById('publish-progress-status').textContent = 'Starting upload...';
+          document.getElementById('publish-progress-percent').textContent = '0%';
+          document.getElementById('publish-progress-fill').style.width = '0%';
+          document.getElementById('publish-console-output').innerHTML = '';
+          document.getElementById('btn-publish-done')?.classList.add('hidden');
+          
+          executePublish(jobId, filename, chosenTitle, chosenCaption, products, platforms, btn, true);
+        });
+      }
     }
   });
 
@@ -3718,7 +3734,15 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Handle modal close
   document.getElementById('btn-close-publish-modal')?.addEventListener('click', () => {
-    document.getElementById('modal-publish').classList.add('hidden');
+    document.getElementById('modal-publish')?.classList.add('hidden');
+  });
+  document.getElementById('btn-publish-done')?.addEventListener('click', () => {
+    document.getElementById('modal-publish')?.classList.add('hidden');
+  });
+  document.getElementById('modal-publish')?.addEventListener('click', (e) => {
+    if (e.target.id === 'modal-publish') {
+      document.getElementById('modal-publish')?.classList.add('hidden');
+    }
   });
 
   // On page load: populate script job selector, characters, covers, and load scripts
