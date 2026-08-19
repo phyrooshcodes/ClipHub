@@ -193,12 +193,25 @@ def _wait_for_login(page: Page) -> None:
 
 def _launch_persistent_context(playwright, user_data_dir: str, headless: bool, viewport: dict) -> BrowserContext:
     """Launch persistent context, automatically installing chromium if missing."""
+    kwargs = {
+        "user_data_dir": str(Path(user_data_dir).resolve()),
+        "headless": headless,
+        "viewport": None if not headless else viewport,
+        "ignore_default_args": ["--enable-automation"],
+        "args": [
+            "--disable-blink-features=AutomationControlled",
+            "--no-sandbox",
+            "--disable-infobars",
+            "--disable-dev-shm-usage",
+            "--no-default-browser-check",
+            "--no-first-run",
+            "--start-maximized",
+            "--window-position=50,50",
+            "--window-size=1366,850",
+        ],
+    }
     try:
-        return playwright.chromium.launch_persistent_context(
-            user_data_dir=user_data_dir,
-            headless=headless,
-            viewport=viewport,
-        )
+        return playwright.chromium.launch_persistent_context(**kwargs)
     except Exception as exc:
         exc_str = str(exc)
         if "Executable doesn't exist" in exc_str or "playwright install" in exc_str:
@@ -208,11 +221,7 @@ def _launch_persistent_context(playwright, user_data_dir: str, headless: bool, v
                 import subprocess
                 subprocess.run([sys.executable, "-m", "playwright", "install", "chromium"], check=True)
                 logger.info("[Instagram] Playwright Chromium installed successfully. Retrying launch...")
-                return playwright.chromium.launch_persistent_context(
-                    user_data_dir=user_data_dir,
-                    headless=headless,
-                    viewport=viewport,
-                )
+                return playwright.chromium.launch_persistent_context(**kwargs)
             except Exception as install_exc:
                 logger.error("[Instagram] Failed to automatically install Playwright Chromium: %s", install_exc)
                 raise exc

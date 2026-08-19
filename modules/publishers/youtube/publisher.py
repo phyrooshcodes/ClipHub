@@ -230,7 +230,7 @@ def _launch_persistent_context(playwright, user_data_dir: str, headless: bool, v
     kwargs = {
         "user_data_dir": str(Path(user_data_dir).resolve()),
         "headless": headless,
-        "viewport": viewport,
+        "viewport": None if not headless else viewport,
         "ignore_default_args": ["--enable-automation"],
         "args": [
             "--disable-blink-features=AutomationControlled",
@@ -239,6 +239,9 @@ def _launch_persistent_context(playwright, user_data_dir: str, headless: bool, v
             "--disable-dev-shm-usage",
             "--no-default-browser-check",
             "--no-first-run",
+            "--start-maximized",
+            "--window-position=50,50",
+            "--window-size=1366,850",
         ],
         "user_agent": user_agent_str,
     }
@@ -420,8 +423,10 @@ def connect_youtube_playwright() -> bool:
             )
             page = context.pages[0] if context.pages else context.new_page()
 
-            page.goto("https://studio.youtube.com/", wait_until="domcontentloaded", timeout=60_000)
-            logger.info("[YouTube] Waiting for user to log in...")
+            ch_id = get_youtube_channel_info().get("channel_id") or "UCHOWUiZgG8c6XLWG7XuK11A"
+            start_url = f"https://studio.youtube.com/channel/{ch_id}"
+            page.goto(start_url, wait_until="domcontentloaded", timeout=60_000)
+            logger.info("[YouTube] Waiting for user to log in on %s...", start_url)
 
             deadline = time.monotonic() + 300.0
             logged_in = False
