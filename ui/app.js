@@ -2207,12 +2207,12 @@ document.addEventListener("DOMContentLoaded", () => {
       if (data.type === 'start') {
         updateProgress(null, "Warming up pipeline", 15);
         appendLog(`<span class="log-highlight">[System]</span> Connected to pipeline. Warming up...`);
+        startThinkingTimer();
         liveChainOfThoughts = [{
           time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
           text: `[Pipeline Initialized] Job ${jobId} warming up AI reasoning models...`
         }];
-        const liveDot = document.getElementById('live-thought-dot');
-        if (liveDot) liveDot.classList.remove('hidden');
+        renderScriptPreview(null);
       } else if (data.type === 'stage' || data.type === 'substage') {
         // The backend parses the pipeline's real log markers into these
         // events.  This is the canonical progress source for uploaded files.
@@ -2243,9 +2243,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
         liveChainOfThoughts.unshift({ time: timeStr, text: rawText });
         if (liveChainOfThoughts.length > 50) liveChainOfThoughts.pop();
-        const liveDot = document.getElementById('live-thought-dot');
-        if (liveDot) liveDot.classList.remove('hidden');
-        if (currentThoughtTab === 'live') {
+        if (currentJobId && typeof pipelineDone !== 'undefined' && !pipelineDone) {
           renderScriptPreview(currentLoadedScript);
         }
       } else if (data.type === 'clip_start') {
@@ -2314,6 +2312,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       } else if (data.type === 'done') {
         clearInterval(scriptPoll);
+        stopThinkingTimer();
         fetchJobScript(jobId);
         if (!data.success) {
           appendLog('[Error] Pipeline failed. Check the preceding log entries.');
@@ -2378,20 +2377,50 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // ─── LLM THOUGHT PROCESS & COGNITIVE REASONING ───────────
-  let currentThoughtTab = 'cognitive';
+  // ─── CHATGPT & CLAUDE STYLE THINKING MODEL ENGINE ─────────
   let liveChainOfThoughts = [];
+  let thinkingStartTime = null;
+  let thinkingTimerInterval = null;
 
-  // Bind tabs in LLM Thought Process panel
-  const thoughtTabs = document.querySelectorAll('#thought-process-tabs button');
-  thoughtTabs.forEach(tab => {
-    tab.addEventListener('click', () => {
-      thoughtTabs.forEach(t => t.classList.remove('active'));
-      tab.classList.add('active');
-      currentThoughtTab = tab.getAttribute('data-thought-tab') || 'cognitive';
-      renderScriptPreview(currentLoadedScript);
-    });
-  });
+  function startThinkingTimer() {
+    if (thinkingTimerInterval) clearInterval(thinkingTimerInterval);
+    thinkingStartTime = Date.now();
+    const timerBadge = document.getElementById('thinking-timer-badge');
+    const statusIcon = document.getElementById('thinking-status-icon');
+    if (statusIcon) statusIcon.classList.add('active');
+    
+    thinkingTimerInterval = setInterval(() => {
+      if (!thinkingStartTime) return;
+      const elapsedSec = ((Date.now() - thinkingStartTime) / 1000).toFixed(1);
+      if (timerBadge) {
+        timerBadge.textContent = `Thinking (${elapsedSec}s)...`;
+        timerBadge.classList.add('active');
+      }
+    }, 200);
+  }
+
+  function stopThinkingTimer(finalDurationSeconds) {
+    if (thinkingTimerInterval) {
+      clearInterval(thinkingTimerInterval);
+      thinkingTimerInterval = null;
+    }
+    const timerBadge = document.getElementById('thinking-timer-badge');
+    const statusIcon = document.getElementById('thinking-status-icon');
+    if (statusIcon) statusIcon.classList.remove('active');
+    
+    if (timerBadge) {
+      timerBadge.classList.remove('active');
+      if (typeof finalDurationSeconds === 'number' && finalDurationSeconds > 0) {
+        timerBadge.textContent = `Thought for ${finalDurationSeconds.toFixed(1)}s`;
+      } else if (thinkingStartTime) {
+        const elapsedSec = ((Date.now() - thinkingStartTime) / 1000).toFixed(1);
+        timerBadge.textContent = `Thought for ${elapsedSec}s`;
+      } else {
+        timerBadge.textContent = 'Completed';
+      }
+    }
+    thinkingStartTime = null;
+  }
 
   // Bind change listeners to script job selectors
   const jobSel = document.getElementById('script-job-selector');
@@ -2481,185 +2510,120 @@ document.addEventListener("DOMContentLoaded", () => {
     const container = document.getElementById('review-cards-container');
     if (!container) return;
 
-    // TAB 3: LIVE CHAIN OF THOUGHT FEED
-    if (currentThoughtTab === 'live') {
-      if (!liveChainOfThoughts || liveChainOfThoughts.length === 0) {
-        container.innerHTML = `
-          <div class="empty-script" style="padding:30px 15px;">
-            <div class="empty-icon"><i class="ri-pulse-line"></i></div>
-            <h4>Chain of Thought Ready</h4>
-            <p>Real-time cognitive thinking logs from Gemini / Qwen / local models will stream here as soon as processing starts.</p>
-          </div>
-        `;
-        return;
+    const isJobActive = currentJobId && typeof pipelineDone !== 'undefined' && !pipelineDone;
+
+    // 1. If currently processing: render real-time live streaming thoughts with typing cursor
+    if (isJobActive) {
+      let liveHtml = '<div class="thought-stream-container thinking-live">';
+      liveHtml += `<p class="thought-prose-p"><em>Analyzing video transcript and identifying viral hook structures...</em><span class="thought-cursor"></span></p>`;
+      
+      if (liveChainOfThoughts && liveChainOfThoughts.length > 0) {
+        liveChainOfThoughts.slice(0, 8).forEach(item => {
+          let clean = escapeHtml(item.text);
+          clean = clean.replace(/(\[.*?\])/g, '<strong>$1</strong>');
+          liveHtml += `
+            <div class="thought-live-item">
+              <span class="dot">›</span>
+              <span>${clean}</span>
+            </div>
+          `;
+        });
       }
-      let html = '<div class="chain-of-thought-feed">';
-      liveChainOfThoughts.forEach(item => {
-        let formattedText = escapeHtml(item.text);
-        formattedText = formattedText.replace(/(\[.*?\])/g, '<strong>$1</strong>');
-        html += `
-          <div class="chain-thought-item">
-            <span class="chain-thought-time">${item.time}</span>
-            <div class="chain-thought-body">${formattedText}</div>
-          </div>
-        `;
-      });
-      html += '</div>';
-      container.innerHTML = html;
+      
+      liveHtml += '</div>';
+      container.innerHTML = liveHtml;
       return;
     }
 
-    // If no metadata is loaded yet:
+    // 2. If no metadata / empty state:
     if (!metadata || metadata.length === 0) {
-      if (currentJobId && typeof pipelineDone !== 'undefined' && !pipelineDone) {
-        container.innerHTML = `
-          <div class="thinking-radar-box">
-            <div class="thinking-neural-pulse"><i class="ri-brain-line"></i></div>
-            <div>
-              <h4 style="font-size:0.95rem; font-weight:700; color:var(--text-main); margin-bottom:4px;">LLM Analyzing Transcript...</h4>
-              <p style="font-size:0.8rem; color:var(--text-muted); max-width:280px; margin:0 auto; line-height:1.4;">
-                Extracting virality peaks, evaluating retention hooks, and synthesizing Kai mentorship narratives.
-              </p>
-            </div>
-          </div>
-        `;
-      } else {
-        container.innerHTML = `
-          <div class="empty-script">
-            <div class="empty-icon"><i class="ri-brain-line"></i></div>
-            <h4>No Thought Process Data</h4>
-            <p>Select a completed job above or run a video to inspect the AI's deep virality reasoning and coaching rationale.</p>
-          </div>
-        `;
-      }
+      container.innerHTML = `
+        <div class="thinking-idle-box">
+          <i class="ri-brain-line"></i>
+          <span>Thinking stream will activate when video analysis begins.</span>
+        </div>
+      `;
+      const timerBadge = document.getElementById('thinking-timer-badge');
+      if (timerBadge) timerBadge.textContent = 'Idle';
       return;
     }
 
-    // TAB 1: COGNITIVE REASONING & STRATEGY (Default)
-    if (currentThoughtTab === 'cognitive') {
-      let html = '';
-      metadata.forEach((clip, idx) => {
-        const startSec = (clip.start_ms || 0) / 1000;
-        const endSec = (clip.end_ms || 0) / 1000;
-        const timeStr = `${Math.floor(startSec / 60)}:${Math.floor(startSec % 60).toString().padStart(2, '0')} - ${Math.floor(endSec / 60)}:${Math.floor(endSec % 60).toString().padStart(2, '0')}`;
-        
-        const scoreVal = clip.viral_score || clip.hook_score || 9.5;
-        const scoreFormatted = typeof scoreVal === 'number' ? scoreVal.toFixed(1) : scoreVal;
-        const hookType = clip.hook_type || 'Reframe / Validation';
-        
-        const rawTitle = clip.title || clip.clip_title || (`Viral Insight #${idx + 1}`);
-        const cleanTitle = rawTitle.replace(/^(?:clip[_\s\-]*\d+[_\s\-]*|\d+[\.\:\-]\s*)+/i, '').trim() || rawTitle;
-
-        const reasonText = clip.hook_explanation || clip.reason || clip.description || 'Identified high-retention conversational shift with high emotional resonance for short-form viewers.';
-        const kaiWhyText = clip.kai_why || 'Reframes complex topic into an actionable, empathetic breakthrough designed to empower and focus lost or overwhelmed viewers.';
-        const socialCaption = clip.social_caption || '';
-
-        html += `
-          <div class="cognitive-card">
-            <div class="cognitive-card-header">
-              <div style="display:flex; align-items:center; gap:8px;">
-                <span class="clip-num-badge" style="background:rgba(168,85,247,0.15); color:#c084fc; border:1px solid rgba(168,85,247,0.3); padding:2px 8px; border-radius:8px; font-weight:700; font-size:0.72rem;">Clip #${idx + 1}</span>
-                <strong style="color:#f3f4f6; font-size:0.88rem;">${escapeHtml(cleanTitle)}</strong>
-              </div>
-              <div style="display:flex; align-items:center; gap:6px;">
-                <span style="font-size:0.72rem; color:var(--text-muted);"><i class="ri-time-line"></i> ${timeStr}</span>
-                <span class="cognitive-score-pill"><i class="ri-fire-fill"></i> ${scoreFormatted}/10</span>
-                <span class="cognitive-hook-type-pill"><i class="ri-flashlight-fill"></i> ${escapeHtml(hookType)}</span>
-              </div>
-            </div>
-
-            <!-- 🧠 Why this clip is viral (LLM Rationale) -->
-            <div class="cognitive-box rationale-box">
-              <div class="cognitive-box-label">
-                <i class="ri-lightbulb-flash-line"></i> Why This Clip is Viral (LLM Rationale)
-              </div>
-              <p class="cognitive-box-text">${escapeHtml(reasonText)}</p>
-            </div>
-
-            <!-- 💡 Presenter Coaching Objective (Kai Why) -->
-            <div class="cognitive-box kai-box">
-              <div class="cognitive-box-label">
-                <i class="ri-user-star-line"></i> Presenter's Coaching &amp; Empathy Angle
-              </div>
-              <p class="cognitive-box-text">${escapeHtml(kaiWhyText)}</p>
-            </div>
-
-            ${socialCaption ? `
-              <!-- 📱 Social Strategy & Caption -->
-              <div class="cognitive-box social-box">
-                <div class="cognitive-box-label">
-                  <i class="ri-hashtag"></i> Viral Social Hook &amp; Keywords
-                </div>
-                <p class="cognitive-box-text" style="font-size:0.8rem; color:#bae6fd;">${escapeHtml(socialCaption)}</p>
-              </div>
-            ` : ''}
-          </div>
-        `;
-      });
-      container.innerHTML = html;
-      return;
+    // 3. Render ChatGPT / Claude style structured thought process
+    const timerBadge = document.getElementById('thinking-timer-badge');
+    if (timerBadge && (!thinkingTimerInterval)) {
+      timerBadge.textContent = `Thought for ~${metadata.length * 3.5}s`;
     }
 
-    // TAB 2: SPOKEN SCRIPTS (Hook Intro & Outro Breakdown)
-    if (currentThoughtTab === 'dialogues') {
-      let html = '';
-      metadata.forEach((clip, idx) => {
-        const startSec = (clip.start_ms || 0) / 1000;
-        const endSec = (clip.end_ms || 0) / 1000;
-        const timeStr = `${Math.floor(startSec / 60)}:${Math.floor(startSec % 60).toString().padStart(2, '0')} - ${Math.floor(endSec / 60)}:${Math.floor(endSec % 60).toString().padStart(2, '0')}`;
-        const rawTitle = clip.title || clip.clip_title || (`Clip #${idx + 1}`);
-        const cleanTitle = rawTitle.replace(/^(?:clip[_\s\-]*\d+[_\s\-]*|\d+[\.\:\-]\s*)+/i, '').trim() || rawTitle;
+    let html = '<div class="thought-stream-container">';
+    html += `
+      <p class="thought-prose-p">
+        <em>Understanding video semantic structure &amp; psychological audience retention...</em><br>
+        Scanned transcript to isolate high-energy contrarian shifts, emotional resonance peaks, and concise self-improvement breakthroughs.
+      </p>
+    `;
 
-        let hookText = '';
-        let closingText = '';
+    metadata.forEach((clip, idx) => {
+      const startSec = (clip.start_ms || 0) / 1000;
+      const endSec = (clip.end_ms || 0) / 1000;
+      const timeStr = `${Math.floor(startSec / 60)}:${Math.floor(startSec % 60).toString().padStart(2, '0')} - ${Math.floor(endSec / 60)}:${Math.floor(endSec % 60).toString().padStart(2, '0')}`;
+      const scoreVal = clip.viral_score || clip.hook_score || 9.5;
+      const scoreFormatted = typeof scoreVal === 'number' ? scoreVal.toFixed(1) : scoreVal;
+      const hookType = clip.hook_type || 'Reframe / Validation';
 
-        if (clip.editorial_data) {
-          hookText = typeof clip.editorial_data.hook === 'object' ? (clip.editorial_data.hook?.text || '') : (clip.editorial_data.hook || '');
-          closingText = clip.editorial_data.closing_explanation || '';
-          if (!closingText && clip.editorial_data.commentary_segments && clip.editorial_data.commentary_segments.length > 0) {
-            closingText = clip.editorial_data.commentary_segments.map(s => s.text || '').filter(Boolean).join(' ');
-          }
+      const rawTitle = clip.title || clip.clip_title || (`Viral Insight #${idx + 1}`);
+      const cleanTitle = rawTitle.replace(/^(?:clip[_\s\-]*\d+[_\s\-]*|\d+[\.\:\-]\s*)+/i, '').trim() || rawTitle;
+
+      const reasonText = clip.hook_explanation || clip.reason || clip.description || '';
+      const kaiWhyText = clip.kai_why || '';
+
+      let hookText = '';
+      let closingText = '';
+      if (clip.editorial_data) {
+        hookText = typeof clip.editorial_data.hook === 'object' ? (clip.editorial_data.hook?.text || '') : (clip.editorial_data.hook || '');
+        closingText = clip.editorial_data.closing_explanation || '';
+        if (!closingText && clip.editorial_data.commentary_segments && clip.editorial_data.commentary_segments.length > 0) {
+          closingText = clip.editorial_data.commentary_segments.map(s => s.text || '').join(' ');
         }
+      }
+      if (!hookText && clip.hook_text) hookText = clip.hook_text;
+      if (!closingText && clip.commentary_text) closingText = clip.commentary_text;
 
-        if (!hookText && clip.hook_text) hookText = clip.hook_text;
-        if (!closingText && clip.commentary_text) closingText = clip.commentary_text;
-
-        html += `
-          <div class="cognitive-card">
-            <div class="cognitive-card-header">
-              <div style="display:flex; align-items:center; gap:8px;">
-                <span class="clip-num-badge" style="background:rgba(99, 102, 241, 0.15); color:#818cf8; border:1px solid rgba(99, 102, 241, 0.3); padding:2px 8px; border-radius:8px; font-weight:700; font-size:0.72rem;">Clip #${idx + 1}</span>
-                <strong style="color:#f3f4f6; font-size:0.88rem;">${escapeHtml(cleanTitle)}</strong>
-              </div>
-              <span style="font-size:0.75rem; color:#9ca3af;"><i class="ri-time-line"></i> ${timeStr}</span>
-            </div>
-
-            ${hookText ? `
-              <div class="cognitive-box dialogue-hook-box">
-                <div class="cognitive-box-label">
-                  <i class="ri-mic-line"></i> Opening Hook (Presenter Frame 0 Intro)
-                </div>
-                <p class="cognitive-box-text">"${escapeHtml(hookText)}"</p>
-              </div>
-            ` : ''}
-
-            <div style="padding:6px 12px; background:rgba(255,255,255,0.03); border-radius:6px; font-size:0.78rem; color:var(--text-muted); display:flex; align-items:center; gap:6px;">
-              <i class="ri-user-voice-line"></i> <span>Speaker completes complex explanation in mid-clip (${timeStr})</span>
-            </div>
-
-            ${closingText ? `
-              <div class="cognitive-box dialogue-closing-box">
-                <div class="cognitive-box-label">
-                  <i class="ri-chat-voice-line"></i> Closing Simplification (Presenter Outro Breakdown)
-                </div>
-                <p class="cognitive-box-text">"${escapeHtml(closingText)}"</p>
-              </div>
-            ` : ''}
+      html += `
+        <div class="thought-clip-card">
+          <div class="thought-clip-header">
+            <span class="thought-clip-title">Clip #${idx + 1}: ${escapeHtml(cleanTitle)}</span>
+            <span class="thought-badge-score">${scoreFormatted}/10 · ${escapeHtml(hookType)}</span>
           </div>
-        `;
-      });
-      container.innerHTML = html;
-    }
+
+          ${reasonText ? `
+            <p class="thought-prose-p" style="font-size:12px; color:#cbd5e1;">
+              <strong>Selection Rationale:</strong> ${escapeHtml(reasonText)}
+            </p>
+          ` : ''}
+
+          ${kaiWhyText ? `
+            <p class="thought-prose-p" style="font-size:12px; color:#94a3b8;">
+              <strong>Presenter Coaching Strategy:</strong> ${escapeHtml(kaiWhyText)}
+            </p>
+          ` : ''}
+
+          ${hookText ? `
+            <div class="thought-quote-line">
+              <span class="label">Opening Hook:</span> "${escapeHtml(hookText)}"
+            </div>
+          ` : ''}
+
+          ${closingText ? `
+            <div class="thought-quote-line">
+              <span class="label" style="color:#34d399;">Closing Breakdown:</span> "${escapeHtml(closingText)}"
+            </div>
+          ` : ''}
+        </div>
+      `;
+    });
+
+    html += '</div>';
+    container.innerHTML = html;
   }
 
   function renderFullscreenScriptCards(metadata) {
@@ -2669,7 +2633,7 @@ document.addEventListener("DOMContentLoaded", () => {
       container.innerHTML = `
         <div class="empty-script" style="padding: 40px; text-align: center;">
           <div class="empty-icon" style="font-size: 36px; margin-bottom: 12px;"><i class="ri-brain-line"></i></div>
-          <h4 style="font-size: 1.1rem; color: var(--text-main);">No Matching Cognitive Records Found</h4>
+          <h4 style="font-size: 1.1rem; color: var(--text-main);">No Matching Thinking Records Found</h4>
           <p style="color: var(--text-muted);">Try adjusting your search query or select another job from the dropdown.</p>
         </div>
       `;
@@ -2715,49 +2679,47 @@ document.addEventListener("DOMContentLoaded", () => {
             </div>
             <div style="display: flex; align-items: center; gap: 8px;">
               <span style="font-size: 0.82rem; color: var(--text-muted);"><i class="ri-time-line"></i> ${timeStr}</span>
-              <span class="cognitive-score-pill"><i class="ri-fire-fill"></i> Score: ${scoreFormatted}/10</span>
-              <span class="cognitive-hook-type-pill"><i class="ri-flashlight-fill"></i> ${escapeHtml(hookType)}</span>
+              <span class="thought-badge-score">${scoreFormatted}/10 · ${escapeHtml(hookType)}</span>
             </div>
           </div>
 
           <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:8px;">
             ${reasonText ? `
-              <div class="cognitive-box rationale-box">
-                <div class="cognitive-box-label"><i class="ri-lightbulb-flash-line"></i> LLM Selection Rationale</div>
-                <p class="cognitive-box-text">${escapeHtml(reasonText)}</p>
+              <div class="thought-clip-card" style="margin:0;">
+                <span class="thought-quote-line"><span class="label">Selection Rationale:</span></span>
+                <p class="thought-prose-p" style="color:#cbd5e1;">${escapeHtml(reasonText)}</p>
               </div>
             ` : ''}
 
             ${kaiWhyText ? `
-              <div class="cognitive-box kai-box">
-                <div class="cognitive-box-label"><i class="ri-user-star-line"></i> Presenter Coaching Intent</div>
-                <p class="cognitive-box-text">${escapeHtml(kaiWhyText)}</p>
+              <div class="thought-clip-card" style="margin:0;">
+                <span class="thought-quote-line"><span class="label">Presenter Coaching Strategy:</span></span>
+                <p class="thought-prose-p" style="color:#94a3b8;">${escapeHtml(kaiWhyText)}</p>
               </div>
             ` : ''}
           </div>
 
           ${hookText ? `
-            <div class="fs-dialogue-block fs-dialogue-hook" style="margin-top:10px;">
-              <div class="fs-dialogue-label" style="color: #818cf8;">
-                <i class="ri-mic-line"></i> <span>Opening Hook (Frame 0 Intro Dialogue)</span>
+            <div class="thought-clip-card" style="margin-top:10px;">
+              <div class="thought-quote-line">
+                <span class="label">Opening Hook (Frame 0 Intro Dialogue):</span> "${escapeHtml(hookText)}"
               </div>
-              <p class="fs-dialogue-text">"${escapeHtml(hookText)}"</p>
             </div>
           ` : ''}
 
           ${closingText ? `
-            <div class="fs-dialogue-block fs-dialogue-comm" style="margin-top:10px;">
-              <div class="fs-dialogue-label" style="color: #34d399;">
-                <i class="ri-chat-voice-line"></i> <span>Closing Simplification (Outro Dialogue Breakdown)</span>
+            <div class="thought-clip-card" style="margin-top:10px;">
+              <div class="thought-quote-line">
+                <span class="label" style="color: #34d399;">Closing Simplification (Outro Dialogue Breakdown):</span> "${escapeHtml(closingText)}"
               </div>
-              <p class="fs-dialogue-text">"${escapeHtml(closingText)}"</p>
             </div>
           ` : ''}
 
           ${socialCaption ? `
-            <div class="cognitive-box social-box" style="margin-top:10px;">
-              <div class="cognitive-box-label"><i class="ri-hashtag"></i> Generated Social Metadata &amp; Keywords</div>
-              <p class="cognitive-box-text" style="font-size:0.82rem; color:#bae6fd;">${escapeHtml(socialCaption)}</p>
+            <div class="thought-clip-card" style="margin-top:10px;">
+              <div class="thought-quote-line">
+                <span class="label" style="color: #38bdf8;">Generated Social Metadata:</span> ${escapeHtml(socialCaption)}
+              </div>
             </div>
           ` : ''}
         </div>

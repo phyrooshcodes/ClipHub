@@ -144,34 +144,32 @@
           </div>
         </div>
 
-        <!-- TOP RIGHT: LLM Thought Process & Cognitive Brain -->
-        <div class="panel panel-script" id="section-human-review">
-          <div class="panel-header between">
-            <div class="panel-header-title">
-              <i class="ri-brain-line" style="color:var(--brand-purple); font-size:18px;"></i>
-              <h3>LLM THOUGHT PROCESS</h3>
-              <span class="header-pill" style="font-size:10px; background:rgba(168,85,247,0.15); color:#c084fc; border:1px solid rgba(168,85,247,0.3); margin-left:6px;"><i class="ri-sparkling-fill"></i> Cognitive Rationale</span>
+        <!-- TOP RIGHT: AI Thinking Process (ChatGPT / Claude Style) -->
+        <div class="panel panel-script panel-thinking-model" id="section-human-review">
+          <div class="panel-header between thinking-panel-header">
+            <div class="thinking-header-left">
+              <div class="thinking-brain-icon-wrapper" id="thinking-status-icon">
+                <i class="ri-sparkling-2-line"></i>
+              </div>
+              <div class="thinking-title-group">
+                <span class="thinking-title">Thinking Process</span>
+                <span class="thinking-timer" id="thinking-timer-badge">Idle</span>
+              </div>
             </div>
-            <div style="display:flex; align-items:center; gap:8px;">
-              <select class="script-job-select" id="script-job-selector" title="Select Job to Inspect LLM Thought Process">
-                <option value="">Loading thought data...</option>
+            <div class="thinking-header-right">
+              <select class="script-job-select" id="script-job-selector" title="Select Video Job">
+                <option value="">Select previous job...</option>
               </select>
-              <button id="btn-fullscreen-script" title="Expand Fullscreen Cognitive Analysis">
+              <button id="btn-fullscreen-script" class="btn-thinking-tool" title="Expand Fullscreen Thought Process">
                 <i class="ri-fullscreen-line"></i>
               </button>
             </div>
           </div>
-          <div class="panel-tabs" id="thought-process-tabs">
-            <button class="tab active" id="tab-llm-cognitive" data-thought-tab="cognitive"><i class="ri-brain-line"></i> COGNITIVE REASONING</button>
-            <button class="tab" id="tab-llm-dialogues" data-thought-tab="dialogues"><i class="ri-chat-voice-line"></i> SPOKEN SCRIPTS</button>
-            <button class="tab" id="tab-llm-live" data-thought-tab="live"><i class="ri-pulse-line"></i> CHAIN OF THOUGHT <span id="live-thought-dot" class="live-pulse-dot hidden"></span></button>
-          </div>
-          <div class="script-content" id="review-cards-container" style="padding:15px; max-height:420px; overflow-y:auto;">
-            <!-- Thought Process / Script segments will be injected here dynamically by app.js -->
-            <div class="empty-script">
-              <div class="empty-icon"><i class="ri-brain-line"></i></div>
-              <h4>No Thought Process Selected</h4>
-              <p>Select a job from the dropdown above or run a video to inspect real-time LLM cognitive reasoning, hook virality analysis, and AI persona strategy.</p>
+          
+          <div class="thinking-content-body" id="review-cards-container">
+            <div class="thinking-idle-box">
+              <i class="ri-brain-line"></i>
+              <span>Thinking will stream in real-time when clipping starts.</span>
             </div>
           </div>
         </div>

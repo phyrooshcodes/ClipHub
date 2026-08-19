@@ -2320,205 +2320,240 @@ body.dark-theme .tag {
   color: var(--text-main);
 }
 
-/* ─── LLM THOUGHT PROCESS & COGNITIVE REASONING ─── */
-.cognitive-card {
-  background: rgba(18, 18, 24, 0.85);
-  border: 1px solid rgba(168, 85, 247, 0.2);
-  border-radius: 12px;
+/* ─── CHATGPT & CLAUDE STYLE THINKING PROCESS ─── */
+.panel-thinking-model {
+  display: flex;
+  flex-direction: column;
+}
+
+.thinking-panel-header {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-light);
+  background: var(--bg-panel);
+}
+
+.thinking-header-left {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.thinking-brain-icon-wrapper {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: rgba(168, 85, 247, 0.12);
+  border: 1px solid rgba(168, 85, 247, 0.25);
+  color: #c084fc;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.thinking-brain-icon-wrapper.active {
+  animation: thinkingPulse 2s infinite ease-in-out;
+  border-color: rgba(168, 85, 247, 0.6);
+  color: #e9d5ff;
+}
+
+@keyframes thinkingPulse {
+  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(168, 85, 247, 0.4); }
+  50% { transform: scale(1.05); box-shadow: 0 0 12px 2px rgba(168, 85, 247, 0.35); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(168, 85, 247, 0); }
+}
+
+.thinking-title-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.thinking-title {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-main);
+  letter-spacing: -0.2px;
+}
+
+.thinking-timer {
+  font-size: 10.5px;
+  font-family: var(--font-mono), monospace;
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.04);
+  padding: 2px 7px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.thinking-timer.active {
+  color: #c084fc;
+  background: rgba(168, 85, 247, 0.12);
+  border-color: rgba(168, 85, 247, 0.3);
+}
+
+.thinking-header-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn-thinking-tool {
+  background: transparent;
+  border: 1px solid var(--border-light);
+  color: var(--text-secondary);
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.15s ease;
+}
+
+.btn-thinking-tool:hover {
+  background: var(--bg-hover);
+  color: var(--brand-purple);
+  border-color: var(--brand-purple);
+}
+
+.thinking-content-body {
   padding: 14px 16px;
-  margin-bottom: 14px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+  max-height: 420px;
+  overflow-y: auto;
+  background: rgba(12, 13, 17, 0.65);
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
+.thinking-idle-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 16px;
+  text-align: center;
+  color: var(--text-muted);
+  gap: 8px;
+}
+
+.thinking-idle-box i {
+  font-size: 24px;
+  color: var(--text-muted);
+  opacity: 0.6;
+}
+
+.thought-stream-container {
+  border-left: 2px solid rgba(255, 255, 255, 0.12);
+  padding-left: 14px;
+  margin-left: 4px;
   display: flex;
   flex-direction: column;
   gap: 10px;
-  transition: all 0.2s ease;
-  position: relative;
-  overflow: hidden;
 }
 
-.cognitive-card:hover {
-  border-color: rgba(168, 85, 247, 0.45);
-  box-shadow: 0 6px 24px rgba(168, 85, 247, 0.15);
-  transform: translateY(-1px);
+.thought-stream-container.thinking-live {
+  border-left-color: rgba(168, 85, 247, 0.4);
 }
 
-.cognitive-card-header {
+.thought-prose-p {
+  margin: 0;
+  color: #94a3b8;
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.thought-prose-p strong {
+  color: #f1f5f9;
+  font-weight: 600;
+}
+
+.thought-prose-p em {
+  color: #c084fc;
+  font-style: italic;
+}
+
+.thought-clip-card {
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin: 6px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.thought-clip-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding-bottom: 10px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  gap: 8px;
   flex-wrap: wrap;
-  gap: 8px;
 }
 
-.cognitive-score-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  background: linear-gradient(135deg, rgba(245, 158, 11, 0.15) 0%, rgba(239, 68, 68, 0.15) 100%);
-  border: 1px solid rgba(245, 158, 11, 0.35);
+.thought-clip-title {
+  font-weight: 600;
+  color: #f8fafc;
+  font-size: 12.5px;
+}
+
+.thought-badge-score {
+  font-size: 10.5px;
+  font-weight: 600;
   color: #fbbf24;
-  font-weight: 700;
-  font-size: 0.74rem;
-  padding: 2px 8px;
-  border-radius: 20px;
+  background: rgba(245, 158, 11, 0.12);
+  padding: 1px 6px;
+  border-radius: 4px;
 }
 
-.cognitive-hook-type-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  background: rgba(168, 85, 247, 0.12);
-  border: 1px solid rgba(168, 85, 247, 0.3);
-  color: #c084fc;
-  font-size: 0.72rem;
-  font-weight: 700;
-  padding: 2px 8px;
-  border-radius: 6px;
-  letter-spacing: 0.3px;
-}
-
-.cognitive-box {
-  padding: 10px 12px;
-  border-radius: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-
-.cognitive-box.rationale-box {
-  background: linear-gradient(135deg, rgba(139, 92, 246, 0.08) 0%, rgba(99, 102, 241, 0.04) 100%);
-  border-left: 3.5px solid #8b5cf6;
-}
-
-.cognitive-box.kai-box {
-  background: linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(6, 182, 212, 0.04) 100%);
-  border-left: 3.5px solid #10b981;
-}
-
-.cognitive-box.social-box {
-  background: linear-gradient(135deg, rgba(56, 189, 248, 0.08) 0%, rgba(99, 102, 241, 0.04) 100%);
-  border-left: 3.5px solid #38bdf8;
-}
-
-.cognitive-box.dialogue-hook-box {
-  background: rgba(99, 102, 241, 0.08);
-  border-left: 3.5px solid #6366f1;
-}
-
-.cognitive-box.dialogue-closing-box {
-  background: rgba(52, 211, 153, 0.08);
-  border-left: 3.5px solid #34d399;
-}
-
-.cognitive-box-label {
-  font-size: 0.68rem;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.6px;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-
-.rationale-box .cognitive-box-label { color: #a78bfa; }
-.kai-box .cognitive-box-label { color: #34d399; }
-.social-box .cognitive-box-label { color: #38bdf8; }
-.dialogue-hook-box .cognitive-box-label { color: #818cf8; }
-.dialogue-closing-box .cognitive-box-label { color: #34d399; }
-
-.cognitive-box-text {
-  margin: 0;
-  font-size: 0.84rem;
-  line-height: 1.48;
+.thought-quote-line {
+  font-size: 12px;
   color: #e2e8f0;
+  line-height: 1.45;
 }
 
-.live-pulse-dot {
-  display: inline-block;
-  width: 7px;
-  height: 7px;
-  background: #a855f7;
-  border-radius: 50%;
-  box-shadow: 0 0 8px #a855f7;
-  animation: liveDotPulse 1.5s infinite;
-  vertical-align: middle;
-  margin-left: 4px;
+.thought-quote-line .label {
+  color: #818cf8;
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin-right: 4px;
 }
 
-@keyframes liveDotPulse {
-  0% { transform: scale(0.9); opacity: 0.6; }
-  50% { transform: scale(1.3); opacity: 1; box-shadow: 0 0 12px #c084fc; }
-  100% { transform: scale(0.9); opacity: 0.6; }
-}
-
-.chain-of-thought-feed {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  font-family: 'JetBrains Mono', 'Fira Code', var(--font-mono), monospace;
-  font-size: 0.8rem;
-}
-
-.chain-thought-item {
-  background: rgba(15, 23, 42, 0.6);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-left: 3px solid var(--brand-purple);
-  border-radius: 6px;
-  padding: 8px 12px;
+.thought-live-item {
   color: #cbd5e1;
+  font-size: 12px;
   display: flex;
-  gap: 10px;
   align-items: flex-start;
-  line-height: 1.4;
+  gap: 6px;
 }
 
-.chain-thought-time {
-  color: var(--text-muted);
-  font-size: 0.72rem;
-  flex-shrink: 0;
-  padding-top: 1px;
+.thought-live-item .dot {
+  color: #a855f7;
+  font-size: 14px;
+  line-height: 1;
 }
 
-.chain-thought-body {
-  flex: 1;
+.thought-cursor {
+  display: inline-block;
+  width: 6px;
+  height: 13px;
+  background: #a855f7;
+  animation: cursorBlink 1s infinite;
+  vertical-align: middle;
+  margin-left: 3px;
 }
 
-.chain-thought-body strong {
-  color: #c084fc;
-}
-
-/* Thinking Radar Animation Box */
-.thinking-radar-box {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 36px 20px;
-  text-align: center;
-  gap: 14px;
-}
-
-.thinking-neural-pulse {
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(168, 85, 247, 0.3) 0%, rgba(168, 85, 247, 0.05) 70%);
-  border: 1.5px solid rgba(168, 85, 247, 0.4);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 26px;
-  color: #c084fc;
-  box-shadow: 0 0 24px rgba(168, 85, 247, 0.35);
-  animation: neuralWave 2s infinite ease-in-out;
-}
-
-@keyframes neuralWave {
-  0% { transform: scale(0.95); box-shadow: 0 0 12px rgba(168, 85, 247, 0.2); }
-  50% { transform: scale(1.08); box-shadow: 0 0 28px rgba(168, 85, 247, 0.6); }
-  100% { transform: scale(0.95); box-shadow: 0 0 12px rgba(168, 85, 247, 0.2); }
+@keyframes cursorBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
 }
 
 /* Terminate Job Action */
