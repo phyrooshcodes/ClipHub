@@ -330,8 +330,8 @@ def adjust_clip_to_sentences(
         dur_so_far = words[i]["end"] - words[curr_start_idx]["start"]
         if (ends_with_punc or large_gap or i == len(words) - 1):
             curr_end_idx = i
-            # Stop expanding once we reach 42s — this is the hard max for the source clip
-            if dur_so_far >= 42.0:
+            # Stop expanding once we reach 58s — maximum budget for viral short form
+            if dur_so_far >= 58.0:
                 break
             
     new_start_ms = int(words[curr_start_idx]["start"] * 1000)
@@ -426,15 +426,24 @@ def _validate_and_clamp_clips(
             logger.warning(f"[HookDetector] 🚫 Discarding meta-intro/preview clip: '{clip.get('title', 'Untitled')}' ({start/1000:.1f}s)")
             continue
 
-        # Enforce 30–42s source clip budget (leaves room for Kai's ~8s hook + ~18s closing ≤ 65s total)
+        # Enforce viral clip budget (18s to 60s)
         duration = end - start
-        min_allowed = min(30000, max_ms)  # 30 seconds minimum host dialogue
+        min_allowed = min(18000, max_ms)
         if duration < min_allowed:
-            logger.warning(f"[HookDetector] Discarding clip too short ({duration/1000:.1f}s < 30s): {clip.get('title', 'Untitled')}")
+            logger.warning(f"[HookDetector] Discarding clip too short ({duration/1000:.1f}s < 18s): {clip.get('title', 'Untitled')}")
             continue
-        if duration > 42000:
-            logger.warning(f"[HookDetector] Discarding clip too long ({duration/1000:.1f}s > 42s budget): {clip.get('title', 'Untitled')}")
-            continue
+        if duration > 60000:
+            # Clamp long clips to sentence boundary under 60s
+            target_end = start + 58000
+            for w in reversed(words):
+                w_end_ms = int(w["end"] * 1000)
+                if start + 20000 <= w_end_ms <= target_end and any(w["word"].endswith(p) for p in (".", "?", "!")):
+                    end = w_end_ms + 150
+                    break
+            else:
+                end = target_end
+            duration = end - start
+            logger.info(f"[HookDetector] Clamped long clip to {duration/1000:.1f}s: {clip.get('title', 'Untitled')}")
             
         clip["start_ms"] = start
         clip["end_ms"] = end
