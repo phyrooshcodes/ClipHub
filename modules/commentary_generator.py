@@ -148,7 +148,7 @@ Never repeat what the speaker said. Never force a statement. Only speak when it 
                         {"role": "user", "content": user_prompt}
                     ],
                     temperature=0.65,
-                    max_tokens=1024,
+                    max_tokens=2048,
                     stream=True,
                     timeout=35.0
                 )

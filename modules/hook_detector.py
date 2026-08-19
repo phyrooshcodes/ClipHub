@@ -145,13 +145,13 @@ Now {max_clips_instruction}.
 
 
 # ─── Output Sizing ───────────────────────────────────────────
-_TOKENS_PER_CLIP = 260
-_BASE_TOKENS = 400
-_MAX_OUTPUT_TOKENS = 4096
+_TOKENS_PER_CLIP = 350
+_BASE_TOKENS = 800
+_MAX_OUTPUT_TOKENS = 16384
 
 
 def _size_max_tokens(requested_clip_count: int) -> int:
-    return min(_MAX_OUTPUT_TOKENS, max(1500, requested_clip_count * _TOKENS_PER_CLIP + _BASE_TOKENS))
+    return min(_MAX_OUTPUT_TOKENS, max(3000, requested_clip_count * _TOKENS_PER_CLIP + _BASE_TOKENS))
 
 
 # ─── Client Initialization ──────────────────────────────────
@@ -480,7 +480,7 @@ def detect_hooks(
     
     smartest_models = NVIDIA_NIM_MODELS
     client = _get_client()
-    full_max_tokens = max(2048, min(8192, effective_max_clips * 400))
+    full_max_tokens = 16384 if is_auto else max(4096, min(16384, effective_max_clips * 600))
     
     for m in smartest_models:
         try:
