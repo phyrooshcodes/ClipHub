@@ -572,10 +572,17 @@ def _deduplicate_clips(clips: List[Dict], max_clips: int) -> List[Dict]:
 def _parse_json_response(raw: str) -> List[Dict]:
     """
     Robustly parse a JSON list from the LLM response.
-    Handles direct arrays [...], or object-wrapped structures like {"clips": [...]},
-    or markdown fences.
+    Handles <think>...</think> tags, markdown fences, direct arrays,
+    and object-wrapped structures.
     """
-    cleaned = re.sub(r"```(?:json)?", "", raw).strip()
+    # 1. Isolate content after thinking block if present
+    post_think = raw
+    if "</think>" in raw:
+        post_think = raw.split("</think>", 1)[1]
+    else:
+        post_think = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL)
+
+    cleaned = re.sub(r"```(?:json)?", "", post_think).strip()
     cleaned = cleaned.strip("`").strip()
 
     # Try direct parse first
@@ -593,29 +600,42 @@ def _parse_json_response(raw: str) -> List[Dict]:
     except Exception:
         pass
 
-    # Try finding [ or {
-    start_arr = cleaned.find("[")
-    start_obj = cleaned.find("{")
-    
-    if start_arr != -1 and (start_obj == -1 or start_arr < start_obj):
+    # Try finding [ or { across cleaned string
+    for start_char, end_char in [("[", "]"), ("{", "}")]:
+        start_idx = cleaned.find(start_char)
+        last_idx = cleaned.rfind(end_char)
+        if start_idx != -1 and last_idx != -1 and last_idx > start_idx:
+            chunk = cleaned[start_idx:last_idx + 1]
+            try:
+                parsed = json.loads(chunk)
+                if isinstance(parsed, list):
+                    return parsed
+                if isinstance(parsed, dict):
+                    for key in ("clips", "moments", "viral_clips", "results", "data"):
+                        if key in parsed and isinstance(parsed[key], list):
+                            return parsed[key]
+                    for v in parsed.values():
+                        if isinstance(v, list):
+                            return v
+            except Exception:
+                try:
+                    obj, _ = json.JSONDecoder().raw_decode(cleaned, start_idx)
+                    if isinstance(obj, list):
+                        return obj
+                    if isinstance(obj, dict):
+                        for key in ("clips", "moments", "viral_clips", "results", "data"):
+                            if key in obj and isinstance(obj[key], list):
+                                return obj[key]
+                except Exception:
+                    pass
+
+    # Final fallback: search anywhere in full raw text
+    for m in re.finditer(r'\[\s*\{.*?\}\s*\]', raw, re.DOTALL):
         try:
-            clips, _ = json.JSONDecoder().raw_decode(cleaned, start_arr)
-            if isinstance(clips, list):
-                return clips
+            parsed = json.loads(m.group(0))
+            if isinstance(parsed, list) and len(parsed) > 0:
+                return parsed
         except Exception:
             pass
 
-    if start_obj != -1:
-        try:
-            obj, _ = json.JSONDecoder().raw_decode(cleaned, start_obj)
-            if isinstance(obj, dict):
-                for key in ("clips", "moments", "viral_clips", "results", "data"):
-                    if key in obj and isinstance(obj[key], list):
-                        return obj[key]
-                for v in obj.values():
-                    if isinstance(v, list):
-                        return v
-        except Exception:
-            pass
-
-    raise ValueError(f"No valid JSON array or object found in LLM response: {raw[:120]}...")
+    return []
