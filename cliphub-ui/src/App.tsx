@@ -69,7 +69,7 @@ function Sidebar({ page, setPage, clipCount }: { page: Page; setPage: (p: Page) 
 
 // ── Config Defaults ───────────────────────────────────────────────────────
 const DEFAULT_CONFIG = {
-  model: 'small', max_clips: 8,
+  model: 'small', max_clips: 0,
   caption_style: 'kinetic_slide', font_preset: 'default',
   font_size: 48, primary_color: '#FFFFFF', outline_color: '#000000',
   no_title: false, language: '', phase: 'all',
@@ -187,7 +187,8 @@ function UploadPage({ onJobStart }: { onJobStart: (jobId: string, filename: stri
           <div className="config-field">
             <label className="config-label">Max Clips</label>
             <select className="select-dark" value={config.max_clips} onChange={e => cfg('max_clips', Number(e.target.value))}>
-              {[3,5,8,10,15,20].map(n => <option key={n} value={n}>{n}</option>)}
+              <option value={0}>Auto (All Viral Clips)</option>
+              {[3,5,8,10,15,20,30,50].map(n => <option key={n} value={n}>{n} clips</option>)}
             </select>
           </div>
           <div className="config-field">

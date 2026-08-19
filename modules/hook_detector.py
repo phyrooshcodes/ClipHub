@@ -465,17 +465,17 @@ def detect_hooks(
         return []
 
     is_auto = (max_clips == 0)
-    effective_max_clips = 50 if is_auto else max_clips
+    effective_max_clips = 100 if is_auto else max_clips
 
     logger.info(
         f"[HookDetector] Video duration: {video_duration_seconds:.1f}s ({video_duration_seconds/60:.1f}m). "
-        f"Processing entire transcript with 128k LLM in a single holistic query (effective_max_clips={effective_max_clips}) ..."
+        f"Processing entire transcript with 128k LLM in a single holistic query (effective_max_clips={'ALL' if is_auto else effective_max_clips}) ..."
     )
     from modules.transcriber import words_to_timed_transcript
     full_tx = words_to_timed_transcript(words)
     
     if is_auto:
-        max_clips_instruction = "identify all truly viral clip moments (anywhere from 2 to 50 moments, depending on the richness and depth of the content)"
+        max_clips_instruction = "identify EVERY SINGLE truly viral clip moment across the entire transcript. Do NOT artificially limit or cap your output — deliver every moment that has strong curiosity, high retention, or actionable value (extract all valid viral moments from beginning to end)"
     else:
         max_clips_instruction = f"identify the top {effective_max_clips} viral clip moments (standalone 30-65 second moments)"
 
@@ -517,7 +517,7 @@ def detect_hooks(
                     for clip in valid_clips:
                         if raw_thinking and "llm_thinking" not in clip:
                             clip["llm_thinking"] = raw_thinking
-                    valid_clips = sorted(valid_clips, key=lambda x: x.get("hook_score", 0.0), reverse=True)[:effective_max_clips]
+                    valid_clips = sorted(valid_clips, key=lambda x: x.get("hook_score", 0.0), reverse=True)[:effective_max_clips if not is_auto else None]
                     logger.info(f"[HookDetector] ✅ Full-transcript query with {m} successfully extracted {len(valid_clips)} viral clips.")
                     for i, clip in enumerate(valid_clips, 1):
                         start_s = clip["start_ms"] / 1000
@@ -575,7 +575,7 @@ def _deduplicate_clips(clips: List[Dict], max_clips: int) -> List[Dict]:
         if not overlap_found:
             deduped.append(c)
 
-    return sorted(deduped, key=lambda c: c.get("hook_score", 0), reverse=True)[:max_clips]
+    return sorted(deduped, key=lambda c: c.get("hook_score", 0), reverse=True)[:max_clips if max_clips > 0 else None]
 
 
 def _parse_json_response(raw: str) -> List[Dict]:
@@ -647,4 +647,4 @@ def _parse_json_response(raw: str) -> List[Dict]:
         except Exception:
             pass
 
-    return []
+    raise ValueError(f"No valid JSON array or object found in LLM response: {raw[:120]}...")

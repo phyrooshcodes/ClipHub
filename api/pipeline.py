@@ -314,7 +314,7 @@ from typing import Literal, Optional, List, Dict, Any
 
 class JobConfigModel(BaseModel):
     model: Literal["tiny", "base", "small"] = "small"
-    max_clips: int = Field(default=10, ge=1, le=30)
+    max_clips: int = Field(default=0, ge=0, le=100)
     caption_style: str = "kinetic_slide"
     font_preset: Literal["default", "hormozi", "beast", "minimal"] = "default"
     font_name: str = ""
@@ -593,7 +593,7 @@ async def run_pipeline_ws(websocket: WebSocket, job_id: str):
             python_exe, str(BASE_DIR / "local_clipping_pipeline.py"),
             "--input", job.path, "--output-dir", str(job_dir),
             "--model", config.get("model", "small"),
-            "--max-clips", str(config.get("max_clips", 10)),
+            "--max-clips", str(config.get("max_clips", 0)),
             "--caption-style", config.get("caption_style", "aftereffect_preset"),
             "--font-preset", config.get("font_preset", "default"),
             "--font-name", config.get("font_name", ""),

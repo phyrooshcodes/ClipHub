@@ -100,9 +100,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--max-clips",
         type=int,
-        default=10,
+        default=0,
         metavar="N",
-        help="Maximum number of clips to generate. Range: 1-30. Default: 10"
+        help="Maximum number of clips to generate. 0 = Auto (Extract and render all viral clips). Default: 0"
     )
     parser.add_argument(
         "--keep-temp",

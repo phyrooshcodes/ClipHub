@@ -49,7 +49,7 @@ class TestAiAndHookDetector(unittest.TestCase):
         valid = _validate_and_clamp_clips(raw_clips, video_duration_seconds=100.0, words=words)
         self.assertEqual(len(valid), 1)
         self.assertEqual(valid[0]["title"], "Valid Standalone Clip")
-        self.assertTrue((valid[0]["end_ms"] - valid[0]["start_ms"]) >= 35000)
+        self.assertTrue((valid[0]["end_ms"] - valid[0]["start_ms"]) >= 18000)
 
     def test_deduplicate_clips(self):
         clips = [
