@@ -140,6 +140,18 @@ def render_60fps_avatar_segment(
     av_bgr = avatar_scaled[:, :, :3]
     av_alpha_orig = (avatar_scaled[:, :, 3].astype(np.float32) / 255.0)
 
+    stderr_chunks = []
+    def _drain_stderr():
+        try:
+            for line in iter(proc.stderr.readline, b""):
+                stderr_chunks.append(line)
+        except Exception:
+            pass
+
+    import threading
+    t_err = threading.Thread(target=_drain_stderr, daemon=True)
+    t_err.start()
+
     try:
         for i in range(total_frames):
             t_curr = i / fps
@@ -181,10 +193,11 @@ def render_60fps_avatar_segment(
             proc.stdin.write(frame_out.tobytes())
 
         proc.stdin.close()
-        stderr_output = proc.stderr.read().decode("utf-8", errors="ignore")
         proc.wait()
+        t_err.join(timeout=2.0)
 
         if proc.returncode != 0:
+            stderr_output = b"".join(stderr_chunks).decode("utf-8", errors="ignore")
             logger.error(f"[AvatarAnimator] FFmpeg returned error {proc.returncode}: {stderr_output}")
             return False
 
@@ -281,7 +294,7 @@ def _build_ffmpeg_pipe_cmd(
         "-vcodec", "rawvideo",
         "-s", "1080x1920",
         "-pix_fmt", "bgr24",
-        "-r", str(int(fps)),
+        "-framerate", str(int(fps)),
         "-i", "-",
         "-i", audio_path
     ]
