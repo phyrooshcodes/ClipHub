@@ -51,7 +51,9 @@ def render_clip(
     subtitle_path: str, music_choice: Optional[Dict[str, Any]] = None, clip_index: int = 0,
     encoder: str = "auto", editorial_data: Optional[Dict[str, Any]] = None,
     commentary_voice: str = "af_sarah", intro_duration: float = 2.5,
-    ai_audio_events: List[Dict[str, Any]] = None
+    ai_audio_events: List[Dict[str, Any]] = None,
+    character: Optional[str] = None,
+    avatar_path: Optional[str] = None
 ):
     ai_audio_events = ai_audio_events or []
     
@@ -71,8 +73,10 @@ def render_clip(
     click_sfx_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "assets", "sfx", "mouse_click.mp3"))
     has_click_sfx = os.path.exists(click_sfx_path)
 
-    avatar_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "assets", "avatars", "anime_presenter.png"))
-    has_avatar = os.path.exists(avatar_path)
+    if not avatar_path:
+        from modules.character_manager import resolve_character_path
+        avatar_path = resolve_character_path(character)
+    has_avatar = bool(avatar_path and os.path.exists(avatar_path))
 
     # Helper to generate smooth 2D balloon floating drift expressions
     def make_balloon_floating_expr(duration: float, is_intro: bool = False, w_av: int = 932, h_av: int = 1400):
@@ -309,7 +313,7 @@ def render_clip(
         except Exception as e:
             if use_nvenc and "nvenc" in str(e).lower():
                 logger.warning("[Renderer] ⚠️ NVENC failed in segmented explainer render. Retrying with CPU encoder...")
-                return render_clip(input_video, output_path, start_ms, end_ms, crop_coords, subtitle_path, music_choice, clip_index, "libx264", editorial_data, commentary_voice, intro_duration, ai_audio_events)
+                return render_clip(input_video, output_path, start_ms, end_ms, crop_coords, subtitle_path, music_choice, clip_index, "libx264", editorial_data, commentary_voice, intro_duration, ai_audio_events, character, avatar_path)
             raise e
 
         # 5. Generate pristine clean 1080x1920 cover thumbnail image
@@ -450,7 +454,7 @@ def render_clip(
     except Exception as e:
         if use_nvenc and "nvenc" in str(e).lower():
             logger.warning("[Renderer] ⚠️ NVENC hardware encoder failed. Falling back to CPU encoder...")
-            return render_clip(input_video, output_path, start_ms, end_ms, crop_coords, subtitle_path, music_choice, clip_index, "libx264", editorial_data, commentary_voice, intro_duration, ai_audio_events)
+            return render_clip(input_video, output_path, start_ms, end_ms, crop_coords, subtitle_path, music_choice, clip_index, "libx264", editorial_data, commentary_voice, intro_duration, ai_audio_events, character, avatar_path)
         raise e
     finally:
         if use_dynamic and 'sendcmd_path' in locals() and os.path.exists(sendcmd_path):

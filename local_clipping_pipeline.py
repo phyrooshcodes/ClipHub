@@ -194,6 +194,11 @@ def parse_args() -> argparse.Namespace:
         help="Voice ID for Kokoro TTS (default: af_sarah)."
     )
     parser.add_argument(
+        "--character",
+        default="anime_presenter.png",
+        help="Presenter character avatar ID or image filename in assets/avatars/ (default: anime_presenter.png)."
+    )
+    parser.add_argument(
         "--intro-duration",
         type=float,
         default=2.5,
@@ -639,7 +644,8 @@ def run_pipeline(args: argparse.Namespace) -> None:
             editorial_data=editorial_data,
             commentary_voice=getattr(args, "commentary_voice", "af_sarah"),
             intro_duration=getattr(args, "intro_duration", 2.5),
-            ai_audio_events=ai_audio_events
+            ai_audio_events=ai_audio_events,
+            character=getattr(args, "character", "anime_presenter.png")
         )
 
         # Keep publishing independent from generation: enqueue only. The

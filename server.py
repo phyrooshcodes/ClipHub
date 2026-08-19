@@ -22,6 +22,7 @@ from dotenv import load_dotenv
 from api.pipeline import router as pipeline_router
 from api.social import router as social_router
 from api.downloads import router as downloads_router
+from api.characters import router as characters_router
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -93,6 +94,7 @@ from fastapi.staticfiles import StaticFiles
 app.include_router(pipeline_router)
 app.include_router(social_router)
 app.include_router(downloads_router)
+app.include_router(characters_router)
 
 # ─── Static Asset Mounts ────────────────────────────────────
 assets_dir = BASE_DIR / "assets"

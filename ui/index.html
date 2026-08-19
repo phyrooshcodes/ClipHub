@@ -480,15 +480,37 @@
                </select>
              </label>
              <label style="display:flex; flex-direction:column; gap:4px; font-size:12px; color:var(--text-muted);">
-               TTS Voice (Kokoro)
-               <select id="config-commentary-voice" style="padding:8px; border:1px solid var(--border-light); border-radius:4px; background:var(--bg-app); font-family:inherit;">
-                 <option value="af_sarah" selected>Sarah (Female — Energetic)</option>
-                 <option value="af_bella">Bella (Female — Warm)</option>
-                 <option value="am_adam">Adam (Male — Deep Narrator)</option>
-                 <option value="am_michael">Michael (Male — Conversational)</option>
-               </select>
-             </label>
-           </div>
+                TTS Voice (Kokoro)
+                <select id="config-commentary-voice" style="padding:8px; border:1px solid var(--border-light); border-radius:4px; background:var(--bg-app); font-family:inherit;">
+                  <option value="af_sarah" selected>Sarah (Female — Energetic)</option>
+                  <option value="af_bella">Bella (Female — Warm)</option>
+                  <option value="am_adam">Adam (Male — Deep Narrator)</option>
+                  <option value="am_michael">Michael (Male — Conversational)</option>
+                </select>
+              </label>
+              <label style="display:flex; flex-direction:column; gap:4px; font-size:12px; color:var(--text-muted);">
+                Active Character Avatar
+                <select id="config-character-select" style="padding:8px; border:1px solid var(--border-light); border-radius:4px; background:var(--bg-app); font-family:inherit;">
+                  <option value="anime_presenter.png">Kai (Anime Sensei)</option>
+                </select>
+              </label>
+            </div>
+            
+            <!-- AI Explainer Character / Avatar Section -->
+            <div style="display:flex; flex-direction:column; gap:8px; margin-top:2px;">
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                  <span style="font-weight:600; font-size:13px; color:var(--text-main);"><i class="ri-user-smile-line" style="color:var(--brand-primary); margin-right:4px;"></i> AI Presenter Characters</span>
+                  <p style="font-size:11px; color:var(--text-muted); margin-top:1px;">Avatars shown during the intro hook and closing breakdown</p>
+                </div>
+                <button type="button" id="btn-upload-character-settings" class="btn-outline-dashed" style="padding:4px 10px; font-size:11.5px; display:flex; align-items:center; gap:5px; cursor:pointer;">
+                  <i class="ri-upload-cloud-2-line" style="color:var(--brand-purple);"></i> Upload Character
+                </button>
+              </div>
+              <div id="settings-characters-grid" class="character-selection-grid" style="margin-top:4px;">
+                <!-- Populated dynamically via JS -->
+              </div>
+            </div>
            
            <div style="display:flex; flex-direction:column; gap:6px;">
              <label style="font-size:12px; color:var(--text-muted);">NVIDIA NIM API Key</label>
@@ -739,6 +761,22 @@
         </div>
         <div class="modal-body" style="padding:20px; max-height:70vh; overflow-y:auto;">
           <div id="caption-studio-main">
+            <!-- 👤 AI Presenter Character Selection Section -->
+            <div id="character-studio-section" class="character-studio-container" style="margin-bottom: 24px;">
+              <div class="character-section-header" style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; padding-bottom:8px; border-bottom:1px solid var(--border-light);">
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <span class="vip-badge-pill" style="background: linear-gradient(135deg, #38bdf8 0%, #818cf8 100%); color:#fff; box-shadow: 0 0 12px rgba(99, 102, 241, 0.4);"><i class="ri-user-smile-fill"></i> AI PRESENTER</span>
+                  <span style="font-size:0.85rem; color:var(--text-main); font-weight:700; letter-spacing:0.3px;">Choose Character / Avatar</span>
+                </div>
+                <button type="button" id="btn-upload-character-studio" class="btn-outline-dashed" style="padding:3px 8px; font-size:11px; display:flex; align-items:center; gap:4px; cursor:pointer;">
+                  <i class="ri-add-line"></i> Upload New Character
+                </button>
+              </div>
+              <div id="studio-characters-grid" class="character-studio-grid">
+                <!-- Character cards rendered dynamically -->
+              </div>
+            </div>
+
             <!-- ⭐ VIP Master Preset Section -->
             <div class="vip-presets-container" style="margin-bottom: 24px;">
               <div class="vip-section-header" style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; padding-bottom:8px; border-bottom:1px solid rgba(255,215,0,0.2);">
@@ -777,6 +815,39 @@
         <div class="modal-footer" style="padding:16px 20px; border-top:1px solid var(--border-light); display:flex; justify-content:space-between; align-items:center;">
           <button id="btn-caption-studio-back" class="btn-outline-dashed" style="padding:8px 16px;">Back</button>
           <button id="btn-caption-studio-proceed" class="btn-primary-gradient" style="padding:10px 28px;"><i class="ri-sparkling-fill"></i> <span id="btn-proceed-modal-text">Generate Clips</span></button>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Upload Character Modal -->
+    <div id="modal-upload-character" class="modal-backdrop hidden">
+      <div class="modal-card" style="max-width: 440px;">
+        <div class="modal-header">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <i class="ri-user-add-line" style="font-size:1.2rem; color:var(--brand-purple);"></i>
+            <h3>Upload Presenter Character</h3>
+          </div>
+          <button class="close-modal" id="btn-close-upload-char-modal"><i class="ri-close-line"></i></button>
+        </div>
+        <div class="modal-body" style="padding:20px; display:flex; flex-direction:column; gap:14px;">
+          <div id="char-upload-preview-box" style="width:100%; height:180px; border:2px dashed var(--border-light); border-radius:10px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; cursor:pointer; background:var(--bg-app); position:relative; overflow:hidden;">
+            <img id="char-upload-preview-img" class="hidden" style="max-height:92%; max-width:92%; object-fit:contain; filter:drop-shadow(0 4px 8px rgba(0,0,0,0.5));" alt="Character Preview">
+            <div id="char-upload-placeholder" style="display:flex; flex-direction:column; align-items:center; gap:6px;">
+              <i class="ri-image-add-line" style="font-size:2rem; color:var(--brand-purple);"></i>
+              <span style="font-size:13px; font-weight:600;">Click to choose character image</span>
+              <small style="color:var(--text-muted);">PNG (transparent cutout recommended), JPG, WEBP</small>
+            </div>
+          </div>
+          <input type="file" id="modal-char-file-input" accept="image/png,image/jpeg,image/webp" class="hidden">
+          
+          <div>
+            <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">Character Name</label>
+            <input type="text" id="modal-char-name-input" placeholder="e.g. Maya (Focus Mentor), Sensei John..." style="width:100%; padding:8px 12px; border:1px solid var(--border-light); border-radius:6px; font-family:inherit; background:var(--bg-card); color:var(--text-main); box-sizing:border-box;">
+          </div>
+        </div>
+        <div class="modal-footer" style="padding:14px 20px; border-top:1px solid var(--border-light); display:flex; justify-content:flex-end; gap:10px;">
+          <button id="btn-cancel-char-upload" class="btn-outline-dashed" style="padding:8px 16px;">Cancel</button>
+          <button id="btn-confirm-char-upload" class="btn-primary-gradient" style="padding:8px 20px;" disabled><i class="ri-check-line"></i> Save Character</button>
         </div>
       </div>
     </div>

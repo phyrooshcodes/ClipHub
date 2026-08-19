@@ -2469,4 +2469,142 @@ body.dark-theme .tag {
   text-shadow: 0 0 20px rgba(0, 255, 255, 0.80), 0 3px 6px rgba(0, 0, 0, 0.9);
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   👤 AI CHARACTER / AVATAR STUDIO & SETTINGS CARDS
+   ═══════════════════════════════════════════════════════════════════════════ */
+.character-studio-grid, .character-selection-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 14px;
+}
+
+.character-card {
+  background: var(--bg-card);
+  border: 1.5px solid var(--border-light);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  position: relative;
+  transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+}
+
+.character-card:hover {
+  border-color: var(--brand-primary);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.character-card.selected {
+  border-color: #818cf8 !important;
+  background: linear-gradient(145deg, rgba(30, 27, 75, 0.6), rgba(15, 23, 42, 0.8)) !important;
+  box-shadow: 0 0 20px rgba(129, 140, 248, 0.35) !important;
+}
+
+.character-card-img-wrap {
+  width: 100%;
+  height: 120px;
+  border-radius: 8px;
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.15) 0%, rgba(0, 0, 0, 0.4) 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 8px;
+  overflow: hidden;
+  position: relative;
+}
+
+.character-card-img {
+  max-width: 90%;
+  max-height: 90%;
+  object-fit: contain;
+  filter: drop-shadow(0 4px 8px rgba(0,0,0,0.5));
+  transition: transform 0.25s ease;
+}
+
+.character-card:hover .character-card-img {
+  transform: scale(1.06);
+}
+
+.character-card-name {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-main);
+  margin-bottom: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.character-card-badge {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 2px 6px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-muted);
+}
+
+.character-card.selected .character-card-badge {
+  background: rgba(129, 140, 248, 0.25);
+  color: #818cf8;
+}
+
+.character-delete-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(239, 68, 68, 0.85);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  border: none;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.2s, transform 0.2s;
+  z-index: 10;
+}
+
+.character-card:hover .character-delete-btn {
+  opacity: 1;
+}
+
+.character-delete-btn:hover {
+  background: #dc2626;
+  transform: scale(1.15);
+}
+
+.character-add-card {
+  border: 1.5px dashed var(--border-light);
+  background: rgba(255, 255, 255, 0.02);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 165px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.character-add-card:hover {
+  border-color: var(--brand-purple);
+  background: rgba(168, 85, 247, 0.06);
+  transform: translateY(-2px);
+}
+
+
 

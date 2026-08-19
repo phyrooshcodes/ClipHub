@@ -508,6 +508,7 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById('modal-settings')?.classList.remove('hidden');
     refreshNvidiaKeyStatus();
     refreshSocialStatus();
+    loadCharacters();
   });
 
   document.getElementById('btn-close-settings')?.addEventListener('click', () => {
@@ -615,6 +616,241 @@ document.addEventListener("DOMContentLoaded", () => {
       localStorage.setItem('cliphub_commentary_voice', e.target.value);
     });
   }
+
+  // ─── Character Management Architecture ────────────────────────
+  let availableCharacters = [];
+  let stagedCharUploadFile = null;
+
+  const configCharacterSelect = document.getElementById('config-character-select');
+  if (configCharacterSelect) {
+    configCharacterSelect.addEventListener('change', (e) => {
+      localStorage.setItem('selectedCharacter', e.target.value);
+      renderSettingsCharactersGrid();
+      renderStudioCharactersGrid();
+    });
+  }
+
+  async function loadCharacters() {
+    try {
+      const res = await fetch('/api/characters');
+      const data = await res.json();
+      if (data && Array.isArray(data.characters)) {
+        availableCharacters = data.characters;
+        renderCharacterSelectDropdown();
+        renderSettingsCharactersGrid();
+        renderStudioCharactersGrid();
+      }
+    } catch (e) {
+      console.error("[Characters] Failed to load characters:", e);
+    }
+  }
+
+  function renderCharacterSelectDropdown() {
+    if (!configCharacterSelect) return;
+    const current = localStorage.getItem('selectedCharacter') || 'anime_presenter.png';
+    configCharacterSelect.innerHTML = '';
+    availableCharacters.forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c.id;
+      opt.textContent = c.name + (c.is_builtin ? ' (Built-in)' : '');
+      if (c.id === current) opt.selected = true;
+      configCharacterSelect.appendChild(opt);
+    });
+  }
+
+  function createCharacterCard(c, isSelected, inStudio = false) {
+    const card = document.createElement('div');
+    card.className = `character-card ${isSelected ? 'selected' : ''}`;
+    card.setAttribute('data-char-id', c.id);
+
+    const badgeText = c.is_builtin ? 'Built-in' : 'Custom';
+    const isCustom = !c.is_builtin;
+
+    card.innerHTML = `
+      ${isCustom && !inStudio ? `<button type="button" class="character-delete-btn" title="Delete Character" data-delete-id="${c.id}"><i class="ri-delete-bin-line"></i></button>` : ''}
+      <div class="character-card-img-wrap">
+        <img src="${c.url}" class="character-card-img" alt="${c.name}">
+      </div>
+      <div class="character-card-name" title="${c.name}">${c.name}</div>
+      <div style="display:flex; align-items:center; justify-content:space-between; width:100%; margin-top:4px;">
+        <span class="character-card-badge">${badgeText}</span>
+        <span class="char-check" style="font-size:12px; font-weight:800; color:${isSelected ? '#818cf8' : 'transparent'};">✓</span>
+      </div>
+    `;
+
+    if (isCustom && !inStudio) {
+      const delBtn = card.querySelector('.character-delete-btn');
+      if (delBtn) {
+        delBtn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          if (confirm(`Are you sure you want to delete character "${c.name}"?`)) {
+            try {
+              const res = await fetch(`/api/characters/${encodeURIComponent(c.id)}`, { method: 'DELETE' });
+              const resData = await res.json();
+              if (resData.success) {
+                Toast.show(`Character "${c.name}" deleted.`, "info");
+                if (localStorage.getItem('selectedCharacter') === c.id) {
+                  localStorage.setItem('selectedCharacter', 'anime_presenter.png');
+                }
+                await loadCharacters();
+              } else {
+                Toast.show(resData.error || "Failed to delete", "error");
+              }
+            } catch (err) {
+              Toast.show("Delete error: " + err.message, "error");
+            }
+          }
+        });
+      }
+    }
+
+    card.addEventListener('click', () => {
+      localStorage.setItem('selectedCharacter', c.id);
+      if (configCharacterSelect) configCharacterSelect.value = c.id;
+      renderSettingsCharactersGrid();
+      renderStudioCharactersGrid();
+      Toast.show(`Presenter: ${c.name}`, "info");
+    });
+
+    return card;
+  }
+
+  function renderSettingsCharactersGrid() {
+    const grid = document.getElementById('settings-characters-grid');
+    if (!grid) return;
+    grid.innerHTML = '';
+    const selected = localStorage.getItem('selectedCharacter') || 'anime_presenter.png';
+
+    availableCharacters.forEach(c => {
+      grid.appendChild(createCharacterCard(c, c.id === selected, false));
+    });
+
+    const addCard = document.createElement('div');
+    addCard.className = 'character-add-card';
+    addCard.innerHTML = `
+      <i class="ri-user-add-line" style="font-size:24px; color:var(--brand-purple);"></i>
+      <span style="font-size:12px; font-weight:600; color:var(--text-main);">Upload Character</span>
+      <small style="font-size:10px; color:var(--text-muted);">PNG, JPG, WEBP</small>
+    `;
+    addCard.addEventListener('click', () => openCharacterUploadModal());
+    grid.appendChild(addCard);
+  }
+
+  function renderStudioCharactersGrid() {
+    const grid = document.getElementById('studio-characters-grid');
+    if (!grid) return;
+    grid.innerHTML = '';
+    const selected = localStorage.getItem('selectedCharacter') || 'anime_presenter.png';
+
+    availableCharacters.forEach(c => {
+      grid.appendChild(createCharacterCard(c, c.id === selected, true));
+    });
+
+    const addCard = document.createElement('div');
+    addCard.className = 'character-add-card';
+    addCard.innerHTML = `
+      <i class="ri-user-add-line" style="font-size:22px; color:var(--brand-purple);"></i>
+      <span style="font-size:11.5px; font-weight:600; color:var(--text-main);">+ Add Character</span>
+      <small style="font-size:10px; color:var(--text-muted);">Upload cutout</small>
+    `;
+    addCard.addEventListener('click', () => openCharacterUploadModal());
+    grid.appendChild(addCard);
+  }
+
+  // Upload Character Modal Controls
+  const modalUploadChar = document.getElementById('modal-upload-character');
+  const modalCharFileInput = document.getElementById('modal-char-file-input');
+  const modalCharNameInput = document.getElementById('modal-char-name-input');
+  const charUploadPreviewBox = document.getElementById('char-upload-preview-box');
+  const charUploadPreviewImg = document.getElementById('char-upload-preview-img');
+  const charUploadPlaceholder = document.getElementById('char-upload-placeholder');
+  const btnConfirmCharUpload = document.getElementById('btn-confirm-char-upload');
+  const btnCancelCharUpload = document.getElementById('btn-cancel-char-upload');
+  const btnCloseUploadCharModal = document.getElementById('btn-close-upload-char-modal');
+
+  function openCharacterUploadModal() {
+    stagedCharUploadFile = null;
+    if (modalCharFileInput) modalCharFileInput.value = '';
+    if (modalCharNameInput) modalCharNameInput.value = '';
+    if (charUploadPreviewImg) {
+      charUploadPreviewImg.src = '';
+      charUploadPreviewImg.classList.add('hidden');
+    }
+    if (charUploadPlaceholder) charUploadPlaceholder.classList.remove('hidden');
+    if (btnConfirmCharUpload) {
+      btnConfirmCharUpload.disabled = true;
+      btnConfirmCharUpload.innerHTML = `<i class="ri-check-line"></i> Save Character`;
+    }
+    if (modalUploadChar) modalUploadChar.classList.remove('hidden');
+  }
+
+  function closeCharacterUploadModal() {
+    if (modalUploadChar) modalUploadChar.classList.add('hidden');
+  }
+
+  btnCancelCharUpload?.addEventListener('click', closeCharacterUploadModal);
+  btnCloseUploadCharModal?.addEventListener('click', closeCharacterUploadModal);
+  document.getElementById('btn-upload-character-settings')?.addEventListener('click', openCharacterUploadModal);
+  document.getElementById('btn-upload-character-studio')?.addEventListener('click', openCharacterUploadModal);
+
+  charUploadPreviewBox?.addEventListener('click', () => {
+    modalCharFileInput?.click();
+  });
+
+  modalCharFileInput?.addEventListener('change', (e) => {
+    if (e.target.files.length) {
+      stagedCharUploadFile = e.target.files[0];
+      const reader = new FileReader();
+      reader.onload = (re) => {
+        if (charUploadPreviewImg) {
+          charUploadPreviewImg.src = re.target.result;
+          charUploadPreviewImg.classList.remove('hidden');
+        }
+        if (charUploadPlaceholder) charUploadPlaceholder.classList.add('hidden');
+      };
+      reader.readAsDataURL(stagedCharUploadFile);
+
+      if (modalCharNameInput && !modalCharNameInput.value.trim()) {
+        const rawName = stagedCharUploadFile.name.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " ");
+        modalCharNameInput.value = rawName.split(" ").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+      }
+      if (btnConfirmCharUpload) btnConfirmCharUpload.disabled = false;
+    }
+  });
+
+  btnConfirmCharUpload?.addEventListener('click', async () => {
+    if (!stagedCharUploadFile) {
+      Toast.show("Please select a character image first.", "error");
+      return;
+    }
+    const charName = modalCharNameInput?.value?.trim() || "";
+    btnConfirmCharUpload.disabled = true;
+    btnConfirmCharUpload.innerHTML = `<i class="ri-loader-4-line spin"></i> Saving...`;
+
+    try {
+      const fd = new FormData();
+      fd.append('file', stagedCharUploadFile);
+      if (charName) fd.append('name', charName);
+
+      const res = await fetch('/api/characters/upload', {
+        method: 'POST',
+        body: fd
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.detail || data.error || "Failed to upload character");
+      }
+
+      Toast.show(`Character "${data.character.name}" saved!`, "success");
+      localStorage.setItem('selectedCharacter', data.character.id);
+      closeCharacterUploadModal();
+      await loadCharacters();
+    } catch (err) {
+      Toast.show("Upload failed: " + err.message, "error");
+      btnConfirmCharUpload.disabled = false;
+      btnConfirmCharUpload.innerHTML = `<i class="ri-check-line"></i> Save Character`;
+    }
+  });
 
   let currentPendingJob = null;
 
@@ -753,14 +989,18 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById('standalone-caption-loading')?.classList.add('hidden');
     document.getElementById('standalone-caption-result')?.classList.add('hidden');
 
+    const charSection = document.getElementById('character-studio-section');
     const btnText = document.getElementById('btn-proceed-modal-text');
     if (isStandaloneTool) {
+      if (charSection) charSection.classList.add('hidden');
       document.getElementById('caption-studio-title').innerHTML = `Add Viral Captions: <span style="color:var(--brand-purple);">Choose Style</span>`;
       document.getElementById('caption-studio-subtitle').textContent = `Select the animation style to burn onto your uploaded clip!`;
       if (btnText) btnText.textContent = `Burn Captions Onto Video`;
     } else {
-      document.getElementById('caption-studio-title').innerHTML = `Step 2: Choose Your <span style="color:var(--brand-purple);">Caption Style</span>`;
-      document.getElementById('caption-studio-subtitle').textContent = `Select a viral typography & animation preset below.`;
+      if (charSection) charSection.classList.remove('hidden');
+      renderStudioCharactersGrid();
+      document.getElementById('caption-studio-title').innerHTML = `Step 2: Choose <span style="color:var(--brand-purple);">Presenter & Style</span>`;
+      document.getElementById('caption-studio-subtitle').textContent = `Select your AI explainer character and motion typography preset below.`;
       const curStyle = localStorage.getItem('captionStyle') || 'aftereffect_preset';
       const curObj = CAPTION_STYLES_DATA.find(s => s.id === curStyle);
       const name = curObj ? curObj.name : 'Selected Style';
@@ -1544,6 +1784,7 @@ document.addEventListener("DOMContentLoaded", () => {
           const captionStyle = localStorage.getItem('captionStyle') || document.getElementById('config-caption-style')?.value || 'aftereffect_preset';
           const commentaryMode = document.getElementById('config-commentary-mode')?.value || 'hook_commentary';
           const commentaryVoice = document.getElementById('config-commentary-voice')?.value || 'af_sarah';
+          const character = localStorage.getItem('selectedCharacter') || document.getElementById('config-character-select')?.value || 'anime_presenter.png';
           try {
             await fetch(`/config/${jobId}`, {
               method: 'POST',
@@ -1553,6 +1794,7 @@ document.addEventListener("DOMContentLoaded", () => {
                  caption_style: captionStyle,
                  commentary_mode: commentaryMode,
                  commentary_voice: commentaryVoice,
+                 character: character,
                  phase: 'all'
               })
             });
@@ -3007,8 +3249,9 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById('modal-publish').classList.add('hidden');
   });
 
-  // On page load: populate script job selector and load scripts
+  // On page load: populate script job selector, characters, and load scripts
   populateScriptJobSelector();
+  loadCharacters();
 
   window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
