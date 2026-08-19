@@ -219,6 +219,30 @@ def render_clip(
                 f"closing={'✓' if closing_ev else '✗'}"
             )
 
+            # ── Segment 0: Universal Cover Flash (0.045s for YouTube Shorts / Reels Frame 0 cover lock) ──
+            resolved_cover = cover_path
+            if resolved_cover is None and cover_choice is not None:
+                from modules.cover_manager import resolve_cover_path
+                resolved_cover = resolve_cover_path(cover_choice)
+
+            if resolved_cover and os.path.exists(resolved_cover):
+                cover_seg_file = os.path.join(temp_segs_dir, f"seg_{seg_idx:02d}_cover.mp4")
+                cmd_cover_seg = [
+                    "ffmpeg", "-y",
+                    "-loop", "1", "-i", resolved_cover,
+                    "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo",
+                    "-vf", "scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:black,setsar=1,fps=60",
+                    "-t", "0.045",
+                ] + enc_args + [
+                    "-c:a", "aac", "-ar", "48000", "-ac", "2", "-b:a", "192k", "-pix_fmt", "yuv420p",
+                    cover_seg_file
+                ]
+                _run_ffmpeg(cmd_cover_seg)
+                if os.path.exists(cover_seg_file) and os.path.getsize(cover_seg_file) > 500:
+                    segment_files.append(cover_seg_file)
+                    seg_idx += 1
+                    logger.info(f"[Renderer] 📸 Prepended universal thumbnail flash segment (0.045s) for automatic YouTube & Reels cover lock.")
+
             # ── Segment 1: Kai Intro Hook (avatar freeze-frame before speaker) ──
             if hook_ev and os.path.exists(hook_ev["audio_path"]):
                 hook_file = os.path.join(temp_segs_dir, f"seg_{seg_idx:02d}_hook.mp4")

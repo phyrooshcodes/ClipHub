@@ -148,7 +148,9 @@ async def _bg_social_post(upload_id: str, job_id: str, clip_filename: str, title
         try:
             from modules.youtube_worker import get_youtube_worker
             worker = get_youtube_worker()
-            worker.enqueue(upload_id, str(video_path), title, caption, [], None, product_recommendations, amazon_store_tag, enable_comment_affiliate, enable_native_shopping, lambda p, m: update_progress("youtube", p, m), allow_duplicate=allow_duplicate)
+            thumb_path = video_path.with_name(f"{video_path.stem}_thumb.jpg")
+            cover_img = str(thumb_path) if thumb_path.exists() else None
+            worker.enqueue(upload_id, str(video_path), title, caption, [], cover_img, product_recommendations, amazon_store_tag, enable_comment_affiliate, enable_native_shopping, lambda p, m: update_progress("youtube", p, m), allow_duplicate=allow_duplicate)
             
             # Poll for completion with bounded 10-minute timeout
             start_poll = time.time()
