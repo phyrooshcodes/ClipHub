@@ -223,48 +223,12 @@ def _clean_stale_chrome_lock(user_data_dir: Path | str):
 
 
 def _launch_persistent_context(playwright, user_data_dir: str, headless: bool, viewport: dict, cdp_port: int | None = None) -> tuple[BrowserContext, Optional[subprocess.Popen]]:
-    """Launch persistent context using system Chrome with anti-bot detection evasions."""
+    """Launch clean, isolated persistent context with anti-bot detection evasions."""
     _clean_stale_chrome_lock(user_data_dir)
 
     user_agent_str = _get_platform_user_agent()
-    system_chrome = _find_system_chrome()
-    if system_chrome:
-        if cdp_port is None:
-            cdp_port = _find_free_port(start=9400)
-            
-        # Use CDP connect — caller picks the port to avoid conflicts
-        port = cdp_port
-        cmd = [
-            system_chrome,
-            f"--user-data-dir={Path(user_data_dir).resolve()}",
-            f"--remote-debugging-port={port}",
-            "--no-first-run",
-            "--no-default-browser-check",
-            "--disable-blink-features=AutomationControlled",
-            "--disable-infobars",
-            "--window-size=1440,1000",
-            f"--user-agent={user_agent_str}",
-            "about:blank",
-        ]
-        if headless:
-            cmd.append("--headless=new")
-
-        proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        time.sleep(3.0)
-        try:
-            browser = playwright.chromium.connect_over_cdp(f"http://localhost:{port}")
-            context = browser.contexts[0] if browser.contexts else browser.new_context(viewport=viewport)
-            return context, proc
-        except Exception as e:
-            logger.warning(f"[YouTube] CDP connect failed on port {port}: {e}, falling back to standard launch...")
-            try:
-                proc.terminate()
-            except Exception:
-                pass
-
-    # Fallback to standard launch
     kwargs = {
-        "user_data_dir": user_data_dir,
+        "user_data_dir": str(Path(user_data_dir).resolve()),
         "headless": headless,
         "viewport": viewport,
         "ignore_default_args": ["--enable-automation"],
@@ -273,14 +237,22 @@ def _launch_persistent_context(playwright, user_data_dir: str, headless: bool, v
             "--no-sandbox",
             "--disable-infobars",
             "--disable-dev-shm-usage",
+            "--no-default-browser-check",
+            "--no-first-run",
         ],
         "user_agent": user_agent_str,
     }
-    if system_chrome:
-        kwargs["executable_path"] = system_chrome
 
-    context = playwright.chromium.launch_persistent_context(**kwargs)
-    return context, None
+    try:
+        context = playwright.chromium.launch_persistent_context(**kwargs)
+        return context, None
+    except Exception as exc:
+        if "Executable doesn't exist" in str(exc):
+            logger.info("[YouTube] Installing Playwright Chromium...")
+            subprocess.run([sys.executable, "-m", "playwright", "install", "chromium"], check=True)
+            context = playwright.chromium.launch_persistent_context(**kwargs)
+            return context, None
+        raise exc
 
 
 def _save_diagnostics(context: BrowserContext, page: Page, reason: str, console_lines: list[str]) -> Path:
@@ -448,7 +420,7 @@ def connect_youtube_playwright() -> bool:
             )
             page = context.pages[0] if context.pages else context.new_page()
 
-            page.goto("https://studio.youtube.com/")
+            page.goto("https://studio.youtube.com/", wait_until="domcontentloaded", timeout=60_000)
             logger.info("[YouTube] Waiting for user to log in...")
 
             deadline = time.monotonic() + 300.0
