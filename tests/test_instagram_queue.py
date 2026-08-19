@@ -45,8 +45,9 @@ class InstagramQueueTests(unittest.TestCase):
         shutil.rmtree(TEST_STATE, ignore_errors=True)
 
     @staticmethod
-    def _successful_upload(_path: str, _caption: str, progress) -> InstagramUploadResult:
-        progress(50, "Mock browser upload")
+    def _successful_upload(_path: str, _caption: str, progress=None, *args, **kwargs) -> InstagramUploadResult:
+        if progress:
+            progress(50, "Mock browser upload")
         return InstagramUploadResult("completed", "https://instagram.com/reel/test")
 
     def test_queue_completes_and_records_history(self) -> None:

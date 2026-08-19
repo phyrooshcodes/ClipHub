@@ -548,9 +548,87 @@ def _dismiss_video_post_reel_notice(page: Page) -> None:
         page.wait_for_timeout(100)
 
 
+def _upload_cover_photo(page: Page, cover_image_path: str) -> bool:
+    """Upload a custom cover photo/thumbnail to Instagram Reel creator."""
+    if not cover_image_path or not os.path.isfile(cover_image_path):
+        return False
+    
+    resolved_cover = str(Path(cover_image_path).resolve())
+    logger.info("[Instagram] Setting custom universal cover photo: %s", resolved_cover)
+    try:
+        # Step 1: Ensure Cover Photo tab is active (if Edit tab layout is shown)
+        cover_tab = page.get_by_role("tab", name=re.compile(r"^Cover photo$", re.I)).first
+        if not cover_tab.count():
+            cover_tab = page.get_by_text(re.compile(r"^Cover photo$", re.I)).first
+        if cover_tab.count() and cover_tab.is_visible():
+            try:
+                cover_tab.click(timeout=2_000)
+            except Exception:
+                pass
+            page.wait_for_timeout(300)
+
+        # Step 2: Search for image file input or "Select from computer" button
+        # Method A: Dedicated file input
+        file_inputs = page.locator('input[type="file"]')
+        for idx in range(file_inputs.count()):
+            f_inp = file_inputs.nth(idx)
+            accept = (f_inp.get_attribute("accept") or "").lower()
+            if any(ext in accept for ext in ["image", "jpg", "jpeg", "png"]):
+                logger.info("[Instagram] Found image file input (accept='%s'). Uploading cover...", accept)
+                f_inp.set_input_files(resolved_cover, timeout=10_000)
+                page.wait_for_timeout(1_000)
+                return True
+
+        # Method B: Click "Select from computer" / "Add from computer" button
+        for btn_label in ("Select from computer", "Add from computer", "Upload cover photo"):
+            btn = page.get_by_role("button", name=re.compile(f"^{re.escape(btn_label)}$", re.I)).first
+            if not btn.count():
+                btn = page.get_by_text(re.compile(f"^{re.escape(btn_label)}$", re.I)).first
+            if btn.count() and btn.is_visible():
+                logger.info("[Instagram] Found '%s' button. Triggering file chooser...", btn_label)
+                try:
+                    with page.expect_file_chooser(timeout=5_000) as fc_info:
+                        btn.click(timeout=2_000)
+                    chooser = fc_info.value
+                    chooser.set_files(resolved_cover)
+                    page.wait_for_timeout(1_000)
+                    logger.info("[Instagram] ✅ Universal cover photo uploaded successfully.")
+                    return True
+                except Exception as fc_err:
+                    logger.warning("[Instagram] File chooser error on '%s': %s", btn_label, fc_err)
+
+        # Method C: If on caption/details screen, look for "Edit cover"
+        edit_cover = page.get_by_text(re.compile(r"^Edit cover$", re.I)).first
+        if not edit_cover.count():
+            edit_cover = page.get_by_role("button", name=re.compile(r"^Edit cover$", re.I)).first
+        if edit_cover.count() and edit_cover.is_visible():
+            logger.info("[Instagram] Found 'Edit cover' button on details screen. Opening modal...")
+            edit_cover.click(timeout=2_000)
+            page.wait_for_timeout(500)
+            for btn_label in ("Select from computer", "Add from computer"):
+                btn = page.get_by_text(re.compile(f"^{re.escape(btn_label)}$", re.I)).first
+                if btn.count() and btn.is_visible():
+                    try:
+                        with page.expect_file_chooser(timeout=5_000) as fc_info:
+                            btn.click(timeout=2_000)
+                        chooser = fc_info.value
+                        chooser.set_files(resolved_cover)
+                        page.wait_for_timeout(1_000)
+                        done = page.get_by_role("button", name=re.compile(r"^(Done|Save)$", re.I)).first
+                        if done.count() and done.is_visible():
+                            done.click(timeout=2_000)
+                        return True
+                    except Exception as err:
+                        logger.warning("[Instagram] Error in Edit Cover dialog: %s", err)
+
+    except Exception as e:
+        logger.warning("[Instagram] Notice while attempting to set universal cover photo: %s", e)
+    return False
+
+
 _upload_lock = threading.Lock()
 
-def post_instagram_reel(video_path: str, caption: str, progress: Optional[ProgressCallback] = None) -> InstagramUploadResult:
+def post_instagram_reel(video_path: str, caption: str, progress: Optional[ProgressCallback] = None, cover_path: Optional[str] = None) -> InstagramUploadResult:
     """Upload one Reel and return only an observed, verified outcome.
 
     Browser failures before Share are marked retryable. Once Share is clicked,
@@ -559,6 +637,20 @@ def post_instagram_reel(video_path: str, caption: str, progress: Optional[Progre
     with _upload_lock:
         validate_reel_video(video_path)
     notify = progress or (lambda _percent, _message: None)
+
+    # Auto-detect custom cover thumbnail if not explicitly passed
+    if not cover_path:
+        v_path = Path(video_path)
+        for cand in [
+            v_path.with_name(f"{v_path.stem}_thumb.jpg"),
+            v_path.with_name(f"{v_path.stem}_thumb.png"),
+            v_path.with_name(f"{v_path.stem}.jpg"),
+            v_path.with_name(f"{v_path.stem}.png"),
+        ]:
+            if cand.is_file() and cand.stat().st_size > 100:
+                cover_path = str(cand.resolve())
+                break
+
     console_lines: list[str] = []
     share_clicked = False
     browser = context = page = None
@@ -608,13 +700,24 @@ def post_instagram_reel(video_path: str, caption: str, progress: Optional[Progre
 
             notify(40, "Waiting for Instagram to prepare the video")
             _click_first_available(page, ("Next",), timeout=90_000)
-            notify(55, "Preparing Reel")
+            notify(55, "Setting cover photo & preparing Reel")
+            
+            # Upload universal cover photo/thumbnail if available
+            if cover_path and os.path.isfile(cover_path):
+                notify(58, "Applying universal cover thumbnail")
+                _upload_cover_photo(page, cover_path)
+
             # Some accounts show a crop/cover step, others go directly to caption.
             caption_box = _caption_field(page)
             if not caption_box.count():
                 notify(65, "Opening Reel details")
                 _click_first_available(page, ("Next",), timeout=30_000)
                 caption_box = _caption_field(page)
+
+            # Check cover on details screen if not set yet
+            if cover_path and os.path.isfile(cover_path):
+                _upload_cover_photo(page, cover_path)
+
             caption_box.wait_for(state="visible", timeout=30_000)
             _fill_caption(page, caption_box, caption)
             notify(75, "Ready to share")

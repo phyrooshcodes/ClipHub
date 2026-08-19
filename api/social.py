@@ -111,7 +111,15 @@ async def _bg_social_post(upload_id: str, job_id: str, clip_filename: str, title
         if "instagram" in platforms:
             try:
                 loop = asyncio.get_event_loop()
-                ig_func = functools.partial(post_instagram_reel, str(video_path), caption, progress=lambda p, m: update_progress("instagram", p, m))
+                thumb_path = video_path.with_name(f"{video_path.stem}_thumb.jpg")
+                cover_img = str(thumb_path) if thumb_path.exists() else None
+                ig_func = functools.partial(
+                    post_instagram_reel,
+                    str(video_path),
+                    caption,
+                    cover_path=cover_img,
+                    progress=lambda p, m: update_progress("instagram", p, m)
+                )
                 res = await loop.run_in_executor(None, ig_func)
                 if hasattr(res, "status"):
                     if res.status == "completed":
