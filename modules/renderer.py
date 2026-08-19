@@ -152,6 +152,30 @@ def render_clip(
             _run_ffmpeg(cmd)
 
         def render_avatar_segment(freeze_t: float, audio_path: str, duration: float, out_file: str, is_intro: bool = False):
+            # 1. Primary path: 60 FPS CapCut Subpixel Keyframe Animator
+            if has_avatar and os.path.exists(avatar_path):
+                try:
+                    from modules.avatar_animator import render_60fps_avatar_segment
+                    success = render_60fps_avatar_segment(
+                        input_video=input_video,
+                        freeze_t=start_s + freeze_t,
+                        audio_path=audio_path,
+                        duration=duration,
+                        out_file=out_file,
+                        avatar_path=avatar_path,
+                        is_intro=is_intro,
+                        crop_coords=crop_coords,
+                        dynamic_crop_x=dynamic_crop_x,
+                        fps=60.0,
+                        click_sfx_path=click_sfx_path if has_click_sfx else None,
+                        use_nvenc=(encoder == "h264_nvenc")
+                    )
+                    if success and os.path.exists(out_file) and os.path.getsize(out_file) > 1000:
+                        return
+                except Exception as e:
+                    logger.warning(f"[Renderer] 60 FPS animator error: {e}. Falling back to FFmpeg expression filter.")
+
+            # 2. Resilient Fallback: FFmpeg Filtergraph
             cmd = ["ffmpeg", "-y", "-ss", f"{start_s + freeze_t:.3f}", "-i", input_video, "-i", audio_path]
             clk_idx, av_idx, inp_cnt = -1, -1, 2
             if has_click_sfx: cmd += ["-i", click_sfx_path]; clk_idx = inp_cnt; inp_cnt += 1
