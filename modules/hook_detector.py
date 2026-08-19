@@ -127,11 +127,13 @@ YOUR EXTRACTION MISSION:
 Total video duration: {duration_str}
 
 Now {max_clips_instruction}.
-- MINIMUM 35 SECONDS: Every clip MUST cover at least 35 seconds of host dialogue. Never extract short quotes. Expand to include surrounding sentences until you reach 35s.
+- CLIP LENGTH — STRICT: Every clip must be 30–42 seconds of host dialogue. This is a HARD limit. The final video will add Kai's intro (~8s) and Kai's closing (~18s) on top of the clip. The total must never exceed 65 seconds.
+- MINIMUM 30 SECONDS: Never extract short quotes. Expand to include surrounding sentences until you reach 30s.
+- MAXIMUM 42 SECONDS: Never exceed 42 seconds of source dialogue. Trim at the nearest clean sentence end within 42s.
 - KAI TEST: Every clip must genuinely reach someone who feels lost, stuck, or overwhelmed.
 - TOPIC DIVERSITY: No two clips on the same sub-topic.
 - KAI'S WHY: Every clip must include a "kai_why" field — this is mandatory.
-- STANDALONE COMPLETE: 35–65s of continuous dialogue with a clear start, insight, and conclusion.
+- STANDALONE COMPLETE: 30–42s of continuous dialogue with a clear start, insight, and conclusion. If you find a great 60-second moment, split it into two 30s clips if possible.
 - Return ONLY the raw JSON array."""
 
 
@@ -298,9 +300,9 @@ def adjust_clip_to_sentences(
             break
             
     # 2. Walk end_idx forward to find the end of the sentence
-    # If the clip is currently under 28 seconds, allow generous forward expansion to complete the thought
+    # Only expand if under 30s — hard budget cap of 12s to stay within the 42s source clip limit
     current_dur = words[end_idx]["end"] - words[curr_start_idx]["start"]
-    effective_forward_expansion = 45.0 if current_dur < 35.0 else max_expansion_s
+    effective_forward_expansion = 12.0 if current_dur < 30.0 else max_expansion_s
 
     curr_end_idx = end_idx
     for i in range(end_idx, len(words)):
@@ -317,8 +319,8 @@ def adjust_clip_to_sentences(
         dur_so_far = words[i]["end"] - words[curr_start_idx]["start"]
         if (ends_with_punc or large_gap or i == len(words) - 1):
             curr_end_idx = i
-            # If we reached a sentence boundary and have at least 35s of content, stop expanding
-            if dur_so_far >= 35.0:
+            # Stop expanding once we reach 42s — this is the hard max for the source clip
+            if dur_so_far >= 42.0:
                 break
             
     new_start_ms = int(words[curr_start_idx]["start"] * 1000)
@@ -413,14 +415,14 @@ def _validate_and_clamp_clips(
             logger.warning(f"[HookDetector] 🚫 Discarding meta-intro/preview clip: '{clip.get('title', 'Untitled')}' ({start/1000:.1f}s)")
             continue
 
-        # Enforce minimum 35s of host dialogue for a complete, standalone clip
+        # Enforce 30–42s source clip budget (leaves room for Kai's ~8s hook + ~18s closing ≤ 65s total)
         duration = end - start
-        min_allowed = min(35000, max_ms)  # 35 seconds minimum host dialogue
+        min_allowed = min(30000, max_ms)  # 30 seconds minimum host dialogue
         if duration < min_allowed:
-            logger.warning(f"[HookDetector] Discarding clip too short ({duration/1000:.1f}s < 35s): {clip.get('title', 'Untitled')}")
+            logger.warning(f"[HookDetector] Discarding clip too short ({duration/1000:.1f}s < 30s): {clip.get('title', 'Untitled')}")
             continue
-        if duration > 95000:
-            logger.warning(f"[HookDetector] Discarding clip that is too long ({duration/1000:.1f}s): {clip.get('title', 'Untitled')}")
+        if duration > 42000:
+            logger.warning(f"[HookDetector] Discarding clip too long ({duration/1000:.1f}s > 42s budget): {clip.get('title', 'Untitled')}")
             continue
             
         clip["start_ms"] = start

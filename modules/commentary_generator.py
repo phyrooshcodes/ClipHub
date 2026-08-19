@@ -66,7 +66,7 @@ KAI'S OUTPUT — TWO FIELDS:
    RIGHT: "You're not lazy. Your brain is literally running on empty right now."
    RIGHT: "The reason nothing feels exciting anymore isn't a mood. It's fixable."
 
-2. "closing_explanation" (40–75 words):
+2. "closing_explanation" (30–50 words MAX):
    Kai's voice AFTER the speaker finishes. This is where she translates everything into plain, grounded truth.
    - Explain the speaker's core point in the simplest possible human terms — as if speaking to a smart 16-year-old who is frustrated and confused.
    - Name the real-world implication: what does this mean for how they live tomorrow, next week?
@@ -74,12 +74,13 @@ KAI'S OUTPUT — TWO FIELDS:
    - Do NOT repeat the speaker's words. Translate and advance.
    - NO analogies. NO "think of it like...". NO jargon. Direct.
    - This is Kai's most important moment in the clip. Make it count.
+   - HARD LIMIT: 30–50 words. Every extra word is a word that makes a viewer scroll away. Be ruthless.
 
 OUTPUT FORMAT:
 Strictly raw JSON. No markdown fences. No extra text:
 {
   "hook": "Kai's 10-16 word opening line that stops the scroll...",
-  "closing_explanation": "Kai's 40-75 word plain-language explanation of the speaker's key point and what it means for the viewer's life..."
+  "closing_explanation": "Kai's 30-50 word plain-language explanation of the speaker's key point and what it means for the viewer's life..."
 }"""
 
 
