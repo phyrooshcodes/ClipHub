@@ -47,35 +47,135 @@ def _find_file_input(page: Page, timeout: int = 15_000):
     raise TimeoutError("Could not locate YouTube Studio file input for video upload.")
 
 
-def initiate_upload(page: Page, video_path: str, channel_id: str | None = None) -> None:
-    """Open YouTube Studio, initiate file chooser, and upload the video file."""
-    logger.info("[YouTube]\nLaunching Studio...")
-    
-    if channel_id:
-        logger.info(f"[YouTube] Ensuring correct channel context for {channel_id}...")
-        # First go to channel switcher to force the session to the correct channel
+def get_active_channel_name(page: Page) -> str:
+    """Read the currently active channel name from YouTube Studio navigation or header."""
+    for sel in (
+        "#entity-name",
+        "#channel-name",
+        "ytcp-navigation-drawer #entity-name",
+        "ytcp-header #channel-name",
+        "ytcp-header #account-name",
+        "ytcp-app-header #entity-name",
+    ):
         try:
-            page.goto(f"https://www.youtube.com/channel_switcher?next=https%3A%2F%2Fstudio.youtube.com%2F", wait_until="domcontentloaded", timeout=15000)
-            page.wait_for_timeout(2000)
-        except Exception as e:
-            logger.warning(f"[YouTube] Channel switcher navigation skipped or timed out: {e}")
-        
-        # If the channel is listed, click it. If not, it means we might already be on studio or it's not a switcher page
-        try:
-            channel_link = page.locator(f'a[href*="{channel_id}"]').first
-            if channel_link.count() and channel_link.is_visible():
-                channel_link.click(timeout=5000)
-                page.wait_for_timeout(3000)
+            el = page.locator(sel).first
+            if el.count() and el.is_visible():
+                txt = el.inner_text().strip()
+                if txt:
+                    return txt
         except Exception:
             pass
+    return ""
 
-    target_url = "https://studio.youtube.com/?d=ud"
-    page.goto(target_url, wait_until="domcontentloaded", timeout=60_000)
-    
+
+def ensure_correct_channel(page: Page, channel_id: str | None = None, channel_name: str | None = None) -> str:
+    """Verify and switch to the target YouTube channel if needed."""
+    if not channel_id and not channel_name:
+        return get_active_channel_name(page)
+
+    logger.info(f"[YouTube] Verifying channel context (Target: Name='{channel_name}', ID='{channel_id}')...")
+
+    # 1. First navigate directly to the target channel Studio URL
+    target_url = f"https://studio.youtube.com/channel/{channel_id}" if channel_id else "https://studio.youtube.com/"
     try:
-        page.wait_for_selector("ytcp-app, ytcp-header, #create-icon, #upload-icon, input[type='file']", timeout=20_000)
-    except Exception:
-        pass
+        page.goto(target_url, wait_until="domcontentloaded", timeout=45_000)
+        page.wait_for_timeout(2500)
+    except Exception as e:
+        logger.warning(f"[YouTube] Initial studio navigation warning: {e}")
+
+    active_name = get_active_channel_name(page)
+    if channel_name and active_name and (channel_name.lower() in active_name.lower() or active_name.lower() in channel_name.lower()):
+        logger.info(f"[YouTube] ✅ Confirmed active channel: '{active_name}'")
+        return active_name
+
+    # 2. If active channel name does not match, use YouTube Channel Switcher
+    if (channel_name and active_name and channel_name.lower() not in active_name.lower()) or (not active_name):
+        logger.info(f"[YouTube] Current channel '{active_name}' != target '{channel_name}'. Attempting Channel Switcher...")
+        try:
+            import urllib.parse
+            next_url = f"https://studio.youtube.com/channel/{channel_id}" if channel_id else "https://studio.youtube.com/"
+            switcher_url = f"https://www.youtube.com/channel_switcher?next={urllib.parse.quote(next_url)}"
+            page.goto(switcher_url, wait_until="domcontentloaded", timeout=25_000)
+            page.wait_for_timeout(3000)
+
+            switched = False
+            # Look for channel by name on switcher page
+            if channel_name:
+                for sel in (
+                    f"ytd-account-item-renderer:has-text('{channel_name}')",
+                    f"#channel-title:has-text('{channel_name}')",
+                    f"tp-yt-paper-item:has-text('{channel_name}')",
+                    f"[role='link']:has-text('{channel_name}')",
+                    f"a:has-text('{channel_name}')",
+                ):
+                    try:
+                        link = page.locator(sel).first
+                        if link.count() and link.is_visible():
+                            link.click(timeout=4000)
+                            switched = True
+                            logger.info(f"[YouTube] Clicked target channel '{channel_name}' on switcher via '{sel}'")
+                            page.wait_for_timeout(4000)
+                            break
+                    except Exception:
+                        pass
+
+            if not switched and channel_id:
+                for sel in (
+                    f"a[href*='{channel_id}']",
+                    f"ytd-account-item-renderer:has-text('{channel_id}')",
+                ):
+                    try:
+                        link = page.locator(sel).first
+                        if link.count() and link.is_visible():
+                            link.click(timeout=4000)
+                            switched = True
+                            logger.info(f"[YouTube] Clicked target channel ID '{channel_id}' on switcher")
+                            page.wait_for_timeout(4000)
+                            break
+                    except Exception:
+                        pass
+        except Exception as exc:
+            logger.warning(f"[YouTube] Channel switcher step note: {exc}")
+
+    # 3. Ensure we are back on Studio
+    if "studio.youtube.com" not in page.url:
+        studio_target = f"https://studio.youtube.com/channel/{channel_id}" if channel_id else "https://studio.youtube.com/"
+        page.goto(studio_target, wait_until="domcontentloaded", timeout=30_000)
+        page.wait_for_timeout(2500)
+
+    # 4. If still not on the right channel, try Studio in-page Account Switcher menu
+    active_name = get_active_channel_name(page)
+    if channel_name and active_name and channel_name.lower() not in active_name.lower():
+        logger.info(f"[YouTube] Attempting in-page Studio account switch from '{active_name}' to '{channel_name}'...")
+        try:
+            avatar_btn = page.locator("#avatar-btn, ytcp-header #avatar-btn, button#avatar-btn, ytcp-icon-button#avatar-btn").first
+            if avatar_btn.count() and avatar_btn.is_visible():
+                avatar_btn.click(timeout=3000)
+                page.wait_for_timeout(1000)
+                
+                switch_item = page.locator("ytcp-text-menu-item:has-text('Switch account'), tp-yt-paper-item:has-text('Switch account'), [aria-label*='Switch account']").first
+                if switch_item.count() and switch_item.is_visible():
+                    switch_item.click(timeout=3000)
+                    page.wait_for_timeout(1500)
+                    
+                    target_entry = page.locator(f"ytcp-text-menu-item:has-text('{channel_name}'), tp-yt-paper-item:has-text('{channel_name}'), ytd-account-item-renderer:has-text('{channel_name}')").first
+                    if target_entry.count() and target_entry.is_visible():
+                        target_entry.click(timeout=3000)
+                        logger.info(f"[YouTube] Selected '{channel_name}' from Studio Switch Account menu.")
+                        page.wait_for_timeout(4000)
+        except Exception as e:
+            logger.warning(f"[YouTube] In-page Studio account switch note: {e}")
+
+    active_name = get_active_channel_name(page)
+    logger.info(f"[YouTube] Active channel context: '{active_name or 'Default'}' (Target: '{channel_name or channel_id}')")
+    return active_name
+
+
+def initiate_upload(page: Page, video_path: str, channel_id: str | None = None, channel_name: str | None = None) -> None:
+    """Open YouTube Studio, switch to target channel, and upload the video file."""
+    logger.info("[YouTube]\nLaunching Studio...")
+    
+    ensure_correct_channel(page, channel_id=channel_id, channel_name=channel_name)
 
     # Check for authentication redirect
     if "accounts.google.com" in page.url:

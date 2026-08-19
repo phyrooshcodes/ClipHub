@@ -457,32 +457,47 @@ def connect_youtube_playwright() -> bool:
             while time.monotonic() < deadline and not page.is_closed():
                 try:
                     url = page.url.lower()
-                    if "accounts.google.com" not in url and "channel_switcher" not in url:
+                    if "accounts.google.com" not in url:
                         if page.locator("#create-icon, ytcp-header #avatar-btn, ytcp-header").count() > 0:
                             logged_in = True
                             name, handle, cid = extract_channel_info_from_page(page)
-                            login_success_count += 1
                             try:
+                                banner_text = f"✅ Connected to: <strong>{name or 'YouTube Channel'}</strong> ({cid or 'Active'})"
                                 page.evaluate(f"""() => {{
-                                    if (!document.getElementById('cliphub-login-banner')) {{
-                                        const div = document.createElement('div');
+                                    let div = document.getElementById('cliphub-login-banner');
+                                    if (!div) {{
+                                        div = document.createElement('div');
                                         div.id = 'cliphub-login-banner';
-                                        div.innerHTML = '<h2>✅ Connected to {name or "YouTube Channel"}! Saving session...</h2>';
-                                        div.style.position = 'fixed'; div.style.top = '10px'; div.style.left = '50%';
-                                        div.style.transform = 'translateX(-50%)'; div.style.background = '#4CAF50';
-                                        div.style.color = 'white'; div.style.padding = '15px 25px'; div.style.zIndex = '999999';
-                                        div.style.borderRadius = '8px'; div.style.boxShadow = '0 4px 12px rgba(0,0,0,0.3)';
-                                        div.style.fontFamily = 'sans-serif';
+                                        div.style.position = 'fixed'; div.style.top = '12px'; div.style.left = '50%';
+                                        div.style.transform = 'translateX(-50%)'; div.style.background = '#1e293b';
+                                        div.style.border = '2px solid #6366f1'; div.style.color = '#f8fafc';
+                                        div.style.padding = '12px 24px'; div.style.zIndex = '9999999';
+                                        div.style.borderRadius = '12px'; div.style.boxShadow = '0 10px 25px rgba(0,0,0,0.5)';
+                                        div.style.fontFamily = 'system-ui, -apple-system, sans-serif';
+                                        div.style.display = 'flex'; div.style.alignItems = 'center'; div.style.gap = '16px';
+                                        div.style.fontSize = '14px';
                                         document.body.appendChild(div);
+                                    }}
+                                    div.innerHTML = `
+                                        <span>{banner_text}</span>
+                                        <button id="cliphub-btn-done" style="background:#6366f1; color:white; border:none; border-radius:6px; padding:6px 16px; font-weight:600; cursor:pointer;">Confirm Channel & Finish</button>
+                                    `;
+                                    const btn = document.getElementById('cliphub-btn-done');
+                                    if (btn && !btn.onclick) {{
+                                        btn.onclick = () => {{ window.__cliphub_confirmed = true; }};
                                     }}
                                 }}""")
                             except Exception:
                                 pass
                             
-                            # If we confirmed channel details or spent 2 seconds after login, exit loop cleanly
-                            if login_success_count >= 2:
-                                logger.info("[YouTube] Successfully saved session for channel: %s (%s)", name, cid)
-                                page.wait_for_timeout(1500)
+                            is_confirmed = False
+                            try:
+                                is_confirmed = page.evaluate("() => Boolean(window.__cliphub_confirmed)")
+                            except Exception:
+                                pass
+                            
+                            if is_confirmed:
+                                logger.info("[YouTube] User confirmed channel: %s (%s)", name, cid)
                                 break
                 except Exception:
                     pass
@@ -580,14 +595,16 @@ def post_youtube_video(
 
         # Attach CDP network telemetry listener BEFORE file upload begins
         # so every HTTP response from upload.youtube.com is captured
-        channel_id = get_youtube_channel_info().get("channel_id")
+        ch_info = get_youtube_channel_info()
+        channel_id = ch_info.get("channel_id")
+        channel_name = ch_info.get("name")
         telemetry = UploadNetworkTelemetry(page)
         logger.info("[YouTube] CDP Network Telemetry listener attached.")
 
         # Step 1: Initiate upload
         current_stage = "upload"
         notify(15, "Uploading video file")
-        initiate_upload(page, video_path, channel_id=channel_id)
+        initiate_upload(page, video_path, channel_id=channel_id, channel_name=channel_name)
 
         # Step 2: Fill metadata
         current_stage = "metadata"

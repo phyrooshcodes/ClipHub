@@ -354,8 +354,10 @@ class YouTubePersistentWorker:
             self._notify(upload_id, 15, "Uploading video file")
             
             from modules.publishers.youtube.publisher import get_youtube_channel_info
-            channel_id = get_youtube_channel_info().get("channel_id")
-            initiate_upload(page, video_path, channel_id)
+            ch_info = get_youtube_channel_info()
+            channel_id = ch_info.get("channel_id")
+            channel_name = ch_info.get("name")
+            initiate_upload(page, video_path, channel_id=channel_id, channel_name=channel_name)
             
             current_stage = "metadata"
             self._notify(upload_id, 40, "Filling metadata")
