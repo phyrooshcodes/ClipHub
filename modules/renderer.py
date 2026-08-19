@@ -79,6 +79,7 @@ def render_clip(
         from modules.character_manager import resolve_character_path
         avatar_path = resolve_character_path(character)
     has_avatar = bool(avatar_path and os.path.exists(avatar_path))
+    logger.info(f"[Renderer] Presenter avatar: {avatar_path} (exists={has_avatar})")
 
     # Helper to generate smooth 2D balloon floating drift expressions
     def make_balloon_floating_expr(duration: float, is_intro: bool = False, w_av: int = 932, h_av: int = 1400):

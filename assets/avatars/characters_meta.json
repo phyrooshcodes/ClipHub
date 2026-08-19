@@ -1,1 +1,12 @@
-{}
+{
+  "olivia_1787118125.png": {
+    "id": "olivia_1787118125.png",
+    "name": "Olivia",
+    "filename": "olivia_1787118125.png",
+    "url": "/assets/avatars/olivia_1787118125.png",
+    "is_builtin": false,
+    "is_default": false,
+    "description": "User Uploaded Character",
+    "created_at": 1787118125
+  }
+}

@@ -10,7 +10,7 @@ import subprocess
 from pathlib import Path
 from typing import List, Optional
 
-from fastapi import APIRouter, WebSocket, UploadFile, File, Request
+from fastapi import APIRouter, WebSocket, UploadFile, File, Form, Query, Request
 from fastapi.responses import JSONResponse
 from api.jobs import registry
 from api.security import websocket_is_authorized
@@ -361,7 +361,12 @@ class ClipReviewItem(BaseModel):
 MAX_UPLOAD_SIZE = 2 * 1024 * 1024 * 1024  # 2 GB safety quota
 
 @router.post("/upload")
-async def upload_video(file: UploadFile = File(...)):
+async def upload_video(
+    file: UploadFile = File(...),
+    character: Optional[str] = Form(None),
+    cover: Optional[str] = Form(None),
+    caption_style: Optional[str] = Form(None)
+):
     job_id = uuid.uuid4().hex[:16]
     suffix = Path(file.filename).suffix or ".mp4"
     if suffix.lower() not in (".mp4", ".mov", ".mkv", ".webm", ".avi"):
@@ -382,6 +387,12 @@ async def upload_video(file: UploadFile = File(...)):
             f.write(chunk)
             
     registry.register(job_id, str(save_path), file.filename)
+    init_cfg = {}
+    if character: init_cfg["character"] = character
+    if cover: init_cfg["cover"] = cover
+    if caption_style: init_cfg["caption_style"] = caption_style
+    if init_cfg:
+        registry.set_config(job_id, init_cfg)
     return {"job_id": job_id, "filename": file.filename}
 
 @router.get("/api/uploads")
@@ -424,7 +435,12 @@ async def delete_upload(filename: str):
     return JSONResponse({"error": "File not found"}, status_code=404)
 
 @router.post("/api/start-from-upload/{filename}")
-async def start_from_upload(filename: str):
+async def start_from_upload(
+    filename: str,
+    character: Optional[str] = Query(None),
+    cover: Optional[str] = Query(None),
+    caption_style: Optional[str] = Query(None)
+):
     if Path(filename).name != filename:
         return JSONResponse({"error": "Invalid upload filename."}, status_code=400)
     save_path = (UPLOAD_DIR / filename).resolve()
@@ -448,6 +464,12 @@ async def start_from_upload(filename: str):
         
     job_id = uuid.uuid4().hex[:16]
     registry.register(job_id, str(save_path), orig_name)
+    init_cfg = {}
+    if character: init_cfg["character"] = character
+    if cover: init_cfg["cover"] = cover
+    if caption_style: init_cfg["caption_style"] = caption_style
+    if init_cfg:
+        registry.set_config(job_id, init_cfg)
     return {"job_id": job_id, "filename": orig_name}
 
 @router.post("/config/{job_id}")
@@ -455,8 +477,11 @@ async def set_job_config(job_id: str, config: JobConfigModel):
     job = registry.get(job_id)
     if not job:
         return JSONResponse({"error": "Job not found"}, status_code=404)
-    registry.set_config(job_id, config.model_dump())
-    return {"status": "ok"}
+    existing = registry.get_config(job_id)
+    merged = {**existing, **config.model_dump()}
+    registry.set_config(job_id, merged)
+    logger.info(f"[Config] Configured job {job_id}: character='{merged.get('character')}', cover='{merged.get('cover')}', caption_style='{merged.get('caption_style')}'")
+    return {"status": "ok", "job_id": job_id}
 
 @router.post("/api/cancel/{job_id}")
 async def cancel_job(job_id: str):
@@ -538,6 +563,16 @@ async def run_pipeline_ws(websocket: WebSocket, job_id: str):
         return
 
     config = registry.get_config(job_id)
+    qp = dict(websocket.query_params)
+    for key in ("character", "cover", "caption_style", "model", "commentary_mode", "commentary_voice", "music", "music_volume"):
+        val = qp.get(key)
+        if val:
+            if not config.get(key) or (config.get(key) in ("anime_presenter.png", "default_cover.jpg") and val not in ("anime_presenter.png", "default_cover.jpg")):
+                config[key] = val
+    registry.set_config(job_id, config)
+
+    logger.info(f"[Pipeline WS] Job {job_id} connected | Presenter='{config.get('character')}', Cover='{config.get('cover')}', Style='{config.get('caption_style')}'")
+
     should_launch = registry.claim_execution(job_id)
 
     if should_launch:

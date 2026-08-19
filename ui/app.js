@@ -2030,14 +2030,15 @@ document.addEventListener("DOMContentLoaded", () => {
       }
       
       try {
+        const character = localStorage.getItem('selectedCharacter') || document.getElementById('config-character-select')?.value || 'anime_presenter.png';
+        const cover = localStorage.getItem('selectedCover') || document.getElementById('config-cover-select')?.value || 'default_cover.jpg';
+        const captionStyle = localStorage.getItem('captionStyle') || document.getElementById('config-caption-style')?.value || 'aftereffect_preset';
+
         // Send config (model, caption_style, etc) FIRST before initiating connections
         async function sendConfig(jobId) {
           const model = document.getElementById('config-model')?.value || 'small';
-          const captionStyle = localStorage.getItem('captionStyle') || document.getElementById('config-caption-style')?.value || 'aftereffect_preset';
           const commentaryMode = document.getElementById('config-commentary-mode')?.value || 'hook_commentary';
           const commentaryVoice = document.getElementById('config-commentary-voice')?.value || 'af_sarah';
-          const character = localStorage.getItem('selectedCharacter') || document.getElementById('config-character-select')?.value || 'anime_presenter.png';
-          const cover = localStorage.getItem('selectedCover') || document.getElementById('config-cover-select')?.value || 'default_cover.jpg';
           try {
             await fetch(`/config/${jobId}`, {
               method: 'POST',
@@ -2075,7 +2076,8 @@ document.addEventListener("DOMContentLoaded", () => {
             throw new Error(data.error || "Failed to start YouTube download job");
           }
         } else if (isExistingUpload) {
-          const res = await fetch(`/api/start-from-upload/${encodeURIComponent(fileOrUrl)}`, { method: 'POST' });
+          const startUrl = `/api/start-from-upload/${encodeURIComponent(fileOrUrl)}?character=${encodeURIComponent(character)}&cover=${encodeURIComponent(cover)}&caption_style=${encodeURIComponent(captionStyle)}`;
+          const res = await fetch(startUrl, { method: 'POST' });
           const data = await res.json();
           if (data.job_id) {
             currentJobId = data.job_id;
@@ -2094,6 +2096,9 @@ document.addEventListener("DOMContentLoaded", () => {
            // Normal file upload
            const fd = new FormData();
            fd.append('file', fileOrUrl);
+           fd.append('character', character);
+           fd.append('cover', cover);
+           fd.append('caption_style', captionStyle);
            const res = await fetch('/upload', { method: 'POST', body: fd });
            const data = await res.json();
            if (data.job_id) {
@@ -2177,8 +2182,12 @@ document.addEventListener("DOMContentLoaded", () => {
   function connectPipelineWS(jobId) {
     if (currentWs && currentWs.readyState !== WebSocket.CLOSED) currentWs.close();
     
+    const character = localStorage.getItem('selectedCharacter') || document.getElementById('config-character-select')?.value || 'anime_presenter.png';
+    const cover = localStorage.getItem('selectedCover') || document.getElementById('config-cover-select')?.value || 'default_cover.jpg';
+    const captionStyle = localStorage.getItem('captionStyle') || document.getElementById('config-caption-style')?.value || 'aftereffect_preset';
+
     const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${location.host}/ws/${jobId}`;
+    const wsUrl = `${protocol}//${location.host}/ws/${jobId}?character=${encodeURIComponent(character)}&cover=${encodeURIComponent(cover)}&caption_style=${encodeURIComponent(captionStyle)}`;
     
     // Poll for script updates live during pipeline execution
     const scriptPoll = setInterval(() => {

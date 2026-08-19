@@ -379,6 +379,15 @@ def run_pipeline(args: argparse.Namespace) -> None:
 
     total_start = time.time()
 
+    from modules.character_manager import resolve_character_path
+    from modules.cover_manager import resolve_cover_path
+    char_id = getattr(args, "character", "anime_presenter.png")
+    cover_id = getattr(args, "cover", "default_cover.jpg")
+    resolved_char_path = resolve_character_path(char_id)
+    resolved_cover_path = resolve_cover_path(cover_id)
+    logger.info(f"   👤 AI Presenter Avatar: {char_id} -> {resolved_char_path}")
+    logger.info(f"   🖼️ Universal Cover:    {cover_id} -> {resolved_cover_path or 'Dynamic Video Frame 0.0s'}\n")
+
     if args.phase in ("1", "all"):
         # ─── STAGE 1: Audio Demux ────────────────────────────────
         logger.info("═══ STAGE 1/6 ─ Audio Demux (CPU) ══════════════════")

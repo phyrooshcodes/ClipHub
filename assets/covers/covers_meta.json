@@ -1,1 +1,13 @@
-{}
+{
+  "cover_olivia_1787118419.png": {
+    "id": "cover_olivia_1787118419.png",
+    "name": "Olivia",
+    "filename": "cover_olivia_1787118419.png",
+    "url": "/assets/covers/cover_olivia_1787118419.png",
+    "is_builtin": false,
+    "is_default": false,
+    "is_none": false,
+    "description": "User Uploaded Universal Thumbnail",
+    "created_at": 1787118419
+  }
+}
