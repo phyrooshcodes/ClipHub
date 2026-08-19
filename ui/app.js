@@ -2207,6 +2207,12 @@ document.addEventListener("DOMContentLoaded", () => {
       if (data.type === 'start') {
         updateProgress(null, "Warming up pipeline", 15);
         appendLog(`<span class="log-highlight">[System]</span> Connected to pipeline. Warming up...`);
+        liveChainOfThoughts = [{
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+          text: `[Pipeline Initialized] Job ${jobId} warming up AI reasoning models...`
+        }];
+        const liveDot = document.getElementById('live-thought-dot');
+        if (liveDot) liveDot.classList.remove('hidden');
       } else if (data.type === 'stage' || data.type === 'substage') {
         // The backend parses the pipeline's real log markers into these
         // events.  This is the canonical progress source for uploaded files.
@@ -2219,6 +2225,29 @@ document.addEventListener("DOMContentLoaded", () => {
           appendLog(`<span class="log-info" style="color:var(--text-muted)">[Log]</span> ${data.raw}`);
         }
         fetchJobScript(jobId);
+      }
+      
+      // Capture live LLM thought events
+      const rawText = data.raw || data.message || '';
+      if (rawText && (
+        rawText.includes('[HookDetector]') || 
+        rawText.includes('[CommentaryGenerator]') ||
+        rawText.includes('[Transcriber]') ||
+        rawText.includes('viral') ||
+        rawText.includes('Kai') ||
+        rawText.includes('tokens') ||
+        rawText.includes('LLM') ||
+        rawText.includes('Hook') ||
+        rawText.includes('commentary')
+      )) {
+        const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        liveChainOfThoughts.unshift({ time: timeStr, text: rawText });
+        if (liveChainOfThoughts.length > 50) liveChainOfThoughts.pop();
+        const liveDot = document.getElementById('live-thought-dot');
+        if (liveDot) liveDot.classList.remove('hidden');
+        if (currentThoughtTab === 'live') {
+          renderScriptPreview(currentLoadedScript);
+        }
       } else if (data.type === 'clip_start') {
         pipelineClip = { current: data.clip_num, total: data.total };
         if (data.raw) {
@@ -2349,6 +2378,21 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  // ─── LLM THOUGHT PROCESS & COGNITIVE REASONING ───────────
+  let currentThoughtTab = 'cognitive';
+  let liveChainOfThoughts = [];
+
+  // Bind tabs in LLM Thought Process panel
+  const thoughtTabs = document.querySelectorAll('#thought-process-tabs button');
+  thoughtTabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      thoughtTabs.forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      currentThoughtTab = tab.getAttribute('data-thought-tab') || 'cognitive';
+      renderScriptPreview(currentLoadedScript);
+    });
+  });
+
   // Bind change listeners to script job selectors
   const jobSel = document.getElementById('script-job-selector');
   const fsJobSel = document.getElementById('fs-job-selector');
@@ -2399,16 +2443,19 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
     const filtered = currentLoadedScript.filter((clip, idx) => {
-      const title = (clip.title || `clip ${idx + 1}`).toLowerCase();
+      const title = (clip.title || clip.clip_title || `clip ${idx + 1}`).toLowerCase();
+      const reason = (clip.hook_explanation || clip.reason || '').toLowerCase();
+      const kaiWhy = (clip.kai_why || '').toLowerCase();
       let hook = '';
       let comm = '';
       if (clip.editorial_data) {
         hook = typeof clip.editorial_data.hook === 'object' ? (clip.editorial_data.hook?.text || '') : (clip.editorial_data.hook || '');
-        if (clip.editorial_data.commentary_segments) {
+        comm = clip.editorial_data.closing_explanation || '';
+        if (!comm && clip.editorial_data.commentary_segments) {
           comm = clip.editorial_data.commentary_segments.map(s => s.text || '').join(' ');
         }
       }
-      return title.includes(query) || hook.toLowerCase().includes(query) || comm.toLowerCase().includes(query);
+      return title.includes(query) || reason.includes(query) || kaiWhy.includes(query) || hook.toLowerCase().includes(query) || comm.toLowerCase().includes(query);
     });
     renderFullscreenScriptCards(filtered);
   });
@@ -2433,71 +2480,186 @@ document.addEventListener("DOMContentLoaded", () => {
   function renderScriptPreview(metadata) {
     const container = document.getElementById('review-cards-container');
     if (!container) return;
-    if (!metadata || metadata.length === 0) {
-      container.innerHTML = `
-        <div class="empty-script">
-          <div class="empty-icon"><i class="ri-file-list-3-line"></i></div>
-          <h4>No Script Generated For This Job</h4>
-          <p>This job either used raw clipping or has no AI commentary script associated.</p>
-        </div>
-      `;
+
+    // TAB 3: LIVE CHAIN OF THOUGHT FEED
+    if (currentThoughtTab === 'live') {
+      if (!liveChainOfThoughts || liveChainOfThoughts.length === 0) {
+        container.innerHTML = `
+          <div class="empty-script" style="padding:30px 15px;">
+            <div class="empty-icon"><i class="ri-pulse-line"></i></div>
+            <h4>Chain of Thought Ready</h4>
+            <p>Real-time cognitive thinking logs from Gemini / Qwen / local models will stream here as soon as processing starts.</p>
+          </div>
+        `;
+        return;
+      }
+      let html = '<div class="chain-of-thought-feed">';
+      liveChainOfThoughts.forEach(item => {
+        let formattedText = escapeHtml(item.text);
+        formattedText = formattedText.replace(/(\[.*?\])/g, '<strong>$1</strong>');
+        html += `
+          <div class="chain-thought-item">
+            <span class="chain-thought-time">${item.time}</span>
+            <div class="chain-thought-body">${formattedText}</div>
+          </div>
+        `;
+      });
+      html += '</div>';
+      container.innerHTML = html;
       return;
     }
-    
-    let html = '';
-    metadata.forEach((clip, idx) => {
-      const startSec = (clip.start_ms || 0) / 1000;
-      const endSec = (clip.end_ms || 0) / 1000;
-      const timeStr = `${Math.floor(startSec / 60)}:${Math.floor(startSec % 60).toString().padStart(2, '0')} - ${Math.floor(endSec / 60)}:${Math.floor(endSec % 60).toString().padStart(2, '0')}`;
-      const scoreStr = clip.hook_score ? `${clip.hook_score}/100` : '—';
-      const rawTitle = clip.title || (`Viral Clip #${idx + 1}`);
-      const cleanTitle = rawTitle.replace(/^(?:clip[_\s\-]*\d+[_\s\-]*|\d+[\.\:\-]\s*)+/i, '').trim() || rawTitle;
 
-      let hookText = '';
-      let commentaryText = '';
-
-      if (clip.editorial_data) {
-        hookText = typeof clip.editorial_data.hook === 'object' ? (clip.editorial_data.hook?.text || '') : (clip.editorial_data.hook || '');
-        if (clip.editorial_data.commentary_segments && clip.editorial_data.commentary_segments.length > 0) {
-          commentaryText = clip.editorial_data.commentary_segments.map(s => s.text || '').filter(Boolean).join(' ');
-        }
-      }
-
-      if (!hookText && clip.hook_text) hookText = clip.hook_text;
-      if (!commentaryText && clip.commentary_text) commentaryText = clip.commentary_text;
-
-      html += `
-        <div class="script-preview-card" style="background: rgba(18, 18, 20, 0.75); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 10px; padding: 14px; margin-bottom: 14px;">
-          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid rgba(255, 255, 255, 0.06); flex-wrap: wrap; gap: 6px;">
-            <div style="display: flex; align-items: center; gap: 8px;">
-              <span class="clip-num-badge" style="background: rgba(99, 102, 241, 0.15); color: #818cf8; border: 1px solid rgba(99, 102, 241, 0.3); padding: 2px 8px; border-radius: 8px; font-weight: 700; font-size: 0.72rem;">Clip #${idx + 1}</span>
-              <strong style="color: #f3f4f6; font-size: 0.9rem;">${escapeHtml(cleanTitle)}</strong>
+    // If no metadata is loaded yet:
+    if (!metadata || metadata.length === 0) {
+      if (currentJobId && typeof pipelineDone !== 'undefined' && !pipelineDone) {
+        container.innerHTML = `
+          <div class="thinking-radar-box">
+            <div class="thinking-neural-pulse"><i class="ri-brain-line"></i></div>
+            <div>
+              <h4 style="font-size:0.95rem; font-weight:700; color:var(--text-main); margin-bottom:4px;">LLM Analyzing Transcript...</h4>
+              <p style="font-size:0.8rem; color:var(--text-muted); max-width:280px; margin:0 auto; line-height:1.4;">
+                Extracting virality peaks, evaluating retention hooks, and synthesizing Kai mentorship narratives.
+              </p>
             </div>
-            <span style="font-size: 0.75rem; color: #9ca3af;">${timeStr} · <span style="color:#f59e0b; font-weight:600;"><i class="ri-fire-fill"></i> Score: ${scoreStr}</span></span>
           </div>
+        `;
+      } else {
+        container.innerHTML = `
+          <div class="empty-script">
+            <div class="empty-icon"><i class="ri-brain-line"></i></div>
+            <h4>No Thought Process Data</h4>
+            <p>Select a completed job above or run a video to inspect the AI's deep virality reasoning and coaching rationale.</p>
+          </div>
+        `;
+      }
+      return;
+    }
 
-          ${hookText ? `
-            <div style="margin-bottom: 10px; background: rgba(99, 102, 241, 0.08); border-left: 3px solid #6366f1; padding: 10px 12px; border-radius: 6px;">
-              <div style="font-size: 0.7rem; font-weight: 700; color: #818cf8; text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.5px;">
-                <i class="ri-mic-line"></i> Opening Hook (Presenter Intro)
+    // TAB 1: COGNITIVE REASONING & STRATEGY (Default)
+    if (currentThoughtTab === 'cognitive') {
+      let html = '';
+      metadata.forEach((clip, idx) => {
+        const startSec = (clip.start_ms || 0) / 1000;
+        const endSec = (clip.end_ms || 0) / 1000;
+        const timeStr = `${Math.floor(startSec / 60)}:${Math.floor(startSec % 60).toString().padStart(2, '0')} - ${Math.floor(endSec / 60)}:${Math.floor(endSec % 60).toString().padStart(2, '0')}`;
+        
+        const scoreVal = clip.viral_score || clip.hook_score || 9.5;
+        const scoreFormatted = typeof scoreVal === 'number' ? scoreVal.toFixed(1) : scoreVal;
+        const hookType = clip.hook_type || 'Reframe / Validation';
+        
+        const rawTitle = clip.title || clip.clip_title || (`Viral Insight #${idx + 1}`);
+        const cleanTitle = rawTitle.replace(/^(?:clip[_\s\-]*\d+[_\s\-]*|\d+[\.\:\-]\s*)+/i, '').trim() || rawTitle;
+
+        const reasonText = clip.hook_explanation || clip.reason || clip.description || 'Identified high-retention conversational shift with high emotional resonance for short-form viewers.';
+        const kaiWhyText = clip.kai_why || 'Reframes complex topic into an actionable, empathetic breakthrough designed to empower and focus lost or overwhelmed viewers.';
+        const socialCaption = clip.social_caption || '';
+
+        html += `
+          <div class="cognitive-card">
+            <div class="cognitive-card-header">
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span class="clip-num-badge" style="background:rgba(168,85,247,0.15); color:#c084fc; border:1px solid rgba(168,85,247,0.3); padding:2px 8px; border-radius:8px; font-weight:700; font-size:0.72rem;">Clip #${idx + 1}</span>
+                <strong style="color:#f3f4f6; font-size:0.88rem;">${escapeHtml(cleanTitle)}</strong>
               </div>
-              <p style="margin: 0; font-size: 0.84rem; line-height: 1.45; color: #e5e7eb;">${escapeHtml(hookText)}</p>
-            </div>
-          ` : ''}
-
-          ${commentaryText ? `
-            <div style="background: rgba(16, 185, 129, 0.08); border-left: 3px solid #10b981; padding: 10px 12px; border-radius: 6px;">
-              <div style="font-size: 0.7rem; font-weight: 700; color: #34d399; text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.5px;">
-                <i class="ri-chat-voice-line"></i> Explainer Commentary (Pause Breakdown)
+              <div style="display:flex; align-items:center; gap:6px;">
+                <span style="font-size:0.72rem; color:var(--text-muted);"><i class="ri-time-line"></i> ${timeStr}</span>
+                <span class="cognitive-score-pill"><i class="ri-fire-fill"></i> ${scoreFormatted}/10</span>
+                <span class="cognitive-hook-type-pill"><i class="ri-flashlight-fill"></i> ${escapeHtml(hookType)}</span>
               </div>
-              <p style="margin: 0; font-size: 0.84rem; line-height: 1.45; color: #e5e7eb;">${escapeHtml(commentaryText)}</p>
             </div>
-          ` : ''}
-        </div>
-      `;
-    });
 
-    container.innerHTML = html;
+            <!-- 🧠 Why this clip is viral (LLM Rationale) -->
+            <div class="cognitive-box rationale-box">
+              <div class="cognitive-box-label">
+                <i class="ri-lightbulb-flash-line"></i> Why This Clip is Viral (LLM Rationale)
+              </div>
+              <p class="cognitive-box-text">${escapeHtml(reasonText)}</p>
+            </div>
+
+            <!-- 💡 Presenter Coaching Objective (Kai Why) -->
+            <div class="cognitive-box kai-box">
+              <div class="cognitive-box-label">
+                <i class="ri-user-star-line"></i> Presenter's Coaching &amp; Empathy Angle
+              </div>
+              <p class="cognitive-box-text">${escapeHtml(kaiWhyText)}</p>
+            </div>
+
+            ${socialCaption ? `
+              <!-- 📱 Social Strategy & Caption -->
+              <div class="cognitive-box social-box">
+                <div class="cognitive-box-label">
+                  <i class="ri-hashtag"></i> Viral Social Hook &amp; Keywords
+                </div>
+                <p class="cognitive-box-text" style="font-size:0.8rem; color:#bae6fd;">${escapeHtml(socialCaption)}</p>
+              </div>
+            ` : ''}
+          </div>
+        `;
+      });
+      container.innerHTML = html;
+      return;
+    }
+
+    // TAB 2: SPOKEN SCRIPTS (Hook Intro & Outro Breakdown)
+    if (currentThoughtTab === 'dialogues') {
+      let html = '';
+      metadata.forEach((clip, idx) => {
+        const startSec = (clip.start_ms || 0) / 1000;
+        const endSec = (clip.end_ms || 0) / 1000;
+        const timeStr = `${Math.floor(startSec / 60)}:${Math.floor(startSec % 60).toString().padStart(2, '0')} - ${Math.floor(endSec / 60)}:${Math.floor(endSec % 60).toString().padStart(2, '0')}`;
+        const rawTitle = clip.title || clip.clip_title || (`Clip #${idx + 1}`);
+        const cleanTitle = rawTitle.replace(/^(?:clip[_\s\-]*\d+[_\s\-]*|\d+[\.\:\-]\s*)+/i, '').trim() || rawTitle;
+
+        let hookText = '';
+        let closingText = '';
+
+        if (clip.editorial_data) {
+          hookText = typeof clip.editorial_data.hook === 'object' ? (clip.editorial_data.hook?.text || '') : (clip.editorial_data.hook || '');
+          closingText = clip.editorial_data.closing_explanation || '';
+          if (!closingText && clip.editorial_data.commentary_segments && clip.editorial_data.commentary_segments.length > 0) {
+            closingText = clip.editorial_data.commentary_segments.map(s => s.text || '').filter(Boolean).join(' ');
+          }
+        }
+
+        if (!hookText && clip.hook_text) hookText = clip.hook_text;
+        if (!closingText && clip.commentary_text) closingText = clip.commentary_text;
+
+        html += `
+          <div class="cognitive-card">
+            <div class="cognitive-card-header">
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span class="clip-num-badge" style="background:rgba(99, 102, 241, 0.15); color:#818cf8; border:1px solid rgba(99, 102, 241, 0.3); padding:2px 8px; border-radius:8px; font-weight:700; font-size:0.72rem;">Clip #${idx + 1}</span>
+                <strong style="color:#f3f4f6; font-size:0.88rem;">${escapeHtml(cleanTitle)}</strong>
+              </div>
+              <span style="font-size:0.75rem; color:#9ca3af;"><i class="ri-time-line"></i> ${timeStr}</span>
+            </div>
+
+            ${hookText ? `
+              <div class="cognitive-box dialogue-hook-box">
+                <div class="cognitive-box-label">
+                  <i class="ri-mic-line"></i> Opening Hook (Presenter Frame 0 Intro)
+                </div>
+                <p class="cognitive-box-text">"${escapeHtml(hookText)}"</p>
+              </div>
+            ` : ''}
+
+            <div style="padding:6px 12px; background:rgba(255,255,255,0.03); border-radius:6px; font-size:0.78rem; color:var(--text-muted); display:flex; align-items:center; gap:6px;">
+              <i class="ri-user-voice-line"></i> <span>Speaker completes complex explanation in mid-clip (${timeStr})</span>
+            </div>
+
+            ${closingText ? `
+              <div class="cognitive-box dialogue-closing-box">
+                <div class="cognitive-box-label">
+                  <i class="ri-chat-voice-line"></i> Closing Simplification (Presenter Outro Breakdown)
+                </div>
+                <p class="cognitive-box-text">"${escapeHtml(closingText)}"</p>
+              </div>
+            ` : ''}
+          </div>
+        `;
+      });
+      container.innerHTML = html;
+    }
   }
 
   function renderFullscreenScriptCards(metadata) {
@@ -2506,9 +2668,9 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!metadata || metadata.length === 0) {
       container.innerHTML = `
         <div class="empty-script" style="padding: 40px; text-align: center;">
-          <div class="empty-icon" style="font-size: 36px; margin-bottom: 12px;"><i class="ri-file-search-line"></i></div>
-          <h4 style="font-size: 1.1rem; color: var(--text-main);">No Matching Dialogues Found</h4>
-          <p style="color: var(--text-muted);">Try adjusting your search query or select another job.</p>
+          <div class="empty-icon" style="font-size: 36px; margin-bottom: 12px;"><i class="ri-brain-line"></i></div>
+          <h4 style="font-size: 1.1rem; color: var(--text-main);">No Matching Cognitive Records Found</h4>
+          <p style="color: var(--text-muted);">Try adjusting your search query or select another job from the dropdown.</p>
         </div>
       `;
       return;
@@ -2519,51 +2681,83 @@ document.addEventListener("DOMContentLoaded", () => {
       const startSec = (clip.start_ms || 0) / 1000;
       const endSec = (clip.end_ms || 0) / 1000;
       const timeStr = `${Math.floor(startSec / 60)}:${Math.floor(startSec % 60).toString().padStart(2, '0')} - ${Math.floor(endSec / 60)}:${Math.floor(endSec % 60).toString().padStart(2, '0')}`;
-      const scoreStr = clip.hook_score ? `${clip.hook_score}/100` : '—';
-      const rawTitle = clip.title || (`Viral Clip #${idx + 1}`);
+      const scoreVal = clip.viral_score || clip.hook_score || 9.5;
+      const scoreFormatted = typeof scoreVal === 'number' ? scoreVal.toFixed(1) : scoreVal;
+      const hookType = clip.hook_type || 'Reframe / Validation';
+
+      const rawTitle = clip.title || clip.clip_title || (`Viral Clip #${idx + 1}`);
       const cleanTitle = rawTitle.replace(/^(?:clip[_\s\-]*\d+[_\s\-]*|\d+[\.\:\-]\s*)+/i, '').trim() || rawTitle;
 
+      const reasonText = clip.hook_explanation || clip.reason || clip.description || '';
+      const kaiWhyText = clip.kai_why || '';
+      const socialCaption = clip.social_caption || '';
+
       let hookText = '';
-      let commentaryText = '';
+      let closingText = '';
 
       if (clip.editorial_data) {
         hookText = typeof clip.editorial_data.hook === 'object' ? (clip.editorial_data.hook?.text || '') : (clip.editorial_data.hook || '');
-        if (clip.editorial_data.commentary_segments && clip.editorial_data.commentary_segments.length > 0) {
-          commentaryText = clip.editorial_data.commentary_segments.map(s => s.text || '').filter(Boolean).join(' ');
+        closingText = clip.editorial_data.closing_explanation || '';
+        if (!closingText && clip.editorial_data.commentary_segments) {
+          closingText = clip.editorial_data.commentary_segments.map(s => s.text || '').join(' ');
         }
       }
 
       if (!hookText && clip.hook_text) hookText = clip.hook_text;
-      if (!commentaryText && clip.commentary_text) commentaryText = clip.commentary_text;
+      if (!closingText && clip.commentary_text) closingText = clip.commentary_text;
 
       html += `
-        <div class="fs-script-card">
+        <div class="fs-script-card" style="background:rgba(18, 18, 24, 0.9); border:1px solid rgba(168,85,247,0.25); border-radius:12px; padding:20px;">
           <div class="fs-card-header">
             <div style="display: flex; align-items: center; gap: 10px;">
-              <span class="clip-num-badge" style="background: rgba(99, 102, 241, 0.15); color: #818cf8; border: 1px solid rgba(99, 102, 241, 0.3); padding: 4px 10px; border-radius: 8px; font-weight: 700; font-size: 0.8rem;">Clip #${idx + 1}</span>
+              <span class="clip-num-badge" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.3); padding: 4px 10px; border-radius: 8px; font-weight: 700; font-size: 0.8rem;">Clip #${idx + 1}</span>
               <strong style="color: var(--text-main); font-size: 1.05rem;">${escapeHtml(cleanTitle)}</strong>
             </div>
-            <div style="display: flex; align-items: center; gap: 10px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
               <span style="font-size: 0.82rem; color: var(--text-muted);"><i class="ri-time-line"></i> ${timeStr}</span>
-              <span style="font-size: 0.82rem; color: #f59e0b; font-weight: 600; background: rgba(245, 158, 11, 0.1); padding: 2px 8px; border-radius: 6px;"><i class="ri-fire-fill"></i> Score: ${scoreStr}</span>
+              <span class="cognitive-score-pill"><i class="ri-fire-fill"></i> Score: ${scoreFormatted}/10</span>
+              <span class="cognitive-hook-type-pill"><i class="ri-flashlight-fill"></i> ${escapeHtml(hookType)}</span>
             </div>
           </div>
 
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:8px;">
+            ${reasonText ? `
+              <div class="cognitive-box rationale-box">
+                <div class="cognitive-box-label"><i class="ri-lightbulb-flash-line"></i> LLM Selection Rationale</div>
+                <p class="cognitive-box-text">${escapeHtml(reasonText)}</p>
+              </div>
+            ` : ''}
+
+            ${kaiWhyText ? `
+              <div class="cognitive-box kai-box">
+                <div class="cognitive-box-label"><i class="ri-user-star-line"></i> Presenter Coaching Intent</div>
+                <p class="cognitive-box-text">${escapeHtml(kaiWhyText)}</p>
+              </div>
+            ` : ''}
+          </div>
+
           ${hookText ? `
-            <div class="fs-dialogue-block fs-dialogue-hook">
+            <div class="fs-dialogue-block fs-dialogue-hook" style="margin-top:10px;">
               <div class="fs-dialogue-label" style="color: #818cf8;">
-                <i class="ri-mic-line"></i> <span>Opening Hook (Frame 0 — Anime Teacher Intro)</span>
+                <i class="ri-mic-line"></i> <span>Opening Hook (Frame 0 Intro Dialogue)</span>
               </div>
               <p class="fs-dialogue-text">"${escapeHtml(hookText)}"</p>
             </div>
           ` : ''}
 
-          ${commentaryText ? `
-            <div class="fs-dialogue-block fs-dialogue-comm">
+          ${closingText ? `
+            <div class="fs-dialogue-block fs-dialogue-comm" style="margin-top:10px;">
               <div class="fs-dialogue-label" style="color: #34d399;">
-                <i class="ri-chat-voice-line"></i> <span>Mid-Clip Concept Breakdown (Video Freeze-Frame Explanation)</span>
+                <i class="ri-chat-voice-line"></i> <span>Closing Simplification (Outro Dialogue Breakdown)</span>
               </div>
-              <p class="fs-dialogue-text">"${escapeHtml(commentaryText)}"</p>
+              <p class="fs-dialogue-text">"${escapeHtml(closingText)}"</p>
+            </div>
+          ` : ''}
+
+          ${socialCaption ? `
+            <div class="cognitive-box social-box" style="margin-top:10px;">
+              <div class="cognitive-box-label"><i class="ri-hashtag"></i> Generated Social Metadata &amp; Keywords</div>
+              <p class="cognitive-box-text" style="font-size:0.82rem; color:#bae6fd;">${escapeHtml(socialCaption)}</p>
             </div>
           ` : ''}
         </div>

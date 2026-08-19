@@ -669,6 +669,15 @@ async def get_job_script(job_id: str):
             with open(temp_file, "r", encoding="utf-8") as f:
                 data = json.load(f)
         except Exception: pass
+    else:
+        p_dir = (BASE_DIR / "temp" / f"processing_{clean_jid}").resolve()
+        if p_dir.exists():
+            for hf in p_dir.glob("hooks_*.json"):
+                try:
+                    with open(hf, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                        if data: break
+                except Exception: pass
     return {"job_id": clean_jid, "script": data}
 
 @router.get("/clips")

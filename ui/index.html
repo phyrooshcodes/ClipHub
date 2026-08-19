@@ -144,31 +144,34 @@
           </div>
         </div>
 
-        <!-- TOP RIGHT: AI Script & Explainer -->
+        <!-- TOP RIGHT: LLM Thought Process & Cognitive Brain -->
         <div class="panel panel-script" id="section-human-review">
           <div class="panel-header between">
             <div class="panel-header-title">
-              <i class="ri-sparkling-fill" style="color:var(--brand-purple);"></i>
-              <h3>AI SCRIPT &amp; EXPLAINER</h3>
+              <i class="ri-brain-line" style="color:var(--brand-purple); font-size:18px;"></i>
+              <h3>LLM THOUGHT PROCESS</h3>
+              <span class="header-pill" style="font-size:10px; background:rgba(168,85,247,0.15); color:#c084fc; border:1px solid rgba(168,85,247,0.3); margin-left:6px;"><i class="ri-sparkling-fill"></i> Cognitive Rationale</span>
             </div>
             <div style="display:flex; align-items:center; gap:8px;">
-              <select class="script-job-select" id="script-job-selector" title="Select Previous Job to Inspect Script">
-                <option value="">Loading previous jobs...</option>
+              <select class="script-job-select" id="script-job-selector" title="Select Job to Inspect LLM Thought Process">
+                <option value="">Loading thought data...</option>
               </select>
-              <button id="btn-fullscreen-script" title="Expand Fullscreen Detailed Script View">
+              <button id="btn-fullscreen-script" title="Expand Fullscreen Cognitive Analysis">
                 <i class="ri-fullscreen-line"></i>
               </button>
             </div>
           </div>
-          <div class="panel-tabs">
-            <button class="tab active"><i class="ri-file-text-line"></i> GENERATED NARRATIVES</button>
+          <div class="panel-tabs" id="thought-process-tabs">
+            <button class="tab active" id="tab-llm-cognitive" data-thought-tab="cognitive"><i class="ri-brain-line"></i> COGNITIVE REASONING</button>
+            <button class="tab" id="tab-llm-dialogues" data-thought-tab="dialogues"><i class="ri-chat-voice-line"></i> SPOKEN SCRIPTS</button>
+            <button class="tab" id="tab-llm-live" data-thought-tab="live"><i class="ri-pulse-line"></i> CHAIN OF THOUGHT <span id="live-thought-dot" class="live-pulse-dot hidden"></span></button>
           </div>
           <div class="script-content" id="review-cards-container" style="padding:15px; max-height:420px; overflow-y:auto;">
-            <!-- Script segments will be injected here dynamically by app.js -->
+            <!-- Thought Process / Script segments will be injected here dynamically by app.js -->
             <div class="empty-script">
-              <div class="empty-icon"><i class="ri-file-list-3-line"></i></div>
-              <h4>No Script Selected</h4>
-              <p>Select a previous job from the dropdown above or run a new video clipping job to inspect full narrative scripts in real-time.</p>
+              <div class="empty-icon"><i class="ri-brain-line"></i></div>
+              <h4>No Thought Process Selected</h4>
+              <p>Select a job from the dropdown above or run a video to inspect real-time LLM cognitive reasoning, hook virality analysis, and AI persona strategy.</p>
             </div>
           </div>
         </div>
@@ -967,16 +970,16 @@
       </div>
     </div>
 
-    <!-- FULLSCREEN SCRIPT & DIALOGUES MODAL -->
+    <!-- FULLSCREEN LLM THOUGHT PROCESS & SCRIPTS MODAL -->
     <div id="modal-script-fullscreen" class="modal-backdrop hidden">
       <div class="modal-overlay" id="overlay-fs-script"></div>
       <div class="modal-card modal-card-xl">
         <div class="modal-header between">
           <div style="display: flex; align-items: center; gap: 10px;">
-            <i class="ri-sparkling-fill" style="color: var(--brand-purple); font-size: 22px;"></i>
+            <i class="ri-brain-line" style="color: var(--brand-purple); font-size: 24px;"></i>
             <div>
-              <h3 style="margin: 0; font-size: 1.1rem; font-weight: 700; color: var(--text-main);">AI Explainer Scripts &amp; Dialogues</h3>
-              <small style="color: var(--text-muted); font-size: 0.78rem;">Full detailed view of opening hooks, teacher breakdowns, and timestamps</small>
+              <h3 style="margin: 0; font-size: 1.1rem; font-weight: 700; color: var(--text-main);">LLM Cognitive Strategy &amp; Thought Process</h3>
+              <small style="color: var(--text-muted); font-size: 0.78rem;">In-depth view of AI selection rationale, psychological hooks, persona coaching logic, and spoken narratives</small>
             </div>
           </div>
           <button class="close-modal" id="btn-close-fs-script" title="Close (Esc)"><i class="ri-close-line"></i></button>
@@ -985,7 +988,7 @@
         <div style="padding: 12px 24px; border-bottom: 1px solid var(--border-light); display: flex; gap: 14px; align-items: center; background: var(--bg-panel-inset); flex-wrap: wrap;">
           <div style="flex: 1; min-width: 240px; position: relative;">
             <i class="ri-search-line" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 15px;"></i>
-            <input type="text" id="fs-script-search" placeholder="Search dialogues, hooks, or topics..." style="width: 100%; padding: 8px 12px 8px 36px; border-radius: var(--radius-sm); border: 1px solid var(--border-light); background: var(--bg-card); color: var(--text-main); font-size: 13px; outline: none; box-sizing: border-box;">
+            <input type="text" id="fs-script-search" placeholder="Search cognitive rationale, hooks, or dialogue..." style="width: 100%; padding: 8px 12px 8px 36px; border-radius: var(--radius-sm); border: 1px solid var(--border-light); background: var(--bg-card); color: var(--text-main); font-size: 13px; outline: none; box-sizing: border-box;">
           </div>
           <div style="display: flex; align-items: center; gap: 8px;">
             <label style="font-size: 12px; color: var(--text-muted); font-weight: 600;">Job:</label>
