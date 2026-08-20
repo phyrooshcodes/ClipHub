@@ -350,10 +350,17 @@ async def social_status():
     }
 
 @router.post("/api/social/instagram/connect-playwright")
-async def connect_ig_playwright():
+async def connect_ig_playwright(request: Request = None):
     from modules.publisher_ig import connect_instagram_playwright
+    force_fresh = False
+    if request:
+        try:
+            body = await request.json()
+            force_fresh = bool(body.get("force_fresh", False))
+        except Exception:
+            pass
     try:
-        await asyncio.to_thread(connect_instagram_playwright)
+        await asyncio.to_thread(connect_instagram_playwright, force_fresh=force_fresh)
         return {"success": True}
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=400)

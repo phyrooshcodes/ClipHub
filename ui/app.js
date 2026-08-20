@@ -1934,6 +1934,7 @@ document.addEventListener("DOMContentLoaded", () => {
       let connectedCount = 0;
 
       if (igStatus) {
+        const igDisconnect = document.getElementById('btn-disconnect-ig');
         if (data.instagram_connected) {
           connectedCount++;
           const queueText = (waiting || uploading || completed) ? ` (Queue: ${waiting} pending, ${completed} published)` : '';
@@ -1941,10 +1942,12 @@ document.addEventListener("DOMContentLoaded", () => {
           igStatus.textContent = `Connected: ${userStr}${queueText}`;
           if (igBadge) igBadge.classList.add('connected');
           if (igButton) igButton.innerHTML = '<i class="ri-refresh-line"></i> <span>Reconnect Instagram</span>';
+          if (igDisconnect) igDisconnect.classList.remove('hidden');
         } else {
           igStatus.textContent = 'Not connected';
           if (igBadge) igBadge.classList.remove('connected');
           if (igButton) igButton.innerHTML = '<i class="ri-instagram-line"></i> <span>Connect Instagram</span>';
+          if (igDisconnect) igDisconnect.classList.add('hidden');
         }
       }
 
@@ -1997,14 +2000,35 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById('btn-connect-ig')?.addEventListener('click', async (event) => {
     const button = event.currentTarget;
     button.disabled = true;
-    button.innerHTML = '<i class="ri-loader-4-line spin"></i> <span>Connecting...</span>';
+    const isReconnect = button.textContent.toLowerCase().includes('reconnect');
+    button.innerHTML = '<i class="ri-loader-4-line spin"></i> <span>Opening Browser...</span>';
+    Toast.show("Opening Instagram login browser window...", "info");
     try {
-      const response = await fetch('/api/social/instagram/connect-playwright', { method: 'POST' });
+      const response = await fetch('/api/social/instagram/connect-playwright', { 
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ force_fresh: isReconnect })
+      });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Instagram login failed');
       Toast.show("Instagram session saved successfully!", "success");
     } catch (error) {
       Toast.show("Instagram connection error: " + error.message, "error");
+    } finally {
+      button.disabled = false;
+      await refreshSocialStatus();
+    }
+  });
+
+  document.getElementById('btn-disconnect-ig')?.addEventListener('click', async (event) => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+      await fetch('/api/social/instagram/disconnect', { method: 'POST' });
+      Toast.show("Instagram session disconnected", "info");
+    } catch (error) {
+      console.error('Disconnect failed:', error);
+      Toast.show("Failed to disconnect: " + error.message, "error");
     } finally {
       button.disabled = false;
       await refreshSocialStatus();
@@ -2469,6 +2493,25 @@ document.addEventListener("DOMContentLoaded", () => {
             }
           }
         }
+      }
+    }
+
+    // When progress completes (100%), mark ALL steps (including final Render step) as completed with check mark
+    if (percent >= 100) {
+      document.querySelectorAll('.stepper .step').forEach(c => {
+        c.classList.remove('active');
+        c.classList.add('completed', 'done');
+        updateStepRing(c.id, 100);
+        const pContent = c.querySelector('.step-icon-content');
+        if (pContent) pContent.innerHTML = '<i class="ri-check-line"></i>';
+      });
+      document.querySelectorAll('.stepper .step-connector').forEach(c => {
+        c.classList.add('completed');
+      });
+      const statusBadge = document.getElementById('pipeline-status-badge');
+      if (statusBadge) {
+        statusBadge.textContent = 'Completed';
+        statusBadge.style.color = '#22c55e';
       }
     }
     

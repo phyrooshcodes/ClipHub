@@ -291,16 +291,18 @@ def _migrate_to_persistent_profile() -> bool:
         return False
 
 
-def connect_instagram_playwright() -> bool:
+def connect_instagram_playwright(force_fresh: bool = False) -> bool:
     """Open a visible browser once, authenticate, and persist the session
     inside the dedicated persistent browser profile directory.
 
     All browser state — cookies, localStorage, IndexedDB, service workers,
     and device fingerprint — is retained by Chromium's user-data-dir.
     """
+    if force_fresh:
+        disconnect_instagram()
     _migrate_to_persistent_profile()
     PROFILE_DIR.mkdir(parents=True, exist_ok=True)
-    logger.info("[Instagram] Opening login browser with persistent profile at %s", PROFILE_DIR)
+    logger.info("[Instagram] Opening login browser with persistent profile at %s (force_fresh=%s)", PROFILE_DIR, force_fresh)
     with sync_playwright() as playwright:
         context = _launch_persistent_context(
             playwright=playwright,
@@ -310,6 +312,10 @@ def connect_instagram_playwright() -> bool:
         )
         page = context.new_page()
         try:
+            try:
+                page.bring_to_front()
+            except Exception:
+                pass
             _wait_for_login(page)
             logger.info("[Instagram] Login successful — session persisted in %s", PROFILE_DIR)
             return True

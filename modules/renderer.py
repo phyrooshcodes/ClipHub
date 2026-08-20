@@ -146,7 +146,7 @@ def render_clip(
             
             filter_str = (
                 f"[0:v]crop={crop_w}:{crop_h}:{crop_x}:0,scale=1080:1080:flags=lanczos,setsar=1,pad=1080:1920:0:420:black,fps=60,setpts=PTS-STARTPTS[v];"
-                f"[0:a]aformat=channel_layouts=stereo:sample_rates=48000,asetpts=PTS-STARTPTS[a]"
+                f"[0:a]aformat=channel_layouts=stereo:sample_rates=48000,volume=1.25,alimiter=limit=0.98,asetpts=PTS-STARTPTS[a]"
             )
             cmd += ["-filter_complex", filter_str, "-map", "[v]", "-map", "[a]"] + enc_args + ["-t", f"{seg_dur:.3f}", "-c:a", "aac", "-b:a", "192k", "-ac", "2", "-ar", "48000", "-pix_fmt", "yuv420p", out_file]
             _run_ffmpeg(cmd)
@@ -193,9 +193,10 @@ def render_clip(
 
             if has_click_sfx and clk_idx >= 0:
                 fc.append(f"[{clk_idx}:a]volume=0.30[clk]")
-                fc.append(f"[1:a][clk]amix=inputs=2:duration=first:dropout_transition=0,aformat=channel_layouts=stereo:sample_rates=48000,asetpts=PTS-STARTPTS[a]")
+                fc.append(f"[1:a]volume=1.25[voice]")
+                fc.append(f"[voice][clk]amix=inputs=2:duration=first:dropout_transition=0,aformat=channel_layouts=stereo:sample_rates=48000,alimiter=limit=0.98,asetpts=PTS-STARTPTS[a]")
             else:
-                fc.append(f"[1:a]aformat=channel_layouts=stereo:sample_rates=48000,asetpts=PTS-STARTPTS[a]")
+                fc.append(f"[1:a]aformat=channel_layouts=stereo:sample_rates=48000,volume=1.25,alimiter=limit=0.98,asetpts=PTS-STARTPTS[a]")
 
             cmd += [
                 "-filter_complex", ";".join(fc),
@@ -336,7 +337,7 @@ def render_clip(
                     f"afade=t=out:st={fade_out_st:.2f}:d={fade_out:.2f}:curve=log[bgm]"
                 )
                 fc.append(
-                    f"[0:a]aformat=channel_layouts=stereo:sample_rates=48000[dialogue];"
+                    f"[0:a]aformat=channel_layouts=stereo:sample_rates=48000,volume=1.25[dialogue];"
                     f"[dialogue][bgm]amix=inputs=2:duration=first:dropout_transition=0:weights=1.0 1.0,"
                     f"alimiter=limit=0.98[a_out]"
                 )
@@ -349,16 +350,19 @@ def render_clip(
                     "-c:a", "aac", "-b:a", "192k", "-ac", "2", "-ar", "48000", "-movflags", "+faststart", output_path
                 ]
             else:
+                fc = []
                 if safe_sub_path:
-                    concat_cmd += [
-                        "-vf", f"ass='{safe_sub_path}'",
-                    ] + enc_args + [
-                        "-c:a", "aac", "-b:a", "192k", "-ac", "2", "-ar", "48000", "-movflags", "+faststart", output_path
-                    ]
+                    fc.append(f"[0:v]ass='{safe_sub_path}'[v_out]")
                 else:
-                    concat_cmd += [
-                        "-c", "copy", "-movflags", "+faststart", output_path
-                    ]
+                    fc.append(f"[0:v]null[v_out]")
+                fc.append(f"[0:a]aformat=channel_layouts=stereo:sample_rates=48000,volume=1.25,alimiter=limit=0.98[a_out]")
+                concat_cmd += [
+                    "-filter_complex", ";".join(fc),
+                    "-map", "[v_out]",
+                    "-map", "[a_out]"
+                ] + enc_args + [
+                    "-c:a", "aac", "-b:a", "192k", "-ac", "2", "-ar", "48000", "-movflags", "+faststart", output_path
+                ]
 
             _run_ffmpeg(concat_cmd)
         except Exception as e:

@@ -310,11 +310,13 @@ def _build_ffmpeg_pipe_cmd(
     if has_click and clk_idx >= 0:
         filter_str = (
             f"[{clk_idx}:a]volume=0.30[clk];"
-            f"[1:a][clk]amix=inputs=2:duration=first:dropout_transition=0,aformat=channel_layouts=stereo:sample_rates=48000,asetpts=PTS-STARTPTS[a]"
+            f"[1:a]volume=1.25[voice];"
+            f"[voice][clk]amix=inputs=2:duration=first:dropout_transition=0,aformat=channel_layouts=stereo:sample_rates=48000,alimiter=limit=0.98,asetpts=PTS-STARTPTS[a]"
         )
         cmd += ["-filter_complex", filter_str, "-map", "0:v", "-map", "[a]"]
     else:
-        cmd += ["-map", "0:v", "-map", "1:a"]
+        filter_str = f"[1:a]volume=1.25,aformat=channel_layouts=stereo:sample_rates=48000,alimiter=limit=0.98,asetpts=PTS-STARTPTS[a]"
+        cmd += ["-filter_complex", filter_str, "-map", "0:v", "-map", "[a]"]
 
     # Video encoding
     if use_nvenc:
