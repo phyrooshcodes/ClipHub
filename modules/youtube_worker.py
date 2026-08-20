@@ -336,6 +336,43 @@ class YouTubePersistentWorker:
                 self.results[upload_id]["status"] = "uploading"
             else:
                 self.results[upload_id] = {"status": "uploading"}
+
+        from modules.publishers.youtube.api_publisher import has_oauth_token, upload_video_via_api
+        if has_oauth_token():
+            self._notify(upload_id, 10, "Starting YouTube upload via official YouTube Data API v3")
+            import re
+            clean_title = re.sub(r'^(?:clip[_\s\-]*\d+[_\s\-]*)+', '', title, flags=re.I).strip()
+            if "_" in clean_title and " " not in clean_title:
+                clean_title = clean_title.replace("_", " ")
+            clean_title = clean_title or title
+            
+            target_dt, date_str, time_str = calculate_schedule_target()
+            scheduled_display_time = f"{date_str} at {time_str}"
+            
+            res = upload_video_via_api(
+                video_path=video_path,
+                title=clean_title,
+                description=description,
+                tags=tags,
+                thumbnail_path=thumbnail_path,
+                publish_at=target_dt,
+                progress_callback=lambda p, m: self._notify(upload_id, p, m),
+            )
+            rec = {
+                "status": "scheduled",
+                "success": True,
+                "url": res.get("url"),
+                "scheduled_time": scheduled_display_time,
+                "title": clean_title,
+                "timestamp": time.time(),
+                "auth_type": "oauth_api"
+            }
+            with self._lock:
+                self.results[upload_id] = rec
+            self._save_history_entry(video_path, rec)
+            return
+
+        self._ensure_browser()
         self._notify(upload_id, 10, "Starting YouTube upload in persistent browser")
         
         page = None

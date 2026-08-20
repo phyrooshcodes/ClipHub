@@ -10,12 +10,20 @@ import logging
 from pathlib import Path
 from typing import Optional, Callable
 
+from modules.publishers.youtube.api_publisher import (
+    has_oauth_token,
+    get_channel_info_api,
+    upload_video_via_api,
+    TOKEN_FILE,
+    CLIENT_SECRETS_FILE,
+    SCOPES,
+)
 from modules.publishers.youtube.publisher import (
     post_youtube_video,
     connect_youtube_playwright,
     is_youtube_connected as is_playwright_connected,
     disconnect_youtube as disconnect_playwright,
-    get_youtube_channel_info,
+    get_youtube_channel_info as get_browser_channel_info,
     inspect_youtube_channel,
     YouTubeUploadResult,
     YouTubeUploadError,
@@ -24,14 +32,11 @@ from modules.publishers.youtube.publisher import (
 logger = logging.getLogger(__name__)
 
 CREDENTIALS_DIR = Path(__file__).parent.parent / "credentials"
-TOKEN_FILE = CREDENTIALS_DIR / "youtube_token.json"
-CLIENT_SECRETS_FILE = CREDENTIALS_DIR / "client_secrets.json"
-SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
 
 
 def is_youtube_connected() -> bool:
-    """Return True if YouTube persistent browser session or OAuth token exists."""
-    return is_playwright_connected() or TOKEN_FILE.exists()
+    """Return True if YouTube OAuth token or persistent browser session exists."""
+    return has_oauth_token() or is_playwright_connected()
 
 
 def has_client_secrets() -> bool:
@@ -39,8 +44,18 @@ def has_client_secrets() -> bool:
     return CLIENT_SECRETS_FILE.exists()
 
 
+def get_youtube_channel_info() -> dict:
+    """Return channel metadata from official API if available, else browser profile."""
+    if has_oauth_token():
+        try:
+            return get_channel_info_api()
+        except Exception as e:
+            logger.warning(f"[YouTube] API channel info fetch note: {e}")
+    return get_browser_channel_info()
+
+
 def disconnect_youtube():
-    """Remove YouTube browser session and OAuth token.json."""
+    """Remove YouTube OAuth token and browser session."""
     disconnect_playwright()
     if TOKEN_FILE.exists():
         TOKEN_FILE.unlink()
@@ -56,9 +71,24 @@ def post_youtube_short(
     progress: Optional[Callable[[int, str], None]] = None,
 ) -> str:
     """
-    Backward-compatible entry point to post a video/Short to YouTube.
-    Automatically schedules the video for 12:00 AM (00:00).
+    Publish a video/Short to YouTube.
+    Prioritizes official YouTube Data API v3 if OAuth token exists, else browser automation.
+    Automatically schedules for 12:00 AM (00:00).
     """
+    if has_oauth_token():
+        from modules.publishers.youtube.scheduler import calculate_schedule_target
+        target_dt, date_str, time_str = calculate_schedule_target()
+        res = upload_video_via_api(
+            video_path=video_path,
+            title=title,
+            description=description,
+            tags=tags,
+            thumbnail_path=thumbnail_path,
+            publish_at=target_dt,
+            progress_callback=progress,
+        )
+        return res["url"]
+
     result = post_youtube_video(
         video_path=video_path,
         title=title,
@@ -72,7 +102,7 @@ def post_youtube_short(
     return url
 
 
-# OAuth Legacy Helpers for backward compatibility
+# OAuth Helpers for Google Cloud App Flow
 def get_youtube_flow(redirect_uri: str = "urn:ietf:wg:oauth:2.0:oob"):
     from google_auth_oauthlib.flow import Flow
     if not CLIENT_SECRETS_FILE.exists():
