@@ -50,12 +50,16 @@ ClipHub goes beyond basic clipping. It creates **Viral Explainer Videos** engine
 2. **NVIDIA GPU**: RTX / GTX series GPU with updated drivers for CUDA & NVENC acceleration.
 3. **NVIDIA NIM API Key**: Free API key from [build.nvidia.com](https://build.nvidia.com/) (for Llama 3.3 70B viral hook detection).
 
-### One-Click Launch
+### Launching ClipHub
 
-- 🪟 **Windows**: Double-click `run_windows.bat`
+- 🪟 **Windows Desktop App (Recommended)**: Double-click `run_windows.bat`
 - 🐧 **Linux / macOS**: Run `./run_linux.sh`
 
-*The Web Dashboard will launch automatically at **`http://localhost:7842`**.*
+#### UI Options:
+1. **🖥️ Floating Desktop Window (Primary & Recommended)**:
+   - Launches automatically as a dedicated desktop application with full native window management, instant hardware acceleration, and integrated social publishing (Instagram Reels & YouTube Shorts).
+2. **🌐 Localhost Web Browser (`http://localhost:7842`)**:
+   - Access the dashboard in Chrome/Edge/Firefox. All features (AI Clipping, Prompt Mode, Caption Studio, Video Previews, History, Media Library) work seamlessly. *(Note: Instagram session authentication is best handled directly in the floating desktop app).*
 
 ---
 
