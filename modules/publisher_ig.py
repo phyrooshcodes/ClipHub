@@ -497,7 +497,16 @@ def _click_first_available(page: Page, names: tuple[str, ...], timeout: int = 20
 def _open_reel_creator(page: Page) -> object:
     """Open Instagram's media chooser across both known creator layouts."""
     # Step 1: Click "Create" or "New post" in the sidebar
-    _click_first_available(page, ("New post", "Create"))
+    create_btn = page.locator('svg[aria-label*="New post" i], svg[aria-label*="Create" i], a[role="link"]:has(svg[aria-label*="New post" i]), a[role="link"]:has(svg[aria-label*="Create" i])').first
+    if create_btn.count():
+        try:
+            logger.info("[Instagram] Clicking Create button in sidebar...")
+            create_btn.click(timeout=3_000)
+        except Exception:
+            _click_first_available(page, ("New post", "Create"))
+    else:
+        _click_first_available(page, ("New post", "Create"))
+
     page.wait_for_timeout(1_000)
     
     file_input = page.locator('input[type="file"]').first
@@ -507,14 +516,27 @@ def _open_reel_creator(page: Page) -> object:
     # Step 2: In modern desktop layout, clicking Create opens a sub-menu with "Post"
     logger.info("[Instagram] Looking for 'Post' in creator sub-menu...")
     try:
-        _click_first_available(page, ("Post", "Reel"), timeout=8_000)
+        # Check if the popup menu appeared with "Live video"
+        live_anchor = page.locator('a:has-text("Live video")').first
+        if live_anchor.count():
+            container = live_anchor.locator('xpath=..')
+            post_a = container.locator('a').first
+            if post_a.count():
+                logger.info("[Instagram] Clicking Post anchor inside creator popup menu...")
+                post_a.click(timeout=4_000)
+        else:
+            post_link = page.locator('a:has(svg[aria-label="Post"]), a:has-text("Post"):not(:has-text("Live video")), a:has(span:text-is("Post"))').first
+            if post_link.count():
+                logger.info("[Instagram] Clicking Post link...")
+                post_link.click(timeout=4_000)
+            else:
+                _click_first_available(page, ("Post", "Reel"), timeout=6_000)
     except Exception as e:
         logger.info("[Instagram] Sub-menu click notice: %s", e)
         
     page.wait_for_timeout(1_500)
     file_input = page.locator('input[type="file"]').first
     file_input.wait_for(state="attached", timeout=20_000)
-    return file_input
     return file_input
 
 
