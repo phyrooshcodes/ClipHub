@@ -1580,17 +1580,50 @@ document.addEventListener("DOMContentLoaded", () => {
     modalYtConnect?.classList.add('hidden');
   });
 
-  document.getElementById('btn-connect-yt')?.addEventListener('click', async () => {
+  document.getElementById('btn-connect-yt')?.addEventListener('click', async (event) => {
+    const button = event.currentTarget;
     try {
       const res = await fetch('/api/social/status');
       const data = await res.json();
       if (data.youtube_client_secrets_present) {
-        btnOauthAuthorize?.classList.remove('hidden');
+        button.disabled = true;
+        button.innerHTML = '<i class="ri-loader-4-line spin"></i> <span>Authorizing...</span>';
+        const authRes = await fetch('/api/social/youtube/auth-url');
+        const authData = await authRes.json();
+        if (authData.auth_url) {
+          window.open(authData.auth_url, 'google_oauth', 'width=600,height=750');
+          Toast.show("Google authorization opened. Select your channel (Right Pull) and click Allow.", "info");
+          
+          let attempts = 0;
+          const pollTimer = setInterval(async () => {
+            attempts++;
+            try {
+              const checkRes = await fetch('/api/social/status');
+              const checkData = await checkRes.json();
+              if (checkData.youtube_connected && checkData.youtube_channel?.name) {
+                clearInterval(pollTimer);
+                Toast.show(`Connected to ${checkData.youtube_channel.name} via Official Google API!`, "success");
+                button.disabled = false;
+                await refreshSocialStatus();
+              }
+            } catch (_) {}
+            if (attempts > 80) {
+              clearInterval(pollTimer);
+              button.disabled = false;
+              refreshSocialStatus();
+            }
+          }, 1500);
+        } else {
+          throw new Error(authData.error || "Could not get authorization URL");
+        }
       } else {
-        btnOauthAuthorize?.classList.add('hidden');
+        modalYtConnect?.classList.remove('hidden');
       }
-    } catch (_) {}
-    modalYtConnect?.classList.remove('hidden');
+    } catch (err) {
+      Toast.show('Error: ' + err.message, 'error');
+      button.disabled = false;
+      await refreshSocialStatus();
+    }
   });
 
   inputClientSecrets?.addEventListener('change', async (e) => {
@@ -1664,8 +1697,9 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  document.getElementById('btn-switch-yt')?.addEventListener('click', async (event) => {
-    modalYtConnect?.classList.remove('hidden');
+  document.getElementById('btn-switch-yt')?.addEventListener('click', async () => {
+    const btnConnect = document.getElementById('btn-connect-yt');
+    if (btnConnect) btnConnect.click();
   });
 
   refreshSocialStatus();

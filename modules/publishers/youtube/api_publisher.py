@@ -22,7 +22,8 @@ from googleapiclient.errors import HttpError
 
 logger = logging.getLogger(__name__)
 
-CREDENTIALS_DIR = Path(__file__).parent.parent.parent / "credentials"
+ROOT_DIR = Path(__file__).resolve().parents[3]
+CREDENTIALS_DIR = ROOT_DIR / "credentials"
 TOKEN_FILE = CREDENTIALS_DIR / "youtube_token.json"
 CLIENT_SECRETS_FILE = CREDENTIALS_DIR / "client_secrets.json"
 SCOPES = [
