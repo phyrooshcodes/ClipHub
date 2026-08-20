@@ -161,6 +161,43 @@ ClipHub/
 
 <br/>
 
+---
+
+<br/>
+
+## 🌐 Social Media Auto-Publishing (YouTube Shorts & Instagram Reels)
+
+ClipHub features fully automated, 1-click social media publishing with automated 12:00 AM scheduling and Amazon affiliate product tagging.
+
+### 📺 YouTube Shorts Setup (Official Google OAuth 2.0)
+
+ClipHub uses the **Official YouTube Data API v3** for 100% reliable background uploads without browser popups, CAPTCHAs, or 2FA session interruptions.
+
+#### 1. Setup Google Cloud Credentials (2 minutes):
+1. Visit the [Google Cloud Console](https://console.cloud.google.com/).
+2. Create a project named **ClipHub**.
+3. Go to **APIs & Services > Library** $\rightarrow$ Search for **YouTube Data API v3** $\rightarrow$ Click **Enable**.
+4. Go to **APIs & Services > Credentials** $\rightarrow$ Click **Create Credentials** $\rightarrow$ **OAuth client ID**.
+5. Select Application Type: **Desktop App** (or Web Application with redirect URI `http://localhost:7842/api/social/youtube/callback`).
+6. Click **Create** and **Download JSON** $\rightarrow$ Save file as:
+   ```
+   credentials/client_secrets.json
+   ```
+   *(Or simply upload this file directly from the ClipHub Web UI by clicking **Connect YouTube**)*.
+
+#### 2. Authorize & Choose Your Channel:
+1. Click **Connect YouTube** in the ClipHub dashboard $\rightarrow$ Click **Authorize with Google**.
+2. **Selecting between Multiple Channels (e.g. *Right Pull*):**
+   - When Google's authorization window opens in your browser, Google displays all channels and Brand Accounts under your email.
+   - Select your intended channel (e.g., **Right Pull**).
+   - Click **Allow**.
+3. Google grants a secure `refresh_token` locked specifically to that channel.
+4. ClipHub displays the connected channel name and avatar on the dashboard. All future uploads will publish directly to **Right Pull**!
+
+---
+
+<br/>
+
 ## 📜 License & Credits
 
 - Built with ❤️ for content creators and educators.

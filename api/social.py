@@ -407,8 +407,25 @@ async def youtube_callback(code: str):
     from modules.publisher_yt import connect_youtube_with_code
     try:
         connect_youtube_with_code(code, redirect_uri="http://localhost:7842/api/social/youtube/callback")
-        return HTMLResponse("<html><head><title>YouTube Connected</title></head><body><h2>✅ YouTube Connected!</h2><script>setTimeout(()=>window.close(), 2000);</script></body></html>")
-    except Exception as e: return HTMLResponse(f"<html><body><h2>❌ Connection Failed</h2><p>{e}</p></body></html>")
+        return HTMLResponse("<html><head><title>YouTube Connected</title><style>body{background:#0f172a;color:#fff;font-family:sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;margin:0;}h2{color:#22c55e;}</style></head><body><h2>✅ YouTube Connected Successfully!</h2><p>You can close this window now.</p><script>if(window.opener){window.opener.location.reload();}setTimeout(()=>window.close(), 1500);</script></body></html>")
+    except Exception as e:
+        return HTMLResponse(f"<html><head><title>Connection Failed</title><style>body{background:#0f172a;color:#fff;font-family:sans-serif;padding:40px;}</style></head><body><h2>❌ Connection Failed</h2><p>{e}</p></body></html>")
+@router.post("/api/social/youtube/upload-client-secrets")
+async def upload_client_secrets(file: UploadFile = File(...)):
+    from modules.publisher_yt import CREDENTIALS_DIR, CLIENT_SECRETS_FILE, get_youtube_flow
+    try:
+        content = await file.read()
+        data = json.loads(content.decode("utf-8"))
+        if "installed" not in data and "web" not in data:
+            return JSONResponse({"error": "Invalid client_secrets.json format. Must contain 'installed' or 'web' OAuth client config."}, status_code=400)
+        CREDENTIALS_DIR.mkdir(parents=True, exist_ok=True)
+        with open(CLIENT_SECRETS_FILE, "wb") as f:
+            f.write(content)
+        flow = get_youtube_flow(redirect_uri="http://localhost:7842/api/social/youtube/callback")
+        auth_url, _ = flow.authorization_url(prompt='consent', access_type='offline')
+        return {"success": True, "auth_url": auth_url}
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
 
 @router.post("/api/social/youtube/disconnect")
 async def disconnect_yt():

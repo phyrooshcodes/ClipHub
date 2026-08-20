@@ -989,6 +989,54 @@
       </div>
     </div>
 
+    <!-- YouTube Connection Modal -->
+    <div id="modal-youtube-connect" class="modal-backdrop hidden">
+      <div class="modal-card" style="max-width: 500px;">
+        <div class="modal-header">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <i class="ri-youtube-fill" style="color: #ef4444; font-size: 22px;"></i>
+            <h3 style="margin: 0; font-size: 1rem; font-weight: 700; color: var(--text-main);">Connect YouTube Channel</h3>
+          </div>
+          <button class="close-modal" id="btn-close-yt-connect" title="Close"><i class="ri-close-line"></i></button>
+        </div>
+        <div class="modal-body" style="padding: 20px; display: flex; flex-direction: column; gap: 14px;">
+          <!-- Option 1: Official Google API -->
+          <div style="padding: 14px; border: 1px solid rgba(99, 102, 241, 0.4); border-radius: 8px; background: rgba(99, 102, 241, 0.04);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <span style="font-weight: 700; font-size: 13px; color: var(--brand-primary);"><i class="ri-shield-check-line"></i> Official Google API (Recommended)</span>
+              <span style="font-size: 10px; background: rgba(34, 197, 94, 0.15); color: #22c55e; padding: 2px 6px; border-radius: 4px; font-weight: 600;">100% Reliable</span>
+            </div>
+            <p style="font-size: 12px; color: var(--text-muted); margin: 0 0 10px 0; line-height: 1.4;">
+              Direct background uploads via YouTube Data API v3. 0 browsers, 0 2FA interrupts.
+            </p>
+            <div id="yt-api-auth-zone">
+              <div id="yt-secrets-upload-area" style="border: 1px dashed var(--border-light); border-radius: 6px; padding: 12px; text-align: center; margin-bottom: 10px; background: var(--bg-card);">
+                <input type="file" id="input-client-secrets" accept=".json" style="display: none;">
+                <p style="font-size: 11px; color: var(--text-muted); margin: 0 0 8px 0;">Upload <code>client_secrets.json</code> from Google Cloud Console</p>
+                <button type="button" class="btn-outline-dashed" onclick="document.getElementById('input-client-secrets').click()" style="font-size: 11px; padding: 5px 12px;">
+                  <i class="ri-file-upload-line"></i> Choose File
+                </button>
+              </div>
+              <button id="btn-oauth-authorize" class="btn-primary-gradient hidden" style="width: 100%; justify-content: center; padding: 8px 14px;">
+                <i class="ri-google-fill"></i> Authorize with Google
+              </button>
+            </div>
+          </div>
+
+          <!-- Option 2: Browser Session -->
+          <div style="padding: 14px; border: 1px solid var(--border-light); border-radius: 8px; background: var(--bg-panel-inset);">
+            <span style="font-weight: 600; font-size: 13px; color: var(--text-main); display: block; margin-bottom: 4px;"><i class="ri-window-line"></i> Browser Session (Playwright)</span>
+            <p style="font-size: 12px; color: var(--text-muted); margin: 0 0 10px 0; line-height: 1.4;">
+              Opens a Chromium browser window to log in to YouTube Studio directly.
+            </p>
+            <button id="btn-browser-login" class="btn-outline-dashed" style="width: 100%; justify-content: center; padding: 8px 14px;">
+              <i class="ri-external-link-line"></i> Launch Browser Login
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- FULLSCREEN LLM THOUGHT PROCESS & SCRIPTS MODAL -->
     <div id="modal-script-fullscreen" class="modal-backdrop hidden">
       <div class="modal-overlay" id="overlay-fs-script"></div>

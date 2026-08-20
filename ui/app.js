@@ -1569,10 +1569,72 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  document.getElementById('btn-connect-yt')?.addEventListener('click', async (event) => {
-    const button = event.currentTarget;
-    button.disabled = true;
-    button.innerHTML = '<i class="ri-loader-4-line spin"></i> <span>Connecting...</span>';
+  // YouTube Connection Modal Handlers
+  const modalYtConnect = document.getElementById('modal-youtube-connect');
+  const btnCloseYtConnect = document.getElementById('btn-close-yt-connect');
+  const btnOauthAuthorize = document.getElementById('btn-oauth-authorize');
+  const inputClientSecrets = document.getElementById('input-client-secrets');
+  const btnBrowserLogin = document.getElementById('btn-browser-login');
+
+  btnCloseYtConnect?.addEventListener('click', () => {
+    modalYtConnect?.classList.add('hidden');
+  });
+
+  document.getElementById('btn-connect-yt')?.addEventListener('click', async () => {
+    try {
+      const res = await fetch('/api/social/status');
+      const data = await res.json();
+      if (data.youtube_client_secrets_present) {
+        btnOauthAuthorize?.classList.remove('hidden');
+      } else {
+        btnOauthAuthorize?.classList.add('hidden');
+      }
+    } catch (_) {}
+    modalYtConnect?.classList.remove('hidden');
+  });
+
+  inputClientSecrets?.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const formData = new FormData();
+    formData.append('file', file);
+    try {
+      Toast.show('Uploading client_secrets.json...', 'info');
+      const res = await fetch('/api/social/youtube/upload-client-secrets', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to upload client secrets');
+      Toast.show('client_secrets.json verified! Opening Google authorization...', 'success');
+      btnOauthAuthorize?.classList.remove('hidden');
+      if (data.auth_url) {
+        window.open(data.auth_url, 'google_oauth', 'width=600,height=700');
+        modalYtConnect?.classList.add('hidden');
+      }
+    } catch (err) {
+      Toast.show('Error: ' + err.message, 'error');
+    }
+  });
+
+  btnOauthAuthorize?.addEventListener('click', async () => {
+    try {
+      const res = await fetch('/api/social/youtube/auth-url');
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to generate auth URL');
+      if (data.auth_url) {
+        window.open(data.auth_url, 'google_oauth', 'width=600,height=700');
+        modalYtConnect?.classList.add('hidden');
+      }
+    } catch (err) {
+      Toast.show('Error: ' + err.message, 'error');
+    }
+  });
+
+  btnBrowserLogin?.addEventListener('click', async () => {
+    modalYtConnect?.classList.add('hidden');
+    const button = document.getElementById('btn-connect-yt');
+    if (button) {
+      button.disabled = true;
+      button.innerHTML = '<i class="ri-loader-4-line spin"></i> <span>Opening Browser...</span>';
+    }
     try {
       const response = await fetch('/api/social/youtube/connect-playwright', { method: 'POST' });
       const data = await response.json();
@@ -1581,7 +1643,7 @@ document.addEventListener("DOMContentLoaded", () => {
     } catch (error) {
       Toast.show("YouTube connection error: " + error.message, "error");
     } finally {
-      button.disabled = false;
+      if (button) button.disabled = false;
       await refreshSocialStatus();
     }
   });
@@ -1603,20 +1665,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   document.getElementById('btn-switch-yt')?.addEventListener('click', async (event) => {
-    const button = event.currentTarget;
-    button.disabled = true;
-    button.innerHTML = '<i class="ri-loader-4-line spin"></i> <span>Opening Studio...</span>';
-    try {
-      const response = await fetch('/api/social/youtube/connect-playwright', { method: 'POST' });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'YouTube Studio launch failed');
-    } catch (error) {
-      const ytStatus = document.getElementById('yt-status-text');
-      if (ytStatus) ytStatus.textContent = error.message;
-    } finally {
-      button.disabled = false;
-      await refreshSocialStatus();
-    }
+    modalYtConnect?.classList.remove('hidden');
   });
 
   refreshSocialStatus();
