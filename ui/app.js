@@ -448,6 +448,44 @@ document.addEventListener("DOMContentLoaded", () => {
   let promptModeWs = null;
   let promptPollInterval = null;
 
+  function _setPmStep(stepNum) {
+    const s1 = document.getElementById('pm-step-1');
+    const s2 = document.getElementById('pm-step-2');
+    const s3 = document.getElementById('pm-step-3');
+
+    const updateEl = (el, active, done) => {
+      if (!el) return;
+      const dot = el.querySelector('.pm-step-dot');
+      if (done) {
+        el.style.color = '#22c55e';
+        if (dot) { dot.style.background = '#22c55e'; dot.style.boxShadow = '0 0 8px #22c55e'; }
+      } else if (active) {
+        el.style.color = 'var(--brand-primary)';
+        if (dot) { dot.style.background = 'var(--brand-primary)'; dot.style.boxShadow = '0 0 8px var(--brand-primary)'; }
+      } else {
+        el.style.color = 'var(--text-muted)';
+        if (dot) { dot.style.background = 'var(--border-dark)'; dot.style.boxShadow = 'none'; }
+      }
+    };
+
+    updateEl(s1, stepNum === 1, stepNum > 1);
+    updateEl(s2, stepNum === 2, stepNum > 2);
+    updateEl(s3, stepNum === 3, false);
+  }
+
+  function _appendPmLog(text) {
+    const logEl = document.getElementById('pm-live-log-text');
+    const container = document.getElementById('pm-live-log-container');
+    if (!logEl || !text) return;
+    const clean = String(text).replace(/^\[Log\]\s*/i, '').trim();
+    if (!clean) return;
+    const line = document.createElement('div');
+    line.style.cssText = 'margin-top:2px; color:#cbd5e1;';
+    line.textContent = `› ${clean}`;
+    logEl.appendChild(line);
+    if (container) container.scrollTop = container.scrollHeight;
+  }
+
   function openPromptModeModal() {
     document.getElementById('modal-prompt-mode')?.classList.remove('hidden');
     const statusLabel = document.getElementById('prompt-mode-status-label');
@@ -455,7 +493,14 @@ document.addEventListener("DOMContentLoaded", () => {
     const copyBtn = document.getElementById('btn-copy-prompt');
     const renderBtn = document.getElementById('btn-render-clips');
     const charCount = document.getElementById('prompt-mode-char-count');
-    if (statusLabel) statusLabel.innerHTML = `<i class="ri-loader-4-line spin"></i> Transcribing audio...`;
+    const pBar = document.getElementById('pm-progress-bar');
+    const logBox = document.getElementById('pm-live-log-text');
+
+    if (pBar) pBar.style.width = '20%';
+    if (logBox) logBox.innerHTML = '<div>Initializing local worker & extracting audio...</div>';
+    _setPmStep(1);
+
+    if (statusLabel) statusLabel.innerHTML = `<i class="ri-loader-4-line spin" style="color:var(--brand-primary);"></i> Extracting audio stream from source video...`;
     if (promptTextArea) promptTextArea.value = '';
     if (copyBtn) copyBtn.disabled = true;
     if (renderBtn) renderBtn.disabled = true;
@@ -475,6 +520,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const captionStyle = localStorage.getItem('captionStyle') || 'aftereffect_preset';
 
       if (isYoutube) {
+        _appendPmLog("Downloading YouTube audio and video stream via yt-dlp...");
         const res = await fetch('/api/download-yt', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -483,16 +529,17 @@ document.addEventListener("DOMContentLoaded", () => {
         const data = await res.json();
         if (!data.job_id) throw new Error(data.error || 'Failed to start YouTube download');
         jobId = data.job_id;
-        // Wait for YT download via WS then kick off prompt mode
         promptModeJobId = jobId;
         _promptModeWatchYtDownload(jobId, fileOrUrl);
         return;
       } else if (isExistingUpload) {
+        _appendPmLog(`Loading existing video from disk: ${fileOrUrl}...`);
         const res = await fetch(`/api/start-from-upload/${encodeURIComponent(fileOrUrl)}?character=${encodeURIComponent(character)}&cover=${encodeURIComponent(cover)}&caption_style=${encodeURIComponent(captionStyle)}`, { method: 'POST' });
         const data = await res.json();
         if (!data.job_id) throw new Error(data.error || 'Failed to register upload');
         jobId = data.job_id;
       } else {
+        _appendPmLog(`Uploading source video (${fileOrUrl.name || 'file'})...`);
         const fd = new FormData();
         fd.append('file', fileOrUrl);
         fd.append('character', character);
@@ -513,7 +560,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   async function _kickPromptModeASR(jobId) {
-    // Send config (model selection)
+    _appendPmLog("Connecting to Whisper ASR pipeline...");
     const model = document.getElementById('config-model')?.value || 'small';
     await fetch(`/config/${jobId}`, {
       method: 'POST',
@@ -521,10 +568,10 @@ document.addEventListener("DOMContentLoaded", () => {
       body: JSON.stringify({ model })
     }).catch(() => {});
 
-    // Kick off the dedicated Prompt Mode endpoint (runs ASR only, builds prompt, emits prompt_ready via events)
+    // Kick off dedicated Prompt Mode endpoint (ASR only)
     await fetch(`/api/pipeline/${jobId}/prompt-mode`, { method: 'POST' }).catch(() => {});
 
-    // Connect WS to receive the prompt_ready event
+    // Connect WS to stream live logs & receive prompt_ready event
     const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${location.host}/ws/${jobId}?character=anime_presenter.png`;
     if (promptModeWs) promptModeWs.close();
@@ -533,10 +580,32 @@ document.addEventListener("DOMContentLoaded", () => {
     promptModeWs.onmessage = (event) => {
       let data;
       try { data = JSON.parse(event.data); } catch { return; }
+
+      const statusLabel = document.getElementById('prompt-mode-status-label');
+      const pBar = document.getElementById('pm-progress-bar');
+
+      if (data.type === 'stage' || data.type === 'substage') {
+        const stg = data.stage || data.substage;
+        if (stg === 1) {
+          _setPmStep(1);
+          if (pBar) pBar.style.width = '35%';
+          if (statusLabel) statusLabel.innerHTML = `<i class="ri-disc-line spin" style="color:var(--brand-primary);"></i> Extracting audio stream (Stage 1/2)...`;
+        } else if (stg === 2) {
+          _setPmStep(2);
+          if (pBar) pBar.style.width = '70%';
+          if (statusLabel) statusLabel.innerHTML = `<i class="ri-mic-line spin" style="color:var(--brand-purple);"></i> Whisper ASR transcribing speech timestamps (Stage 2/2)...`;
+        }
+      }
+
+      if (data.raw) {
+        _appendPmLog(data.raw);
+      }
+
       if (data.type === 'prompt_ready') {
         _onPromptReady(data.prompt, data.char_count || data.prompt?.length || 0);
       } else if (data.type === 'error') {
         Toast.show('Prompt Mode error: ' + data.message, 'error');
+        if (statusLabel) statusLabel.innerHTML = `<i class="ri-error-warning-line" style="color:#ef4444;"></i> Error: ${data.message}`;
       }
     };
 
@@ -566,6 +635,8 @@ document.addEventListener("DOMContentLoaded", () => {
       if (data.type === 'ytdl_done') {
         ws.close();
         await _kickPromptModeASR(jobId);
+      } else if (data.raw) {
+        _appendPmLog(data.raw);
       } else if (data.type === 'error') {
         Toast.show('YouTube download error: ' + data.message, 'error');
         document.getElementById('modal-prompt-mode')?.classList.add('hidden');
@@ -577,15 +648,22 @@ document.addEventListener("DOMContentLoaded", () => {
     if (promptModeWs) { promptModeWs.close(); promptModeWs = null; }
     if (promptPollInterval) { clearInterval(promptPollInterval); promptPollInterval = null; }
 
+    _setPmStep(3);
+    const pBar = document.getElementById('pm-progress-bar');
+    if (pBar) pBar.style.width = '100%';
+
     const statusLabel = document.getElementById('prompt-mode-status-label');
     const promptTextArea = document.getElementById('prompt-mode-prompt-text');
     const copyBtn = document.getElementById('btn-copy-prompt');
     const charEl = document.getElementById('prompt-mode-char-count');
 
-    if (statusLabel) statusLabel.innerHTML = `<i class="ri-checkbox-circle-fill" style="color:#22c55e;"></i> Transcription complete — prompt ready`;
+    if (statusLabel) statusLabel.innerHTML = `<i class="ri-checkbox-circle-fill" style="color:#22c55e; font-size:14px;"></i> Transcription complete — Prompt ready to copy!`;
     if (promptTextArea) promptTextArea.value = promptText;
-    if (copyBtn) copyBtn.disabled = false;
+    if (copyBtn) {
+      copyBtn.disabled = false;
+    }
     if (charEl) charEl.textContent = `~${charCount.toLocaleString()} characters`;
+    _appendPmLog("✅ Full timestamped transcript & Kai commentary instructions compiled into prompt!");
   }
 
   // Copy Prompt button
