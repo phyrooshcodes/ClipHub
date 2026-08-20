@@ -1581,49 +1581,48 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   document.getElementById('btn-connect-yt')?.addEventListener('click', async (event) => {
-    const button = event.currentTarget;
     try {
       const res = await fetch('/api/social/status');
       const data = await res.json();
       if (data.youtube_client_secrets_present) {
-        button.disabled = true;
-        button.innerHTML = '<i class="ri-loader-4-line spin"></i> <span>Authorizing...</span>';
-        const authRes = await fetch('/api/social/youtube/auth-url');
-        const authData = await authRes.json();
-        if (authData.auth_url) {
-          window.open(authData.auth_url, 'google_oauth', 'width=600,height=750');
-          Toast.show("Google authorization opened. Select your channel (Right Pull) and click Allow.", "info");
-          
-          let attempts = 0;
-          const pollTimer = setInterval(async () => {
-            attempts++;
-            try {
-              const checkRes = await fetch('/api/social/status');
-              const checkData = await checkRes.json();
-              if (checkData.youtube_connected && checkData.youtube_channel?.name) {
-                clearInterval(pollTimer);
-                Toast.show(`Connected to ${checkData.youtube_channel.name} via Official Google API!`, "success");
-                button.disabled = false;
-                await refreshSocialStatus();
-              }
-            } catch (_) {}
-            if (attempts > 80) {
-              clearInterval(pollTimer);
-              button.disabled = false;
-              refreshSocialStatus();
-            }
-          }, 1500);
-        } else {
-          throw new Error(authData.error || "Could not get authorization URL");
+        // Direct redirect endpoint - immune to async popup blockers
+        const authWin = window.open('/api/social/youtube/auth-redirect', 'google_oauth', 'width=600,height=750');
+        if (!authWin || authWin.closed || typeof authWin.closed === 'undefined') {
+          // Fallback if browser blocked popup window completely
+          window.location.href = '/api/social/youtube/auth-redirect';
+          return;
         }
+        Toast.show("Google authorization opened. Select your channel (Right Pull) and click Allow.", "info");
+        
+        let attempts = 0;
+        const pollTimer = setInterval(async () => {
+          attempts++;
+          try {
+            const checkRes = await fetch('/api/social/status');
+            const checkData = await checkRes.json();
+            if (checkData.youtube_connected && checkData.youtube_channel?.name) {
+              clearInterval(pollTimer);
+              Toast.show(`Connected to ${checkData.youtube_channel.name} via Official Google API!`, "success");
+              await refreshSocialStatus();
+            }
+          } catch (_) {}
+          if (attempts > 80) {
+            clearInterval(pollTimer);
+            refreshSocialStatus();
+          }
+        }, 1500);
       } else {
         modalYtConnect?.classList.remove('hidden');
       }
     } catch (err) {
       Toast.show('Error: ' + err.message, 'error');
-      button.disabled = false;
       await refreshSocialStatus();
     }
+  });
+
+  btnOauthAuthorize?.addEventListener('click', () => {
+    window.open('/api/social/youtube/auth-redirect', 'google_oauth', 'width=600,height=750');
+    modalYtConnect?.classList.add('hidden');
   });
 
   inputClientSecrets?.addEventListener('change', async (e) => {

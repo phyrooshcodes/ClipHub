@@ -8,7 +8,7 @@ import functools
 from typing import List
 from pathlib import Path
 from fastapi import APIRouter, BackgroundTasks, UploadFile, File, Form
-from fastapi.responses import JSONResponse, HTMLResponse
+from fastapi.responses import JSONResponse, HTMLResponse, RedirectResponse
 from pydantic import BaseModel
 import logging
 
@@ -391,6 +391,17 @@ async def connect_yt_playwright():
     finally:
         if was_running:
             worker.resume()
+
+@router.get("/api/social/youtube/auth-redirect")
+async def youtube_auth_redirect():
+    from modules.publisher_yt import create_authorization_url, has_client_secrets
+    if not has_client_secrets():
+        return HTMLResponse("<html><body style='background:#0f172a;color:#fff;font-family:sans-serif;padding:30px;'><h2>client_secrets.json is missing</h2><p>Please upload client_secrets.json in Settings.</p></body></html>", status_code=400)
+    try:
+        auth_url, state = create_authorization_url(redirect_uri="http://localhost:7842/api/social/youtube/callback")
+        return RedirectResponse(url=auth_url, status_code=302)
+    except Exception as e:
+        return HTMLResponse(f"<html><body style='background:#0f172a;color:#fff;font-family:sans-serif;padding:30px;'><h2>Error</h2><p>{e}</p></body></html>", status_code=500)
 
 @router.get("/api/social/youtube/auth-url")
 async def youtube_auth_url():
