@@ -4165,9 +4165,13 @@ document.addEventListener("DOMContentLoaded", () => {
           }
           const stData = await stRes.json();
           
-          if (stData.status === 'uploading' || stData.status === 'retrying') {
-             const pct = stData.progress || 10;
-             const msg = stData.message || 'Uploading...';
+          if (stData.status === 'queued') {
+             const msg = stData.message || 'Queued in background uploader...';
+             setProgress(15, msg);
+             logToModal(msg);
+          } else if (stData.status === 'uploading' || stData.status === 'retrying') {
+             const pct = Math.max(25, stData.progress || 25);
+             const msg = stData.message || (stData.status === 'retrying' ? 'Retrying upload...' : 'Uploading to Instagram...');
              setProgress(pct, msg);
              logToModal(msg);
           }

@@ -146,17 +146,38 @@ def _open_login_browser_in_background() -> None:
 def _is_authenticated(page: Page) -> bool:
     if _is_login_page(page):
         return False
-    # These are user-visible controls rather than DOM implementation details.
-    navigation = page.get_by_role("link", name=re.compile(r"^(Home|New post|Create|Profile)$", re.I)).first
+    # Check multiple indicators of a logged-in state on modern Instagram desktop:
+    nav_selectors = [
+        'a[href*="/direct/inbox"]',
+        'a[href*="/reels/"]',
+        'a[href*="/explore/"]',
+        'svg[aria-label*="Home" i]',
+        'svg[aria-label*="Create" i]',
+        'svg[aria-label*="New post" i]',
+        'svg[aria-label*="Direct" i]',
+        'svg[aria-label*="Reels" i]',
+        'svg[aria-label*="Messages" i]',
+        'img[alt*="profile picture" i]',
+        'img[data-testid*="user-avatar" i]',
+    ]
+    for sel in nav_selectors:
+        loc = page.locator(sel)
+        if loc.count() > 0 and loc.first.is_visible():
+            return True
+            
+    # As a secondary check, wait up to 4s for any of the above
+    combined_sel = ", ".join(nav_selectors)
     try:
-        navigation.wait_for(state="visible", timeout=12_000)
+        page.locator(combined_sel).first.wait_for(state="visible", timeout=4_000)
         return True
     except TimeoutError:
-        return False
+        pass
+        
+    return not _is_login_page(page) and "instagram.com" in page.url and ("accounts/login" not in page.url) and (page.locator('input[name="username"], input[name="password"]').count() == 0)
 
 
 def _dismiss_interstitials(page: Page) -> None:
-    for name in ("Allow all cookies", "Allow essential cookies", "Not now", "Cancel"):
+    for name in ("Allow all cookies", "Allow essential cookies", "Not now", "Cancel", "Decline optional cookies"):
         button = page.get_by_role("button", name=re.compile(f"^{re.escape(name)}$", re.I))
         if button.count():
             try:
@@ -186,9 +207,9 @@ def _wait_for_login(page: Page) -> None:
     logger.info("[Instagram] Waiting for one-time interactive login in Chromium.")
     page.goto("https://www.instagram.com/", wait_until="domcontentloaded", timeout=60_000)
     _dismiss_interstitials(page)
-    page.get_by_role("link", name=re.compile(r"^(Home|New post|Create|Profile)$", re.I)).first.wait_for(
-        state="visible", timeout=300_000
-    )
+    # Wait for either navigation links, SVGs, or profile avatar
+    nav_sel = 'a[href*="/direct/inbox"], a[href*="/reels/"], svg[aria-label*="Home" i], svg[aria-label*="Create" i], img[alt*="profile picture" i]'
+    page.locator(nav_sel).first.wait_for(state="visible", timeout=300_000)
 
 
 def _launch_persistent_context(playwright, user_data_dir: str, headless: bool, viewport: dict) -> BrowserContext:
@@ -358,13 +379,8 @@ def disconnect_instagram() -> None:
 
 
 def is_instagram_connected() -> bool:
-    """Return whether a reusable local browser session exists (not its validity).
-
-    Checks the persistent browser profile first; falls back to the legacy JSON
-    state file for backward compatibility with sessions created before the
-    persistent-profile migration.
-    """
-    # Persistent profile — the canonical source after migration
+    """Return whether a reusable local browser session exists (not its validity)."""
+    # Check if persistent profile directory exists and has files
     if PROFILE_DIR.exists() and any(PROFILE_DIR.iterdir()):
         return True
 
@@ -384,13 +400,7 @@ def is_instagram_connected() -> bool:
 
 
 def _open_authenticated_context(playwright, progress: ProgressCallback) -> tuple[object, BrowserContext, Page]:
-    """Open Instagram inside the persistent browser profile.
-
-    Every upload reuses the SAME Chromium user-data directory so cookies,
-    localStorage, IndexedDB, service workers, and device fingerprint are all
-    retained.  There is no separate Browser handle — the persistent context
-    encapsulates both launcher and context, so close() tears everything down.
-    """
+    """Open Instagram inside the persistent browser profile."""
     is_instagram_connected()  # Migrates a legacy session before opening Chromium.
     PROFILE_DIR.mkdir(parents=True, exist_ok=True)
     profile_exists = PROFILE_DIR.exists() and any(PROFILE_DIR.iterdir())
@@ -408,6 +418,7 @@ def _open_authenticated_context(playwright, progress: ProgressCallback) -> tuple
     context.tracing.start(screenshots=True, snapshots=True, sources=True)
     page = context.new_page()
     page.goto("https://www.instagram.com/", wait_until="domcontentloaded", timeout=60_000)
+    page.wait_for_timeout(2_000)
     _dismiss_interstitials(page)
     blocking = _blocking_status(page)
     if blocking:
@@ -429,66 +440,81 @@ def _open_authenticated_context(playwright, progress: ProgressCallback) -> tuple
             status="login_required",
         )
     logger.info("[Instagram] Authenticated — reusing persistent browser session.")
-    # With a persistent context there is no separate Browser object.
     return None, context, page
 
 
 def _click_first_available(page: Page, names: tuple[str, ...], timeout: int = 20_000) -> None:
-    """Click a visible action by accessible role, falling back to exact text.
-
-    Instagram's creator menu currently exposes its menu entries as a nested
-    ``span`` inside an anchor.  The anchor is not always represented as a
-    Playwright accessibility link, so role-only lookup misses it.  Exact,
-    visible text is a deliberately narrow final fallback for those entries.
-    """
+    """Click a visible action by accessible role, SVG aria-label, or text."""
     deadline = time.monotonic() + timeout / 1000
     while time.monotonic() < deadline:
         for name in names:
+            # 1. Look for SVG icons or elements containing SVGs with aria-label
+            svg_loc = page.locator(f'a:has(svg[aria-label*="{name}" i]), div:has(svg[aria-label*="{name}" i]), svg[aria-label*="{name}" i]').first
+            if svg_loc.count() and svg_loc.is_visible():
+                try:
+                    logger.info("[Instagram] Clicking SVG locator for '%s'", name)
+                    svg_loc.click(timeout=2_000)
+                    return
+                except PlaywrightError:
+                    pass
+
+            # 2. Look for role button or link
             locator = page.get_by_role("button", name=re.compile(f"^{re.escape(name)}$", re.I))
             if not locator.count():
                 locator = page.get_by_role("link", name=re.compile(f"^{re.escape(name)}$", re.I))
             if locator.count():
                 try:
-                    logger.info("[Instagram] Clicking %s", name)
+                    logger.info("[Instagram] Clicking role locator for '%s'", name)
                     locator.first.click(timeout=2_000)
                     return
                 except PlaywrightError:
-                    # A stale/hidden menu item should not prevent the exact
-                    # text fallback below from reaching the active one.
                     pass
-            text_locator = page.get_by_text(name, exact=True)
-            if text_locator.count():
-                for index in range(text_locator.count()):
-                    candidate = text_locator.nth(index)
-                    try:
-                        if not candidate.is_visible():
-                            continue
-                        logger.info("[Instagram] Clicking visible text %s", name)
-                        candidate.click(timeout=2_000)
-                        return
-                    except PlaywrightError:
-                        continue
+
+            # 3. Look for exact or visible text in clickable elements
+            text_locator = page.locator(f'a:has-text("{name}"), div[role="menuitem"]:has-text("{name}"), div[role="button"]:has-text("{name}"), span:text-is("{name}")').first
+            if text_locator.count() and text_locator.is_visible():
+                try:
+                    logger.info("[Instagram] Clicking text element for '%s'", name)
+                    text_locator.click(timeout=2_000)
+                    return
+                except PlaywrightError:
+                    pass
+
+            # 4. Standard text fallback
+            raw_text = page.get_by_text(name, exact=True)
+            if raw_text.count() and raw_text.first.is_visible():
+                try:
+                    logger.info("[Instagram] Clicking raw text for '%s'", name)
+                    raw_text.first.click(timeout=2_000)
+                    return
+                except PlaywrightError:
+                    pass
+
         page.wait_for_timeout(250)
     raise TimeoutError(f"Timed out waiting for one of: {', '.join(names)}")
 
 
 def _open_reel_creator(page: Page) -> object:
-    """Open Instagram's media chooser across both known creator layouts.
-
-    Older layouts expose the native file input immediately after ``Create``.
-    The current desktop layout opens a second menu containing ``Post`` first.
-    This waits for the input before selecting that second menu action so it
-    does not introduce an unnecessary click on accounts using the old layout.
-    """
+    """Open Instagram's media chooser across both known creator layouts."""
+    # Step 1: Click "Create" or "New post" in the sidebar
     _click_first_available(page, ("New post", "Create"))
+    page.wait_for_timeout(1_000)
+    
     file_input = page.locator('input[type="file"]').first
-    try:
-        file_input.wait_for(state="attached", timeout=3_000)
+    if file_input.count():
         return file_input
-    except TimeoutError:
-        logger.info("[Instagram] Creator menu requires a post-type selection.")
-    _click_first_available(page, ("Post", "Reel"), timeout=15_000)
+
+    # Step 2: In modern desktop layout, clicking Create opens a sub-menu with "Post"
+    logger.info("[Instagram] Looking for 'Post' in creator sub-menu...")
+    try:
+        _click_first_available(page, ("Post", "Reel"), timeout=8_000)
+    except Exception as e:
+        logger.info("[Instagram] Sub-menu click notice: %s", e)
+        
+    page.wait_for_timeout(1_500)
+    file_input = page.locator('input[type="file"]').first
     file_input.wait_for(state="attached", timeout=20_000)
+    return file_input
     return file_input
 
 

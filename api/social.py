@@ -7,7 +7,7 @@ import asyncio
 import functools
 from typing import List
 from pathlib import Path
-from fastapi import APIRouter, BackgroundTasks, UploadFile, File, Form
+from fastapi import APIRouter, BackgroundTasks, UploadFile, File, Form, Request
 from fastapi.responses import JSONResponse, HTMLResponse, RedirectResponse
 from pydantic import BaseModel
 import logging
@@ -352,6 +352,7 @@ async def social_status():
 @router.post("/api/social/instagram/connect-playwright")
 async def connect_ig_playwright(request: Request = None):
     from modules.publisher_ig import connect_instagram_playwright
+    from modules.instagram_queue import get_instagram_queue
     force_fresh = False
     if request:
         try:
@@ -361,6 +362,8 @@ async def connect_ig_playwright(request: Request = None):
             pass
     try:
         await asyncio.to_thread(connect_instagram_playwright, force_fresh=force_fresh)
+        # Unpause queue and wake worker when Instagram connects
+        get_instagram_queue().set_paused(False)
         return {"success": True}
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=400)
@@ -368,8 +371,10 @@ async def connect_ig_playwright(request: Request = None):
 @router.post("/api/social/instagram/connect-session")
 async def connect_ig_session(req: InstagramConnectSessionRequest):
     from modules.publisher_ig import connect_instagram_with_session
+    from modules.instagram_queue import get_instagram_queue
     try:
         connect_instagram_with_session(req.username, req.session_id)
+        get_instagram_queue().set_paused(False)
         return {"success": True}
     except Exception as e: return JSONResponse({"error": str(e)}, status_code=400)
 
@@ -489,7 +494,11 @@ async def start_social_post(req: SocialPostRequest, background_tasks: Background
             video_path = (job_dir / req.clip_filename).resolve()
             if not video_path.is_relative_to(OUTPUT_DIR.resolve()) or not video_path.is_file(): return JSONResponse({"error": "Video file not found or invalid."}, status_code=404)
             from modules.instagram_queue import get_instagram_queue
-            upload = get_instagram_queue().enqueue(str(video_path), req.caption, allow_duplicate=req.allow_duplicate)
+            queue = get_instagram_queue()
+            # If the queue was paused due to a past transient failure, unpause it on explicit user upload
+            if queue.summary().get("paused"):
+                queue.set_paused(False)
+            upload = queue.enqueue(str(video_path), req.caption, allow_duplicate=req.allow_duplicate)
             return {"upload_id": upload["id"], "status": upload["status"], "upload": upload}
         except Exception as exc: return JSONResponse({"error": str(exc)}, status_code=500)
     upload_id = str(uuid.uuid4())
