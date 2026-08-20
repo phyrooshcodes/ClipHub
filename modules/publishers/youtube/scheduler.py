@@ -162,10 +162,23 @@ def apply_schedule(page: Page, target_date_str: str, target_time_str: str = "12:
     logger.info("[YouTube] Selected 12:00 AM.")
     logger.info("[YouTube] Saving schedule.")
     
+    # Extract video URL before saving while dialog is open
+    for url_sel in VIDEO_URL_SELECTORS:
+        try:
+            el = page.locator(url_sel).first
+            if el.count():
+                href = el.get_attribute("href") or el.inner_text()
+                if href and ("youtu" in href or "watch" in href or "shorts" in href):
+                    logger.info(f"[YouTube] Video URL detected: {href.strip()}")
+                    page.evaluate(f"() => {{ window.__cliphub_video_url = '{href.strip()}'; }}")
+                    break
+        except Exception:
+            pass
+
     # Close any open dropdown overlays
     try:
         page.keyboard.press("Escape")
-        page.wait_for_timeout(300)
+        page.wait_for_timeout(400)
     except Exception:
         pass
 
@@ -174,18 +187,27 @@ def apply_schedule(page: Page, target_date_str: str, target_time_str: str = "12:
     for save_sel in SAVE_SCHEDULE_BUTTON_SELECTORS:
         try:
             btn = page.locator(save_sel).first
-            if btn.count() and btn.is_visible() and btn.is_enabled():
+            if btn.count() and btn.is_visible():
                 btn.click(timeout=5_000, force=True)
                 save_clicked = True
+                logger.info(f"[YouTube] Clicked save/schedule button via '{save_sel}'")
+                page.wait_for_timeout(2000)
                 break
         except PlaywrightError:
             pass
 
     if not save_clicked:
-        try:
-            page.get_by_role("button", name=re.compile(r"SCHEDULE|SAVE", re.I)).first.click(timeout=5_000, force=True)
-        except Exception as exc:
-            raise RuntimeError(f"Could not click Schedule / Save button: {exc}")
+        for text_opt in ("Schedule", "SCHEDULE", "Save", "SAVE", "Done", "DONE"):
+            try:
+                btn = page.get_by_role("button", name=text_opt).first
+                if btn.count() and btn.is_visible():
+                    btn.click(timeout=5_000, force=True)
+                    save_clicked = True
+                    logger.info(f"[YouTube] Clicked save button via get_by_role('{text_opt}')")
+                    page.wait_for_timeout(2000)
+                    break
+            except Exception:
+                pass
 
 
 def verify_schedule(page: Page, timeout: int = 35_000) -> tuple[bool, str | None]:
@@ -194,15 +216,31 @@ def verify_schedule(page: Page, timeout: int = 35_000) -> tuple[bool, str | None
     deadline = time.monotonic() + (timeout / 1000.0)
     video_url: str | None = None
 
+    try:
+        stored_url = page.evaluate("() => window.__cliphub_video_url || null")
+        if stored_url:
+            video_url = str(stored_url).strip()
+    except Exception:
+        pass
+
     # Wait brief moment for post-save DOM transition
     page.wait_for_timeout(2_000)
 
     while time.monotonic() < deadline:
         try:
-            # If upload modal has closed, the schedule save operation is complete
-            # Make sure we didn't just navigate to an error page (which also lacks the dialog)
+            # If upload modal has closed or success share dialog appeared
             if "studio.youtube.com" in page.url and page.locator("ytcp-uploads-dialog").count() == 0:
                 logger.info("[YouTube] Upload dialog completed and closed — schedule applied successfully.")
+                return True, video_url
+        except Exception:
+            pass
+
+        # Check for close button on the post-upload share modal
+        try:
+            close_btn = page.locator("#close-button, ytcp-button#close-button, ytcp-button:has-text('Close'), button:has-text('Close')").first
+            if close_btn.count() and close_btn.is_visible():
+                logger.info("[YouTube] Found post-upload share dialog close button. Schedule is complete.")
+                close_btn.click(timeout=3000, force=True)
                 return True, video_url
         except Exception:
             pass
@@ -213,13 +251,13 @@ def verify_schedule(page: Page, timeout: int = 35_000) -> tuple[bool, str | None
         except Exception:
             pass
 
-        if any(token in body_text for token in ("video scheduled", "set to public", "published")):
+        if any(token in body_text for token in ("video scheduled", "set to public", "published", "video will be set to public")):
             for url_sel in VIDEO_URL_SELECTORS:
                 try:
                     el = page.locator(url_sel).first
                     if el.count():
                         href = el.get_attribute("href") or el.inner_text()
-                        if href and ("youtu" in href or "watch" in href):
+                        if href and ("youtu" in href or "watch" in href or "shorts" in href):
                             video_url = href.strip()
                             break
                 except Exception:

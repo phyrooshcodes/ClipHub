@@ -26,8 +26,8 @@ def _click_any(page: Page, selectors: tuple[str, ...], timeout: int = 10_000) ->
         for selector in selectors:
             try:
                 locator = page.locator(selector).first
-                if locator.count() and locator.is_visible() and locator.is_enabled():
-                    locator.click(timeout=2_000)
+                if locator.count() and locator.is_visible():
+                    locator.click(timeout=2_000, force=True)
                     return True
             except PlaywrightError:
                 pass

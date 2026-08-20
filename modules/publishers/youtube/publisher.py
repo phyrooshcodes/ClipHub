@@ -56,41 +56,8 @@ DEBUG_DIR = _state_dir() / "debug"
 
 
 def get_channel_profile_dir(channel_id: str | None = None) -> Path:
-    """Return isolated Chrome profile directory for a specific channel.
-    
-    Each YouTube channel gets its own isolated browser profile directory,
-    preventing session cookie leakage between channels (e.g. Phyroosh vs Right Gravity).
-    Falls back to shared PROFILE_DIR if no channel_id is provided.
-    """
-    if channel_id:
-        profile = _state_dir() / "channel-profiles" / channel_id
-        profile.mkdir(parents=True, exist_ok=True)
-        # Symlink the global profile's cookies/sessions into the channel profile
-        # if the channel profile is brand new and the global one has auth data
-        global_cookies = PROFILE_DIR / "Default" / "Cookies"
-        channel_cookies = profile / "Default" / "Cookies"
-        if global_cookies.exists() and not channel_cookies.exists():
-            (profile / "Default").mkdir(parents=True, exist_ok=True)
-            try:
-                import shutil as _shutil
-                import sqlite3
-                def _safe_copy_db(src_path, dst_path):
-                    with sqlite3.connect(str(src_path)) as src_conn:
-                        with sqlite3.connect(str(dst_path)) as dst_conn:
-                            src_conn.backup(dst_conn)
-
-                _safe_copy_db(global_cookies, channel_cookies)
-                for extra in ("Login Data", "Web Data", "Preferences"):
-                    src = PROFILE_DIR / "Default" / extra
-                    dst = profile / "Default" / extra
-                    if src.exists() and not dst.exists():
-                        if extra == "Preferences":
-                            _shutil.copy2(str(src), str(dst))
-                        else:
-                            _safe_copy_db(src, dst)
-            except Exception as _e:
-                logger.debug("[YouTube] Profile seed copy partial: %s", _e)
-        return profile
+    """Return unified browser profile directory containing the authenticated Google session."""
+    PROFILE_DIR.mkdir(parents=True, exist_ok=True)
     return PROFILE_DIR
 
 
@@ -506,14 +473,8 @@ def connect_youtube_playwright() -> bool:
                         import shutil
                         target_dir = get_channel_profile_dir(c_id)
                         if target_dir != PROFILE_DIR:
-                            temp_target = target_dir.parent / f"{c_id}_tmp_{int(time.time())}"
-                            shutil.copytree(PROFILE_DIR, temp_target, dirs_exist_ok=True)
-                            if target_dir.exists():
-                                backup_dir = target_dir.parent / f"{c_id}_bak"
-                                if backup_dir.exists():
-                                    shutil.rmtree(backup_dir, ignore_errors=True)
-                                target_dir.rename(backup_dir)
-                            temp_target.rename(target_dir)
+                            target_dir.mkdir(parents=True, exist_ok=True)
+                            shutil.copytree(PROFILE_DIR, target_dir, dirs_exist_ok=True)
                             logger.info("[YouTube] Profile cleanly isolated to %s", target_dir)
                     except Exception as e:
                         logger.error("[YouTube] Failed to isolate profile: %s", e)

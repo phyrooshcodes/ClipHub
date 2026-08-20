@@ -7,9 +7,13 @@ from __future__ import annotations
 
 # ─── Navigation & Upload Initiation ──────────────────────────────────────────
 CREATE_BUTTON_SELECTORS = (
+    'button[aria-label="Create"]',
+    'button.ytcpButtonShapeImplHost[aria-label="Create"]',
+    'ytcp-button.ytcpAppHeaderCreateIcon button',
+    'ytcp-button.ytcpAppHeaderCreateIcon',
+    'button:has-text("Create")',
     "#create-icon",
     'ytcp-icon-button[id="create-icon"]',
-    'button[aria-label="Create"]',
     'ytcp-button:has-text("CREATE")',
     'ytcp-button:has-text("Create")',
     '#create-button',
@@ -19,6 +23,8 @@ CREATE_BUTTON_SELECTORS = (
 
 UPLOAD_ITEM_SELECTORS = (
     'tp-yt-paper-item:has-text("Upload videos")',
+    'tp-yt-paper-item[test-id="upload"]',
+    '[test-id="upload"]',
     'paper-item:has-text("Upload videos")',
     'ytcp-text-menu-item:has-text("Upload videos")',
     'ytcp-text-menu-item:has-text("Upload video")',
@@ -29,13 +35,19 @@ UPLOAD_ITEM_SELECTORS = (
 )
 
 DIRECT_UPLOAD_BUTTON_SELECTORS = (
+    'button[aria-label="Upload videos"]',
+    'button.ytcpButtonShapeImplHost[aria-label="Upload videos"]',
+    'ytcp-upload-video-button button',
+    'ytcp-upload-video-button',
+    'ytcp-button#upload-button button',
+    'ytcp-button#upload-button',
+    'button:has-text("Upload videos")',
+    'button:has-text("Upload")',
     "#upload-icon",
     'ytcp-icon-button[aria-label="Upload videos"]',
     'ytcp-button:has-text("Upload videos")',
-    'ytcp-upload-video-button',
     '#upload-button',
     'ytcp-icon-button[id="upload-icon"]',
-    'button[aria-label="Upload videos"]',
     '#upload-icon-button',
 )
 
@@ -120,6 +132,14 @@ TIME_INPUT_SELECTORS = (
 )
 
 SAVE_SCHEDULE_BUTTON_SELECTORS = (
+    'button:has-text("Schedule")',
+    'button:has-text("SCHEDULE")',
+    'button:has-text("Save")',
+    'button:has-text("SAVE")',
+    'button[aria-label="Schedule"]',
+    'button[aria-label="Save"]',
+    'ytcp-button#done-button button',
+    '#done-button button',
     "#done-button",
     'ytcp-button[id="done-button"]',
     'ytcp-button:has-text("SCHEDULE")',
@@ -135,8 +155,9 @@ VERIFICATION_MODAL_SELECTORS = (
 )
 
 VIDEO_URL_SELECTORS = (
-    "a.ytcp-video-info",
+    'a[href*="youtube.com/shorts"]',
     'a[href*="youtu.be"]',
     'a[href*="youtube.com/watch"]',
+    "a.ytcp-video-info",
     "#share-url",
 )
