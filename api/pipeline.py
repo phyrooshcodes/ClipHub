@@ -275,6 +275,7 @@ async def _run_process(job_id: str, cmd: list, start_time: float):
         await process.wait()
         success = process.returncode == 0
         is_phase_1 = "--phase" in cmd and "1" in cmd[cmd.index("--phase") + 1:]
+        is_prompt_mode = "--phase" in cmd and any(p in cmd[cmd.index("--phase") + 1:] for p in ("asr_only", "prompt_mode"))
         
         if success:
             job_dir = OUTPUT_DIR / job_id
@@ -282,7 +283,35 @@ async def _run_process(job_id: str, cmd: list, start_time: float):
             meta = {"job_id": job_id, "filename": job.filename if job else "unknown", "created": time.time()}
             with open(job_dir / "metadata.json", "w", encoding="utf-8") as f: json.dump(meta, f)
             
-            if is_phase_1:
+            if is_prompt_mode:
+                temp_dir = BASE_DIR / "temp" / f"processing_{job_id}"
+                words_files = list(temp_dir.glob("words_*.json"))
+                if words_files:
+                    with open(words_files[0], "r", encoding="utf-8") as f:
+                        words = json.load(f)
+                    from modules.audio_demux import get_video_duration
+                    from modules.hook_detector import build_hook_prompt
+                    duration = get_video_duration(job.path) if job else 0.0
+                    prompt_text = build_hook_prompt(words, duration, 0)
+                    
+                    prompt_cache = job_dir / "prompt_mode_prompt.txt"
+                    with open(prompt_cache, "w", encoding="utf-8") as f:
+                        f.write(prompt_text)
+
+                    words_cache = job_dir / "prompt_mode_words.json"
+                    with open(words_cache, "w", encoding="utf-8") as f:
+                        json.dump({"words": words, "duration": duration}, f)
+
+                    registry.set_state(job_id, "prompt_ready")
+                    registry.add_event(job_id, {
+                        "type": "prompt_ready",
+                        "prompt": prompt_text,
+                        "char_count": len(prompt_text)
+                    })
+                else:
+                    registry.set_state(job_id, "failed")
+                    registry.add_event(job_id, {"type": "error", "message": "Transcript words file not found."})
+            elif is_phase_1:
                 clips_meta_path = job_dir / "clips_metadata.json"
                 if clips_meta_path.exists():
                     with open(clips_meta_path, "r", encoding="utf-8") as f:
@@ -301,7 +330,7 @@ async def _run_process(job_id: str, cmd: list, start_time: float):
             })
 
         clips = _list_clips(job_id=job_id, newer_than=start_time - 5)
-        registry.add_event(job_id, {"type": "done", "success": success, "clips": clips, "is_phase_1": is_phase_1})
+        registry.add_event(job_id, {"type": "done", "success": success, "clips": clips, "is_phase_1": is_phase_1 or is_prompt_mode})
     except Exception as e:
         registry.set_state(job_id, "failed")
         registry.add_event(job_id, {"type": "error", "message": str(e)})

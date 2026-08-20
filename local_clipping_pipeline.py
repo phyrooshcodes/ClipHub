@@ -228,12 +228,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--phase",
         default="all",
-        choices=["1", "2", "all", "asr_only"],
+        choices=["1", "2", "all", "asr_only", "prompt_mode"],
         help="Pipeline Execution Phase:\n"
-             "  1        -> Run Analysis & AI Generation only (Hooks, Commentary) and exit.\n"
-             "  2        -> Run Rendering only (loads metadata from phase 1).\n"
-             "  all      -> Run end-to-end (default).\n"
-             "  asr_only -> Run Demux + Whisper ASR only. Used by Prompt Mode."
+             "  1           -> Run Analysis & AI Generation only (Hooks, Commentary) and exit.\n"
+             "  2           -> Run Rendering only (loads metadata from phase 1).\n"
+             "  all         -> Run end-to-end (default).\n"
+             "  asr_only    -> Run Demux + Whisper ASR only. Used by Prompt Mode.\n"
+             "  prompt_mode -> Run Demux + Whisper ASR only. Used by Prompt Mode."
     )
     parser.add_argument(
         "--doctor",
@@ -389,7 +390,7 @@ def run_pipeline(args: argparse.Namespace) -> None:
     logger.info(f"   👤 AI Presenter Avatar: {char_id} -> {resolved_char_path}")
     logger.info(f"   🖼️ Universal Cover:    {cover_id} -> {resolved_cover_path or 'Dynamic Video Frame 0.0s'}\n")
 
-    if args.phase in ("1", "all"):
+    if args.phase in ("1", "all", "asr_only", "prompt_mode"):
         # ─── STAGE 1: Audio Demux ────────────────────────────────
         logger.info("═══ STAGE 1/6 ─ Audio Demux (CPU) ══════════════════")
         from modules.audio_demux import extract_audio, get_video_duration
@@ -421,7 +422,7 @@ def run_pipeline(args: argparse.Namespace) -> None:
     hook_cache_key = hashlib.sha256(hook_hash_str.encode()).hexdigest()[:12]
     hooks_cache_path = os.path.join(temp_dir, f"hooks_{hook_cache_key}.json")
     
-    if args.phase in ("1", "all", "asr_only"):
+    if args.phase in ("1", "all", "asr_only", "prompt_mode"):
         # ─── STAGE 2: ASR Transcription (Whisper) ─────────────────
         logger.info("═══ STAGE 2/6 ─ ASR Transcription (🖥 Local GPU/CPU) ═══")
         from modules.transcriber import words_to_timed_transcript, transcribe_audio
@@ -441,7 +442,7 @@ def run_pipeline(args: argparse.Namespace) -> None:
             f.write(timed_transcript)
         logger.info(f"   Transcript saved → {transcript_path}\n")
 
-        if args.phase == "asr_only":
+        if args.phase in ("asr_only", "prompt_mode"):
             logger.info("\n[ASR Only] Whisper transcription complete. Exiting cleanly for Prompt Mode.")
             return
 
