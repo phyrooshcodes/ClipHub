@@ -443,6 +443,268 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
+  // ─── PROMPT MODE ─────────────────────────────────────────
+  let promptModeJobId = null;
+  let promptModeWs = null;
+  let promptPollInterval = null;
+
+  function openPromptModeModal() {
+    document.getElementById('modal-prompt-mode')?.classList.remove('hidden');
+    const statusLabel = document.getElementById('prompt-mode-status-label');
+    const promptTextArea = document.getElementById('prompt-mode-prompt-text');
+    const copyBtn = document.getElementById('btn-copy-prompt');
+    const renderBtn = document.getElementById('btn-render-clips');
+    const charCount = document.getElementById('prompt-mode-char-count');
+    if (statusLabel) statusLabel.innerHTML = `<i class="ri-loader-4-line spin"></i> Transcribing audio...`;
+    if (promptTextArea) promptTextArea.value = '';
+    if (copyBtn) copyBtn.disabled = true;
+    if (renderBtn) renderBtn.disabled = true;
+    if (charCount) charCount.textContent = '';
+    document.getElementById('prompt-mode-response-text').value = '';
+    document.getElementById('prompt-mode-validation').textContent = '';
+  }
+
+  async function startPromptMode(fileOrUrl, isYoutube, isExistingUpload) {
+    openPromptModeModal();
+
+    // Upload/register the job first
+    let jobId = null;
+    try {
+      const character = localStorage.getItem('selectedCharacter') || 'anime_presenter.png';
+      const cover = localStorage.getItem('selectedCover') || 'default_cover.jpg';
+      const captionStyle = localStorage.getItem('captionStyle') || 'aftereffect_preset';
+
+      if (isYoutube) {
+        const res = await fetch('/api/download-yt', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: fileOrUrl })
+        });
+        const data = await res.json();
+        if (!data.job_id) throw new Error(data.error || 'Failed to start YouTube download');
+        jobId = data.job_id;
+        // Wait for YT download via WS then kick off prompt mode
+        promptModeJobId = jobId;
+        _promptModeWatchYtDownload(jobId, fileOrUrl);
+        return;
+      } else if (isExistingUpload) {
+        const res = await fetch(`/api/start-from-upload/${encodeURIComponent(fileOrUrl)}?character=${encodeURIComponent(character)}&cover=${encodeURIComponent(cover)}&caption_style=${encodeURIComponent(captionStyle)}`, { method: 'POST' });
+        const data = await res.json();
+        if (!data.job_id) throw new Error(data.error || 'Failed to register upload');
+        jobId = data.job_id;
+      } else {
+        const fd = new FormData();
+        fd.append('file', fileOrUrl);
+        fd.append('character', character);
+        fd.append('cover', cover);
+        fd.append('caption_style', captionStyle);
+        const res = await fetch('/upload', { method: 'POST', body: fd });
+        const data = await res.json();
+        if (!data.job_id) throw new Error(data.error || 'Upload failed');
+        jobId = data.job_id;
+      }
+
+      promptModeJobId = jobId;
+      await _kickPromptModeASR(jobId);
+    } catch (e) {
+      Toast.show('Prompt Mode error: ' + e.message, 'error');
+      document.getElementById('modal-prompt-mode')?.classList.add('hidden');
+    }
+  }
+
+  async function _kickPromptModeASR(jobId) {
+    // Send config (model selection)
+    const model = document.getElementById('config-model')?.value || 'small';
+    await fetch(`/config/${jobId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model })
+    }).catch(() => {});
+
+    // Kick off the dedicated Prompt Mode endpoint (runs ASR only, builds prompt, emits prompt_ready via events)
+    await fetch(`/api/pipeline/${jobId}/prompt-mode`, { method: 'POST' }).catch(() => {});
+
+    // Connect WS to receive the prompt_ready event
+    const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${location.host}/ws/${jobId}?character=anime_presenter.png`;
+    if (promptModeWs) promptModeWs.close();
+    promptModeWs = new WebSocket(wsUrl);
+
+    promptModeWs.onmessage = (event) => {
+      let data;
+      try { data = JSON.parse(event.data); } catch { return; }
+      if (data.type === 'prompt_ready') {
+        _onPromptReady(data.prompt, data.char_count || data.prompt?.length || 0);
+      } else if (data.type === 'error') {
+        Toast.show('Prompt Mode error: ' + data.message, 'error');
+      }
+    };
+
+    // Fallback HTTP poll every 3 seconds
+    if (promptPollInterval) clearInterval(promptPollInterval);
+    promptPollInterval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/pipeline/${jobId}/prompt`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.status === 'ready' && data.prompt) {
+            clearInterval(promptPollInterval);
+            _onPromptReady(data.prompt, data.char_count || 0);
+          }
+        }
+      } catch(_) {}
+    }, 3000);
+  }
+
+  function _promptModeWatchYtDownload(jobId, ytUrl) {
+    const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${location.host}/ws-ytdl/${jobId}?url=${encodeURIComponent(ytUrl)}`;
+    const ws = new WebSocket(wsUrl);
+    ws.onmessage = async (event) => {
+      let data;
+      try { data = JSON.parse(event.data); } catch { return; }
+      if (data.type === 'ytdl_done') {
+        ws.close();
+        await _kickPromptModeASR(jobId);
+      } else if (data.type === 'error') {
+        Toast.show('YouTube download error: ' + data.message, 'error');
+        document.getElementById('modal-prompt-mode')?.classList.add('hidden');
+      }
+    };
+  }
+
+  function _onPromptReady(promptText, charCount) {
+    if (promptModeWs) { promptModeWs.close(); promptModeWs = null; }
+    if (promptPollInterval) { clearInterval(promptPollInterval); promptPollInterval = null; }
+
+    const statusLabel = document.getElementById('prompt-mode-status-label');
+    const promptTextArea = document.getElementById('prompt-mode-prompt-text');
+    const copyBtn = document.getElementById('btn-copy-prompt');
+    const charEl = document.getElementById('prompt-mode-char-count');
+
+    if (statusLabel) statusLabel.innerHTML = `<i class="ri-checkbox-circle-fill" style="color:#22c55e;"></i> Transcription complete — prompt ready`;
+    if (promptTextArea) promptTextArea.value = promptText;
+    if (copyBtn) copyBtn.disabled = false;
+    if (charEl) charEl.textContent = `~${charCount.toLocaleString()} characters`;
+  }
+
+  // Copy Prompt button
+  document.getElementById('btn-copy-prompt')?.addEventListener('click', async () => {
+    const text = document.getElementById('prompt-mode-prompt-text')?.value;
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      const btn = document.getElementById('btn-copy-prompt');
+      const orig = btn.innerHTML;
+      btn.innerHTML = '<i class="ri-check-line"></i> Copied!';
+      btn.style.background = '#22c55e';
+      setTimeout(() => { btn.innerHTML = orig; btn.style.background = ''; }, 2200);
+    } catch {
+      Toast.show('Copy failed — please select all text and copy manually.', 'error');
+    }
+  });
+
+  // Live validation of pasted response
+  document.getElementById('prompt-mode-response-text')?.addEventListener('input', () => {
+    const val = document.getElementById('prompt-mode-response-text')?.value.trim();
+    const validEl = document.getElementById('prompt-mode-validation');
+    const renderBtn = document.getElementById('btn-render-clips');
+    if (!val) {
+      if (validEl) validEl.textContent = '';
+      if (renderBtn) renderBtn.disabled = true;
+      return;
+    }
+    // Quick JSON detection
+    try {
+      const cleaned = val.replace(/```json|```/g, '').trim();
+      const firstBracket = cleaned.indexOf('[');
+      const lastBracket = cleaned.lastIndexOf(']');
+      if (firstBracket === -1 || lastBracket === -1) throw new Error('No JSON array found');
+      const arr = JSON.parse(cleaned.slice(firstBracket, lastBracket + 1));
+      if (!Array.isArray(arr) || arr.length === 0) throw new Error('Empty array');
+      const clipCount = arr.length;
+      if (validEl) validEl.innerHTML = `<span style="color:#22c55e;">✓ Valid JSON · ${clipCount} clip${clipCount !== 1 ? 's' : ''} detected</span>`;
+      if (renderBtn) renderBtn.disabled = false;
+    } catch {
+      if (validEl) validEl.innerHTML = `<span style="color:#ef4444;">⚠ No valid clip JSON found — paste the full array from the LLM</span>`;
+      if (renderBtn) renderBtn.disabled = true;
+    }
+  });
+
+  // Render Clips button
+  document.getElementById('btn-render-clips')?.addEventListener('click', async () => {
+    if (!promptModeJobId) { Toast.show('No active job. Please restart Prompt Mode.', 'error'); return; }
+    const responseText = document.getElementById('prompt-mode-response-text')?.value.trim();
+    if (!responseText) { Toast.show('Please paste the LLM response first.', 'info'); return; }
+
+    const renderBtn = document.getElementById('btn-render-clips');
+    renderBtn.disabled = true;
+    renderBtn.innerHTML = '<i class="ri-loader-4-line spin"></i> Submitting...';
+
+    try {
+      const res = await fetch(`/api/pipeline/${promptModeJobId}/submit-response`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ response_text: responseText })
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || 'Submission failed');
+
+      document.getElementById('modal-prompt-mode')?.classList.add('hidden');
+      Toast.show(`✓ ${data.clip_count} clips queued — starting Phase 2 rendering!`, 'success');
+
+      // Transition to processing view
+      currentJobId = promptModeJobId;
+      localStorage.setItem('currentJobId', promptModeJobId);
+      localStorage.setItem('currentJobId_ts', Date.now());
+      resetSteps();
+      sectionUpload?.classList.add('hidden');
+      sectionProcessing?.classList.remove('hidden');
+      connectPipelineWS(promptModeJobId);
+    } catch (e) {
+      Toast.show('Error: ' + e.message, 'error');
+      renderBtn.disabled = false;
+      renderBtn.innerHTML = '<i class="ri-sparkling-fill"></i> Render Clips';
+    }
+  });
+
+  // Prompt Mode modal — file/local video
+  document.getElementById('btn-proceed-prompt-mode')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const ytUrl = document.getElementById('yt-link-input')?.value.trim();
+    if (stagedFile && ytUrl) {
+      Toast.show('Please choose either a file OR a YouTube link, not both.', 'error');
+      return;
+    }
+    if (stagedFile) {
+      startPromptMode(stagedFile, false, false);
+    } else if (ytUrl) {
+      startPromptMode(ytUrl, true, false);
+    } else {
+      Toast.show('Please select a file or enter a YouTube link first.', 'info');
+    }
+  });
+
+  // Prompt Mode — YouTube inline button
+  document.getElementById('btn-yt-prompt-mode')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const ytUrl = document.getElementById('yt-link-input')?.value.trim();
+    if (!ytUrl) { Toast.show('Please paste a YouTube URL first.', 'info'); return; }
+    startPromptMode(ytUrl, true, false);
+  });
+
+  // Close / Cancel Prompt Mode modal
+  ['btn-close-prompt-mode', 'btn-prompt-mode-cancel'].forEach(id => {
+    document.getElementById(id)?.addEventListener('click', () => {
+      document.getElementById('modal-prompt-mode')?.classList.add('hidden');
+      if (promptModeWs) { promptModeWs.close(); promptModeWs = null; }
+      if (promptPollInterval) { clearInterval(promptPollInterval); promptPollInterval = null; }
+    });
+  });
+  // ─── END PROMPT MODE ──────────────────────────────────────
+
+
   // Wire up sidebar navigation and modals
   document.getElementById('btn-nav-studio')?.addEventListener('click', (e) => {
     e.preventDefault();

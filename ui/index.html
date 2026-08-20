@@ -16,7 +16,7 @@
   </script>
   <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
-  <link rel="stylesheet" href="style.css?v=2.4">
+  <link rel="stylesheet" href="style.css?v=2.5">
 </head>
 <body class="light-theme">
 
@@ -130,13 +130,22 @@
                     <input type="text" id="yt-link-input" placeholder="Paste YouTube link (e.g. youtube.com/watch?v=...)">
                     <button id="btn-yt-import" title="Import and Process YouTube Video"><i class="ri-arrow-right-line"></i> Process</button>
                   </div>
+                  <div style="text-align:right; margin-top:6px;">
+                    <button id="btn-yt-prompt-mode" class="btn-prompt-mode-inline" title="Transcribe only, then get a copyable prompt for Claude / ChatGPT"><i class="ri-file-copy-line"></i> Prompt Mode</button>
+                  </div>
                 </div>
               </div>
               
-              <button class="btn-primary-action" id="btn-proceed">
-                <span>Proceed to Processing</span>
-                <i class="ri-arrow-right-line"></i>
-              </button>
+              <div class="proc-actions-row">
+                <button class="btn-prompt-mode" id="btn-proceed-prompt-mode" title="Run Whisper transcription, then generate a prompt to use with Claude, ChatGPT, or any LLM">
+                  <i class="ri-file-copy-line"></i>
+                  <span>Prompt Mode</span>
+                </button>
+                <button class="btn-primary-action" id="btn-proceed">
+                  <span>Process</span>
+                  <i class="ri-arrow-right-line"></i>
+                </button>
+              </div>
               <input type="file" id="file-input" accept="video/*" hidden>
             </div>
             
@@ -989,6 +998,66 @@
       </div>
     </div>
 
+    <!-- Prompt Mode Modal -->
+    <div id="modal-prompt-mode" class="modal-backdrop hidden" style="z-index: 10060;">
+      <div class="modal-card" style="max-width: 680px; width: 95%;">
+        <div class="modal-header">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <i class="ri-file-copy-line" style="color:var(--brand-primary); font-size:20px;"></i>
+            <div>
+              <h3 style="margin:0; font-size:1rem; font-weight:700; color:var(--text-main);">Prompt Mode</h3>
+              <p style="margin:0; font-size:12px; color:var(--text-muted);">Use Claude, ChatGPT, or any LLM for hook detection</p>
+            </div>
+          </div>
+          <button class="close-modal" id="btn-close-prompt-mode" title="Close"><i class="ri-close-line"></i></button>
+        </div>
+        <div class="modal-body" style="padding:20px; display:flex; flex-direction:column; gap:18px;">
+
+          <!-- Step 1: Transcript Status + Copy Prompt -->
+          <div id="prompt-mode-step1">
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
+              <div style="font-size:13px; font-weight:600; color:var(--text-main);">
+                <span id="prompt-mode-status-label"><i class="ri-loader-4-line spin"></i> Transcribing audio...</span>
+              </div>
+              <span id="prompt-mode-char-count" style="font-size:11px; color:var(--text-muted); font-family:var(--font-mono);"></span>
+            </div>
+            <textarea id="prompt-mode-prompt-text" readonly
+              style="width:100%; height:180px; resize:vertical; font-family:var(--font-mono); font-size:11.5px; line-height:1.55; padding:12px; border:1px solid var(--border-light); border-radius:var(--radius-sm); background:var(--bg-app); color:var(--text-main); outline:none;"
+              placeholder="Generating prompt... please wait for Whisper transcription to complete."></textarea>
+            <div style="display:flex; align-items:center; gap:8px; margin-top:10px; flex-wrap:wrap;">
+              <button id="btn-copy-prompt" class="btn-primary-gradient" style="padding:7px 16px; font-size:12.5px; font-weight:600; display:flex; align-items:center; gap:6px;" disabled>
+                <i class="ri-file-copy-line"></i> Copy Prompt
+              </button>
+              <span style="font-size:12px; color:var(--text-muted);">Then paste into:</span>
+              <a href="https://claude.ai" target="_blank" class="btn-outline-dashed" style="padding:5px 12px; font-size:12px; text-decoration:none; display:flex; align-items:center; gap:5px;"><i class="ri-robot-line"></i> Claude</a>
+              <a href="https://chatgpt.com" target="_blank" class="btn-outline-dashed" style="padding:5px 12px; font-size:12px; text-decoration:none; display:flex; align-items:center; gap:5px;"><i class="ri-openai-line"></i> ChatGPT</a>
+              <a href="https://chat.deepseek.com" target="_blank" class="btn-outline-dashed" style="padding:5px 12px; font-size:12px; text-decoration:none; display:flex; align-items:center; gap:5px;"><i class="ri-code-s-slash-line"></i> DeepSeek</a>
+            </div>
+          </div>
+
+          <div style="border-top:1px solid var(--border-light);"></div>
+
+          <!-- Step 2: Paste Response -->
+          <div id="prompt-mode-step2">
+            <div style="font-size:13px; font-weight:600; color:var(--text-main); margin-bottom:8px;">
+              Step 2 — Paste the model's response
+            </div>
+            <textarea id="prompt-mode-response-text"
+              style="width:100%; height:140px; resize:vertical; font-family:var(--font-mono); font-size:11.5px; line-height:1.55; padding:12px; border:1px solid var(--border-light); border-radius:var(--radius-sm); background:var(--bg-app); color:var(--text-main); outline:none;"
+              placeholder='Paste the JSON array from Claude / ChatGPT here. For example:&#10;[{"clip_title":"...", "start_time":"01:23", "end_time":"02:05", "viral_score":9.7, ...}]'></textarea>
+            <div id="prompt-mode-validation" style="font-size:12px; margin-top:6px; min-height:18px; font-family:var(--font-mono);"></div>
+          </div>
+
+        </div>
+        <div class="modal-footer" style="padding:14px 20px; border-top:1px solid var(--border-light); display:flex; justify-content:flex-end; gap:10px;">
+          <button id="btn-prompt-mode-cancel" class="btn-outline-dashed" style="padding:8px 16px;">Cancel</button>
+          <button id="btn-render-clips" class="btn-primary-gradient" style="padding:8px 20px; font-weight:600; display:flex; align-items:center; gap:7px;" disabled>
+            <i class="ri-sparkling-fill"></i> Render Clips
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- YouTube Connection Modal -->
     <div id="modal-youtube-connect" class="modal-backdrop hidden" style="z-index: 10050;">
       <div class="modal-card" style="max-width: 500px;">
@@ -1118,6 +1187,6 @@
     
   </div>
 
-  <script src="app.js?v=2.4"></script>
+  <script src="app.js?v=2.5"></script>
 </body>
 </html>

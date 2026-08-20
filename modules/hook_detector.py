@@ -648,3 +648,74 @@ def _parse_json_response(raw: str) -> List[Dict]:
             pass
 
     raise ValueError(f"No valid JSON array or object found in LLM response: {raw[:120]}...")
+
+
+# ─── Prompt Mode: External LLM Support ──────────────────────
+
+def build_hook_prompt(
+    words: List[Dict],
+    video_duration_seconds: float,
+    max_clips: int = 0
+) -> str:
+    """
+    Build the full prompt string that would normally be sent to the NVIDIA NIM model.
+    Returns a single copyable string containing the system instructions and transcript,
+    ready to paste into any LLM (Claude, ChatGPT, DeepSeek, etc.).
+    """
+    from modules.transcriber import words_to_timed_transcript
+
+    full_tx = words_to_timed_transcript(words)
+
+    is_auto = (max_clips == 0)
+    if is_auto:
+        max_clips_instruction = (
+            "identify EVERY SINGLE truly viral clip moment across the entire transcript. "
+            "Do NOT artificially limit or cap your output — deliver every moment that has strong "
+            "curiosity, high retention, or actionable value (extract all valid viral moments from beginning to end)"
+        )
+    else:
+        max_clips_instruction = f"identify the top {max_clips} viral clip moments (standalone 30-65 second moments)"
+
+    duration_min = int(video_duration_seconds // 60)
+    duration_sec = int(video_duration_seconds % 60)
+
+    user_section = HOOK_USER_TEMPLATE.format(
+        transcript=full_tx,
+        duration_str=f"{duration_min:02d}:{duration_sec:02d}",
+        max_clips_instruction=max_clips_instruction
+    )
+
+    char_count = len(HOOK_SYSTEM_PROMPT) + len(user_section)
+
+    prompt = (
+        "# SYSTEM INSTRUCTIONS\n"
+        f"{HOOK_SYSTEM_PROMPT}\n\n"
+        "---\n\n"
+        "# YOUR TASK\n"
+        f"{user_section}\n\n"
+        f"# [Info: ~{char_count:,} characters · paste this entire prompt into Claude / ChatGPT / DeepSeek]"
+    )
+    return prompt
+
+
+def parse_external_llm_response(
+    raw_text: str,
+    words: List[Dict],
+    video_duration_seconds: float
+) -> List[Dict]:
+    """
+    Parse the raw text pasted back from an external LLM (Claude, ChatGPT, etc.).
+    Strips markdown fences, extracts JSON, validates timestamps, and snaps clip
+    boundaries to real word positions.  Returns a list of clip dicts ready for
+    Phase 2 rendering — same schema as detect_hooks().
+    """
+    raw_clips = _parse_json_response(raw_text)
+    if not raw_clips:
+        raise ValueError("No valid JSON clip array found in the pasted response.")
+    valid_clips = _validate_and_clamp_clips(raw_clips, video_duration_seconds, words)
+    if not valid_clips:
+        raise ValueError("Clips were parsed but all failed timestamp validation.")
+    valid_clips = sorted(valid_clips, key=lambda x: x.get("hook_score", x.get("viral_score", 0.0)), reverse=True)
+    logger.info(f"[PromptMode] Parsed {len(valid_clips)} valid clips from external LLM response.")
+    return valid_clips
+

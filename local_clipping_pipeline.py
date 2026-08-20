@@ -228,11 +228,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--phase",
         default="all",
-        choices=["1", "2", "all"],
+        choices=["1", "2", "all", "asr_only"],
         help="Pipeline Execution Phase:\n"
-             "  1   -> Run Analysis & AI Generation only (Hooks, Commentary) and exit.\n"
-             "  2   -> Run Rendering only (loads metadata from phase 1).\n"
-             "  all -> Run end-to-end (default)."
+             "  1        -> Run Analysis & AI Generation only (Hooks, Commentary) and exit.\n"
+             "  2        -> Run Rendering only (loads metadata from phase 1).\n"
+             "  all      -> Run end-to-end (default).\n"
+             "  asr_only -> Run Demux + Whisper ASR only. Used by Prompt Mode."
     )
     parser.add_argument(
         "--doctor",
@@ -420,7 +421,7 @@ def run_pipeline(args: argparse.Namespace) -> None:
     hook_cache_key = hashlib.sha256(hook_hash_str.encode()).hexdigest()[:12]
     hooks_cache_path = os.path.join(temp_dir, f"hooks_{hook_cache_key}.json")
     
-    if args.phase in ("1", "all"):
+    if args.phase in ("1", "all", "asr_only"):
         # ─── STAGE 2: ASR Transcription (Whisper) ─────────────────
         logger.info("═══ STAGE 2/6 ─ ASR Transcription (🖥 Local GPU/CPU) ═══")
         from modules.transcriber import words_to_timed_transcript, transcribe_audio
@@ -439,6 +440,10 @@ def run_pipeline(args: argparse.Namespace) -> None:
         with open(transcript_path, "w", encoding="utf-8") as f:
             f.write(timed_transcript)
         logger.info(f"   Transcript saved → {transcript_path}\n")
+
+        if args.phase == "asr_only":
+            logger.info("\n[ASR Only] Whisper transcription complete. Exiting cleanly for Prompt Mode.")
+            return
 
         # ─── STAGE 3: Hook Detection (NVIDIA NIM Cloud) ───────────
         logger.info("═══ STAGE 3/6 ─ Hook Detection (☁ NVIDIA NIM) ══════")

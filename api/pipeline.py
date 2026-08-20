@@ -722,3 +722,194 @@ async def get_history():
 @router.get("/history/{job_id}/clips")
 async def get_history_clips(job_id: str):
     return {"clips": _list_clips(job_id=job_id)}
+
+
+# ─── Prompt Mode Endpoints ────────────────────────────────────
+
+@router.post("/api/pipeline/{job_id}/prompt-mode")
+async def start_prompt_mode(job_id: str, websocket: WebSocket = None):
+    """
+    Prompt Mode: runs Demux + Whisper ASR (phase=1 minus hook detection) and
+    returns the copyable LLM prompt once transcription is done.
+    This endpoint is called via HTTP POST. The frontend then polls
+    GET /api/pipeline/{job_id}/prompt to retrieve the generated prompt.
+    """
+    clean_jid = re.sub(r'[^a-zA-Z0-9_\-]', '', str(job_id))
+    job = registry.get(clean_jid)
+    if not job:
+        return JSONResponse({"error": "Job not found"}, status_code=404)
+
+    config = registry.get_config(clean_jid)
+    # Mark as prompt-mode so the WS handler does NOT start full pipeline
+    config["phase"] = "prompt_mode"
+    registry.set_config(clean_jid, config)
+
+    python_exe = str(BASE_DIR / "venv" / "Scripts" / "python.exe")
+    if not Path(python_exe).exists():
+        python_exe = str(BASE_DIR / "venv" / "bin" / "python")
+        if not Path(python_exe).exists():
+            python_exe = sys.executable
+
+    job_dir = OUTPUT_DIR / clean_jid
+    job_dir.mkdir(parents=True, exist_ok=True)
+
+    cmd = [
+        python_exe, str(BASE_DIR / "local_clipping_pipeline.py"),
+        "--input", job.path,
+        "--output-dir", str(job_dir),
+        "--model", config.get("model", "small"),
+        "--max-clips", str(config.get("max_clips", 0)),
+        "--phase", "asr_only",   # Run Demux + Whisper ASR only, exit before hook detection
+    ]
+    lang = (config.get("language") or "").strip()
+    if lang:
+        cmd += ["--language", lang]
+
+    async def _run_asr_only():
+        try:
+            registry.set_state(clean_jid, "phase_1_running")
+            registry.add_event(clean_jid, {"type": "start", "filename": job.filename})
+
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT
+            )
+            job_ref = registry.get(clean_jid)
+            if job_ref:
+                job_ref.process = proc
+
+            async for raw_line in proc.stdout:
+                line = raw_line.decode("utf-8", errors="replace").rstrip()
+                parsed = _parse_log_line(line)
+                parsed["raw"] = line
+                registry.add_event(clean_jid, parsed)
+
+            await proc.wait()
+
+            # After ASR completes, build the prompt
+            temp_dir = BASE_DIR / "temp" / f"processing_{clean_jid}"
+            import hashlib, json as _json
+            from modules.audio_demux import get_video_duration
+            from modules.transcriber import words_to_timed_transcript
+
+            words_files = list(temp_dir.glob("words_*.json"))
+            if not words_files:
+                registry.add_event(clean_jid, {"type": "error", "message": "ASR transcript not found. Transcription may have failed."})
+                return
+
+            words_path = words_files[0]
+            with open(words_path, "r", encoding="utf-8") as f:
+                words = _json.load(f)
+
+            duration = get_video_duration(job.path)
+            max_clips = config.get("max_clips", 0)
+
+            from modules.hook_detector import build_hook_prompt
+            prompt_text = build_hook_prompt(words, duration, max_clips)
+
+            # Cache prompt and words path for submit-response
+            prompt_cache = job_dir / "prompt_mode_prompt.txt"
+            with open(prompt_cache, "w", encoding="utf-8") as f:
+                f.write(prompt_text)
+
+            words_cache = job_dir / "prompt_mode_words.json"
+            with open(words_cache, "w", encoding="utf-8") as f:
+                _json.dump({"words": words, "duration": duration}, f)
+
+            registry.set_state(clean_jid, "prompt_ready")
+            registry.add_event(clean_jid, {
+                "type": "prompt_ready",
+                "prompt": prompt_text,
+                "char_count": len(prompt_text)
+            })
+
+        except Exception as e:
+            logger.error(f"[PromptMode] ASR error for {clean_jid}: {e}")
+            registry.add_event(clean_jid, {"type": "error", "message": str(e)})
+
+    asyncio.create_task(_run_asr_only())
+    return {"status": "started", "job_id": clean_jid}
+
+
+@router.get("/api/pipeline/{job_id}/prompt")
+async def get_prompt_for_job(job_id: str):
+    """Return the cached prompt text generated during Prompt Mode ASR."""
+    clean_jid = re.sub(r'[^a-zA-Z0-9_\-]', '', str(job_id))
+    job_dir = OUTPUT_DIR / clean_jid
+    prompt_file = job_dir / "prompt_mode_prompt.txt"
+    if not prompt_file.exists():
+        events = registry.get_events(clean_jid)
+        pr = next((e for e in reversed(events) if e.get("type") == "prompt_ready"), None)
+        if pr:
+            return {"status": "ready", "prompt": pr["prompt"], "char_count": pr.get("char_count", 0)}
+        state = getattr(registry.get(clean_jid), "state", "")
+        return JSONResponse({"status": state or "not_found"}, status_code=202)
+    with open(prompt_file, "r", encoding="utf-8") as f:
+        prompt_text = f.read()
+    return {"status": "ready", "prompt": prompt_text, "char_count": len(prompt_text)}
+
+
+@router.post("/api/pipeline/{job_id}/submit-response")
+async def submit_external_response(job_id: str, request: Request):
+    """
+    Accepts the raw text pasted from an external LLM (Claude / ChatGPT / DeepSeek),
+    parses clips, saves clips_metadata.json, and kicks off Phase 2 rendering.
+    """
+    clean_jid = re.sub(r'[^a-zA-Z0-9_\-]', '', str(job_id))
+    job = registry.get(clean_jid)
+    if not job:
+        return JSONResponse({"error": "Job not found"}, status_code=404)
+
+    try:
+        body = await request.json()
+        response_text = body.get("response_text", "").strip()
+        if not response_text:
+            return JSONResponse({"error": "response_text is required"}, status_code=400)
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
+
+    job_dir = OUTPUT_DIR / clean_jid
+    words_cache = job_dir / "prompt_mode_words.json"
+    if not words_cache.exists():
+        # Fallback: find words cache in temp dir
+        temp_dir = BASE_DIR / "temp" / f"processing_{clean_jid}"
+        found = list(temp_dir.glob("words_*.json"))
+        if not found:
+            return JSONResponse({"error": "Transcript data not found. Please run Prompt Mode first."}, status_code=404)
+        import json as _json
+        from modules.audio_demux import get_video_duration
+        with open(found[0], "r", encoding="utf-8") as f:
+            words_data = _json.load(f)
+        words = words_data if isinstance(words_data, list) else words_data.get("words", [])
+        duration = get_video_duration(job.path)
+    else:
+        import json as _json
+        with open(words_cache, "r", encoding="utf-8") as f:
+            cache = _json.load(f)
+        words = cache.get("words", [])
+        duration = cache.get("duration", 0.0)
+
+    try:
+        from modules.hook_detector import parse_external_llm_response
+        clips = parse_external_llm_response(response_text, words, duration)
+    except Exception as e:
+        return JSONResponse({"error": f"Could not parse clips from response: {e}"}, status_code=422)
+
+    clips_meta_path = job_dir / "clips_metadata.json"
+    job_dir.mkdir(parents=True, exist_ok=True)
+    import json as _json
+    with open(clips_meta_path, "w", encoding="utf-8") as f:
+        _json.dump(clips, f, indent=2, ensure_ascii=False)
+
+    # Set phase=2 in config so the WS pipeline only runs rendering
+    config = registry.get_config(clean_jid)
+    config["phase"] = "2"
+    registry.set_config(clean_jid, config)
+
+    restarted = registry.restart_job(clean_jid, phase="2")
+    if not restarted:
+        return JSONResponse({"error": "Failed to schedule Phase 2 rendering."}, status_code=500)
+
+    return {"status": "ok", "job_id": clean_jid, "clip_count": len(clips)}
+
