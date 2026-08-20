@@ -602,7 +602,8 @@ async def run_pipeline_ws(websocket: WebSocket, job_id: str):
 
     logger.info(f"[Pipeline WS] Job {job_id} connected | Presenter='{config.get('character')}', Cover='{config.get('cover')}', Style='{config.get('caption_style')}'")
 
-    should_launch = registry.claim_execution(job_id)
+    is_prompt_mode = config.get("phase") in ("prompt_mode", "asr_only")
+    should_launch = registry.claim_execution(job_id) if not is_prompt_mode else False
 
     if should_launch:
         meta_event = await asyncio.to_thread(get_video_metadata, job.path)
@@ -772,6 +773,7 @@ async def start_prompt_mode(job_id: str, websocket: WebSocket = None):
     # Mark as prompt-mode so the WS handler does NOT start full pipeline
     config["phase"] = "prompt_mode"
     registry.set_config(clean_jid, config)
+    registry.claim_execution(clean_jid)
 
     python_exe = str(BASE_DIR / "venv" / "Scripts" / "python.exe")
     if not Path(python_exe).exists():

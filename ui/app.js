@@ -590,10 +590,14 @@ document.addEventListener("DOMContentLoaded", () => {
   async function _kickPromptModeASR(jobId) {
     _appendPmLog("Connecting to Whisper ASR pipeline...");
     const model = document.getElementById('config-model')?.value || 'small';
+    const character = localStorage.getItem('selectedCharacter') || 'anime_presenter.png';
+    const cover = localStorage.getItem('selectedCover') || 'default_cover.jpg';
+    const captionStyle = localStorage.getItem('captionStyle') || 'aftereffect_preset';
+
     await fetch(`/config/${jobId}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model })
+      body: JSON.stringify({ model, character, cover, caption_style: captionStyle })
     }).catch(() => {});
 
     // Kick off dedicated Prompt Mode endpoint (ASR only)
@@ -601,7 +605,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Connect WS to stream live logs & receive prompt_ready event
     const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${location.host}/ws/${jobId}?character=anime_presenter.png`;
+    const wsUrl = `${protocol}//${location.host}/ws/${jobId}?character=${encodeURIComponent(character)}&cover=${encodeURIComponent(cover)}&caption_style=${encodeURIComponent(captionStyle)}`;
     if (promptModeWs) promptModeWs.close();
     promptModeWs = new WebSocket(wsUrl);
 
