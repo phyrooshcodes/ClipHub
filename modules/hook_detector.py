@@ -80,12 +80,13 @@ STRICT DISQUALIFICATION RULES — NEVER EXTRACT THESE:
 4. NO PURE MECHANISM CLIPS whose only value is explaining a biological term with no human emotional truth attached
 5. NO "SUCCESSFUL PEOPLE DO THIS" CLIPS that speak to people who are already winning, not to people who are struggling
 
-KAI'S WHY — MANDATORY NEW FIELD:
-For each clip, you MUST include a "kai_why" field that explains:
-- What emotional reality or hidden struggle this clip speaks to in Kai's audience
-- What feeling this clip will name or validate for someone who feels lost
-- Why Kai's commentary on this specific moment will land
-This is the brief that Kai's commentary writer uses to write her statements.
+KAI'S SPOKEN COMMENTARY (CRITICAL FOR EDITORIAL AVATAR):
+For each clip, you MUST write Kai's exact spoken voiceover lines:
+1. "kai_hook" (8–14 words): Spoken by Kai BEFORE the speaker begins. Must state a raw truth, common myth, or immediate curiosity question.
+   - Example: "Sleeping eight hours won't fix your fatigue if your evening cortisol is spiking."
+   - Example: "Stop blaming your willpower when your baseline dopamine is completely drained."
+2. "kai_closing" (30–48 words): Spoken by Kai AFTER the speaker finishes. Must explain the speaker's insight in plain words and give a concrete takeaway or reframe the viewer can use today.
+   - Example: "Your body needs a physical signal to wind down, not just a dark room. Cut out late-night screen light and keep your room cool so your body temperature drops for deep repair."
 
 VIRAL TITLE RULES — MANDATORY:
 The clip_title must make someone who feels lost or stuck stop scrolling. It should name a pain point, promise a reframe, or reveal a truth they needed to hear.
@@ -94,14 +95,7 @@ RIGHT: "Why You're Exhausted Even After 8 Hours of Sleep", "The Real Reason You 
 Title must be 6–12 words. No colons. No "The Importance of". No "The Benefits of".
 
 OUTPUT FORMAT:
-First, output your exact, step-by-step thinking process inside <think>...</think> tags.
-In your thinking process:
-- Scan transcript for engagement spikes, emotional contrasts, and contrarian perspectives
-- Evaluate audience retention drop-offs
-- Reason through why specific moments will stop scrolling
-- Explain your scoring and persona framing for each candidate clip
-
-After the </think> tag, output ONLY the valid JSON array:
+Output ONLY the valid JSON array:
 
 [
   {
@@ -111,9 +105,9 @@ After the </think> tag, output ONLY the valid JSON array:
     "viral_score": 9.8,
     "hook_type": "Reframe / Validation / Revelation / Action",
     "hook_explanation": "Why this passes the Kai Test — what emotional truth it delivers for someone who feels stuck",
-    "kai_why": "The hidden emotional reality this clip speaks to and why Kai's commentary will land here",
-    "social_caption": "Caption framing the human truth + what the viewer walks away with + #Hashtags",
-    "product_recommendations": []
+    "kai_hook": "Kai's 8-14 word spoken opening line before the clip starts",
+    "kai_closing": "Kai's 30-48 word spoken closing breakdown & practical takeaway after the clip ends",
+    "social_caption": "Caption framing the human truth + what the viewer walks away with + #Hashtags"
   }
 ]"""
 
@@ -715,7 +709,25 @@ def parse_external_llm_response(
     valid_clips = _validate_and_clamp_clips(raw_clips, video_duration_seconds, words)
     if not valid_clips:
         raise ValueError("Clips were parsed but all failed timestamp validation.")
+    for clip in valid_clips:
+        hook_text = clip.get("kai_hook") or clip.get("hook") or ""
+        closing_text = clip.get("kai_closing") or clip.get("closing_explanation") or clip.get("closing") or clip.get("takeaway") or ""
+        
+        if isinstance(clip.get("editorial_data"), dict):
+            if not hook_text:
+                hook_text = clip["editorial_data"].get("hook", "")
+            if not closing_text:
+                closing_text = clip["editorial_data"].get("closing_explanation", "") or clip["editorial_data"].get("takeaway", "")
+                
+        if hook_text or closing_text:
+            clip["editorial_data"] = {
+                "hook": hook_text,
+                "commentary_segments": [],
+                "takeaway": closing_text,
+                "closing_explanation": closing_text
+            }
+
     valid_clips = sorted(valid_clips, key=lambda x: x.get("hook_score", x.get("viral_score", 0.0)), reverse=True)
-    logger.info(f"[PromptMode] Parsed {len(valid_clips)} valid clips from external LLM response.")
+    logger.info(f"[PromptMode] Parsed {len(valid_clips)} valid clips with editorial commentary from external LLM response.")
     return valid_clips
 
