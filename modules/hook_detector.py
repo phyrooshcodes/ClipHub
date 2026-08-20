@@ -679,17 +679,15 @@ def build_hook_prompt(
         max_clips_instruction=max_clips_instruction
     )
 
-    char_count = len(HOOK_SYSTEM_PROMPT) + len(user_section)
-
     prompt = (
         "# SYSTEM INSTRUCTIONS\n"
         f"{HOOK_SYSTEM_PROMPT}\n\n"
         "---\n\n"
         "# YOUR TASK\n"
-        f"{user_section}\n\n"
-        f"# [Info: ~{char_count:,} characters · paste this entire prompt into Claude / ChatGPT / DeepSeek]"
+        f"{user_section}"
     )
-    return prompt
+    char_count = len(prompt)
+    return prompt, char_count
 
 
 def parse_external_llm_response(

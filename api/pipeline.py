@@ -292,7 +292,7 @@ async def _run_process(job_id: str, cmd: list, start_time: float):
                     from modules.audio_demux import get_video_duration
                     from modules.hook_detector import build_hook_prompt
                     duration = get_video_duration(job.path) if job else 0.0
-                    prompt_text = build_hook_prompt(words, duration, 0)
+                    prompt_text, char_count = build_hook_prompt(words, duration, 0)
                     
                     prompt_cache = job_dir / "prompt_mode_prompt.txt"
                     with open(prompt_cache, "w", encoding="utf-8") as f:
@@ -306,7 +306,7 @@ async def _run_process(job_id: str, cmd: list, start_time: float):
                     registry.add_event(job_id, {
                         "type": "prompt_ready",
                         "prompt": prompt_text,
-                        "char_count": len(prompt_text)
+                        "char_count": char_count
                     })
                 else:
                     registry.set_state(job_id, "failed")
@@ -835,7 +835,7 @@ async def start_prompt_mode(job_id: str, websocket: WebSocket = None):
             max_clips = config.get("max_clips", 0)
 
             from modules.hook_detector import build_hook_prompt
-            prompt_text = build_hook_prompt(words, duration, max_clips)
+            prompt_text, char_count = build_hook_prompt(words, duration, max_clips)
 
             # Cache prompt and words path for submit-response
             prompt_cache = job_dir / "prompt_mode_prompt.txt"
@@ -850,7 +850,7 @@ async def start_prompt_mode(job_id: str, websocket: WebSocket = None):
             registry.add_event(clean_jid, {
                 "type": "prompt_ready",
                 "prompt": prompt_text,
-                "char_count": len(prompt_text)
+                "char_count": char_count
             })
 
         except Exception as e:
