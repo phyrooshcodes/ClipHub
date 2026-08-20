@@ -16,7 +16,7 @@
   </script>
   <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
-  <link rel="stylesheet" href="style.css?v=2.5">
+  <link rel="stylesheet" href="style.css?v=2.6">
 </head>
 <body class="light-theme">
 
@@ -863,7 +863,10 @@
         </div>
         <div class="modal-footer" style="padding:16px 20px; border-top:1px solid var(--border-light); display:flex; justify-content:space-between; align-items:center;">
           <button id="btn-caption-studio-back" class="btn-outline-dashed" style="padding:8px 16px;">Back</button>
-          <button id="btn-caption-studio-proceed" class="btn-primary-gradient" style="padding:10px 28px;"><i class="ri-sparkling-fill"></i> <span id="btn-proceed-modal-text">Generate Clips</span></button>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <button id="btn-caption-studio-prompt-mode" class="btn-prompt-mode" style="padding:9px 18px; font-size:12.5px;"><i class="ri-file-copy-line"></i> Prompt Mode</button>
+            <button id="btn-caption-studio-proceed" class="btn-primary-gradient" style="padding:10px 24px;"><i class="ri-sparkling-fill"></i> <span id="btn-proceed-modal-text">Process</span></button>
+          </div>
         </div>
       </div>
     </div>
@@ -1187,6 +1190,6 @@
     
   </div>
 
-  <script src="app.js?v=2.5"></script>
+  <script src="app.js?v=2.6"></script>
 </body>
 </html>

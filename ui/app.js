@@ -813,9 +813,17 @@ document.addEventListener("DOMContentLoaded", () => {
           </div>
           <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; border-top:1px solid var(--border-light); padding-top:10px;">
             <button class="btn-channel-danger btn-delete-upload" style="padding:6px 10px; font-size:11px;" title="Delete file from disk"><i class="ri-delete-bin-line"></i></button>
-            <button class="btn-primary-gradient btn-select-upload" style="padding:6px 16px; font-size:12px; font-weight:600; flex:1;"><i class="ri-sparkling-fill"></i> Select & Clip →</button>
+            <div style="display:flex; align-items:center; gap:6px; flex:1;">
+              <button class="btn-prompt-mode btn-prompt-mode-upload" style="padding:6px 10px; font-size:11px; border-radius:var(--radius-sm);" title="Extract transcript & copy prompt for Claude / ChatGPT"><i class="ri-file-copy-line"></i> Prompt Mode</button>
+              <button class="btn-primary-gradient btn-select-upload" style="padding:6px 12px; font-size:11.5px; font-weight:600; flex:1;"><i class="ri-sparkling-fill"></i> Select & Clip →</button>
+            </div>
           </div>
         `;
+
+        card.querySelector('.btn-prompt-mode-upload')?.addEventListener('click', () => {
+          document.getElementById('modal-recent-uploads')?.classList.add('hidden');
+          startPromptMode(u.filename, false, true);
+        });
 
         card.querySelector('.btn-select-upload')?.addEventListener('click', () => {
           document.getElementById('modal-recent-uploads')?.classList.add('hidden');
@@ -1596,6 +1604,27 @@ document.addEventListener("DOMContentLoaded", () => {
         document.getElementById('modal-caption-studio')?.classList.add('hidden');
         startProcessing(jobToStart.source, jobToStart.isYoutube, jobToStart.isExistingUpload);
       }
+    });
+  }
+
+  const btnStudioPromptMode = document.getElementById('btn-caption-studio-prompt-mode');
+  if (btnStudioPromptMode) {
+    btnStudioPromptMode.addEventListener('click', () => {
+      if (!currentPendingJob) {
+        const ytInput = document.getElementById('yt-link-input')?.value?.trim();
+        if (stagedFile) {
+          currentPendingJob = { source: stagedFile, isYoutube: false, isExistingUpload: false, isStandaloneTool: false };
+        } else if (ytInput) {
+          currentPendingJob = { source: ytInput, isYoutube: true, isExistingUpload: false, isStandaloneTool: false };
+        } else {
+          Toast.show("Please select a video file or enter a YouTube link first.", "info");
+          document.getElementById('modal-caption-studio')?.classList.add('hidden');
+          return;
+        }
+      }
+      const jobToStart = { ...currentPendingJob };
+      document.getElementById('modal-caption-studio')?.classList.add('hidden');
+      startPromptMode(jobToStart.source, jobToStart.isYoutube, jobToStart.isExistingUpload);
     });
   }
   const btnStudioDone = document.getElementById('btn-caption-studio-done');
