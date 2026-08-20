@@ -486,6 +486,28 @@ document.addEventListener("DOMContentLoaded", () => {
     if (container) container.scrollTop = container.scrollHeight;
   }
 
+  let currentPromptModeSource = null;
+  let currentPromptModeIsYoutube = false;
+  let currentPromptModeIsUpload = false;
+
+  function renderPromptModeConfigSummary() {
+    const charId = localStorage.getItem('selectedCharacter') || 'anime_presenter.png';
+    const coverId = localStorage.getItem('selectedCover') || 'default_cover.jpg';
+    const styleId = localStorage.getItem('captionStyle') || 'aftereffect_preset';
+
+    const charObj = availableCharacters.find(c => c.id === charId);
+    const coverObj = availableCovers.find(c => c.id === coverId);
+    const styleObj = CAPTION_STYLES_DATA.find(s => s.id === styleId);
+
+    const charEl = document.getElementById('pm-config-avatar-label');
+    const coverEl = document.getElementById('pm-config-cover-label');
+    const styleEl = document.getElementById('pm-config-style-label');
+
+    if (charEl) charEl.textContent = charObj ? charObj.name : charId;
+    if (coverEl) coverEl.textContent = coverObj ? coverObj.name : (coverId === 'none' ? 'Video Frame' : coverId);
+    if (styleEl) styleEl.textContent = styleObj ? styleObj.name : styleId;
+  }
+
   function openPromptModeModal() {
     document.getElementById('modal-prompt-mode')?.classList.remove('hidden');
     const statusLabel = document.getElementById('prompt-mode-status-label');
@@ -495,6 +517,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const charCount = document.getElementById('prompt-mode-char-count');
     const pBar = document.getElementById('pm-progress-bar');
     const logBox = document.getElementById('pm-live-log-text');
+
+    renderPromptModeConfigSummary();
 
     if (pBar) pBar.style.width = '20%';
     if (logBox) logBox.innerHTML = '<div>Initializing local worker & extracting audio...</div>';
@@ -510,6 +534,10 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   async function startPromptMode(fileOrUrl, isYoutube, isExistingUpload) {
+    currentPromptModeSource = fileOrUrl;
+    currentPromptModeIsYoutube = isYoutube;
+    currentPromptModeIsUpload = isExistingUpload;
+
     openPromptModeModal();
 
     // Upload/register the job first
@@ -719,11 +747,20 @@ document.addEventListener("DOMContentLoaded", () => {
     renderBtn.disabled = true;
     renderBtn.innerHTML = '<i class="ri-loader-4-line spin"></i> Submitting...';
 
+    const character = localStorage.getItem('selectedCharacter') || 'anime_presenter.png';
+    const cover = localStorage.getItem('selectedCover') || 'default_cover.jpg';
+    const captionStyle = localStorage.getItem('captionStyle') || 'aftereffect_preset';
+
     try {
       const res = await fetch(`/api/pipeline/${promptModeJobId}/submit-response`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ response_text: responseText })
+        body: JSON.stringify({ 
+          response_text: responseText,
+          character: character,
+          cover: cover,
+          caption_style: captionStyle
+        })
       });
       const data = await res.json();
       if (!res.ok || data.error) throw new Error(data.error || 'Submission failed');
@@ -746,7 +783,13 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  // Prompt Mode modal — file/local video
+  // Change Style inside Prompt Mode modal
+  document.getElementById('btn-pm-change-style')?.addEventListener('click', () => {
+    const src = currentPromptModeSource || stagedFile || document.getElementById('yt-link-input')?.value?.trim();
+    openCaptionStudio(src, currentPromptModeIsYoutube, currentPromptModeIsUpload, false, true);
+  });
+
+  // Prompt Mode button on dropzone — Opens Caption Studio first so user selects Avatar, Cover & Style
   document.getElementById('btn-proceed-prompt-mode')?.addEventListener('click', (e) => {
     e.stopPropagation();
     const ytUrl = document.getElementById('yt-link-input')?.value.trim();
@@ -755,30 +798,33 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
     if (stagedFile) {
-      startPromptMode(stagedFile, false, false);
+      openCaptionStudio(stagedFile, false, false, false, true);
     } else if (ytUrl) {
-      startPromptMode(ytUrl, true, false);
+      openCaptionStudio(ytUrl, true, false, false, true);
     } else {
       Toast.show('Please select a file or enter a YouTube link first.', 'info');
     }
   });
 
-  // Prompt Mode — YouTube inline button
+  // Prompt Mode — YouTube inline button — Opens Caption Studio first
   document.getElementById('btn-yt-prompt-mode')?.addEventListener('click', (e) => {
     e.preventDefault();
     e.stopPropagation();
     const ytUrl = document.getElementById('yt-link-input')?.value.trim();
     if (!ytUrl) { Toast.show('Please paste a YouTube URL first.', 'info'); return; }
-    startPromptMode(ytUrl, true, false);
+    openCaptionStudio(ytUrl, true, false, false, true);
   });
 
   // Close / Cancel Prompt Mode modal
-  ['btn-close-prompt-mode', 'btn-prompt-mode-cancel'].forEach(id => {
-    document.getElementById(id)?.addEventListener('click', () => {
-      document.getElementById('modal-prompt-mode')?.classList.add('hidden');
-      if (promptModeWs) { promptModeWs.close(); promptModeWs = null; }
-      if (promptPollInterval) { clearInterval(promptPollInterval); promptPollInterval = null; }
-    });
+  document.getElementById('btn-close-prompt-mode')?.addEventListener('click', () => {
+    document.getElementById('modal-prompt-mode')?.classList.add('hidden');
+    if (promptModeWs) promptModeWs.close();
+    if (promptPollInterval) clearInterval(promptPollInterval);
+  });
+  document.getElementById('btn-prompt-mode-cancel')?.addEventListener('click', () => {
+    document.getElementById('modal-prompt-mode')?.classList.add('hidden');
+    if (promptModeWs) promptModeWs.close();
+    if (promptPollInterval) clearInterval(promptPollInterval);
   });
   // ─── END PROMPT MODE ──────────────────────────────────────
 
@@ -900,7 +946,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         card.querySelector('.btn-prompt-mode-upload')?.addEventListener('click', () => {
           document.getElementById('modal-recent-uploads')?.classList.add('hidden');
-          startPromptMode(u.filename, false, true);
+          openCaptionStudio(u.filename, false, true, false, true);
         });
 
         card.querySelector('.btn-select-upload')?.addEventListener('click', () => {
@@ -1058,6 +1104,7 @@ document.addEventListener("DOMContentLoaded", () => {
       if (configCharacterSelect) configCharacterSelect.value = c.id;
       renderSettingsCharactersGrid();
       renderStudioCharactersGrid();
+      renderPromptModeConfigSummary();
       Toast.show(`Presenter: ${c.name}`, "info");
     });
 
@@ -1305,6 +1352,7 @@ document.addEventListener("DOMContentLoaded", () => {
       if (configCoverSelect) configCoverSelect.value = c.id;
       renderSettingsCoversGrid();
       renderStudioCoversGrid();
+      renderPromptModeConfigSummary();
       Toast.show(isNone ? "Cover set to Video Frame (No Universal)" : `Cover: ${c.name}`, "info");
     });
 
@@ -1547,8 +1595,13 @@ document.addEventListener("DOMContentLoaded", () => {
       
       const btnText = document.getElementById('btn-proceed-modal-text');
       if (btnText && (!currentPendingJob || !currentPendingJob.isStandaloneTool)) {
-        btnText.textContent = `Generate Clips (${st.name})`;
+        if (currentPendingJob && currentPendingJob.isPromptMode) {
+          btnText.innerHTML = `<i class="ri-file-copy-line"></i> Generate Prompt (${st.name})`;
+        } else {
+          btnText.textContent = `Generate Clips (${st.name})`;
+        }
       }
+      renderPromptModeConfigSummary();
     });
 
     return card;
@@ -1574,8 +1627,8 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  function openCaptionStudio(source, isYoutube = false, isExistingUpload = false, isStandaloneTool = false) {
-    currentPendingJob = { source, isYoutube, isExistingUpload, isStandaloneTool };
+  function openCaptionStudio(source, isYoutube = false, isExistingUpload = false, isStandaloneTool = false, isPromptMode = false) {
+    currentPendingJob = { source, isYoutube, isExistingUpload, isStandaloneTool, isPromptMode };
     renderCaptionStudioGrid();
 
     const modal = document.getElementById('modal-caption-studio');
@@ -1588,15 +1641,31 @@ document.addEventListener("DOMContentLoaded", () => {
     const charSection = document.getElementById('character-studio-section');
     const coverSection = document.getElementById('cover-studio-section');
     const btnText = document.getElementById('btn-proceed-modal-text');
+    const btnPromptModeInStudio = document.getElementById('btn-caption-studio-prompt-mode');
+
     if (isStandaloneTool) {
       if (charSection) charSection.classList.add('hidden');
       if (coverSection) coverSection.classList.add('hidden');
+      if (btnPromptModeInStudio) btnPromptModeInStudio.classList.add('hidden');
       document.getElementById('caption-studio-title').innerHTML = `Add Viral Captions: <span style="color:var(--brand-purple);">Choose Style</span>`;
       document.getElementById('caption-studio-subtitle').textContent = `Select the animation style to burn onto your uploaded clip!`;
       if (btnText) btnText.textContent = `Burn Captions Onto Video`;
+    } else if (isPromptMode) {
+      if (charSection) charSection.classList.remove('hidden');
+      if (coverSection) coverSection.classList.remove('hidden');
+      if (btnPromptModeInStudio) btnPromptModeInStudio.classList.add('hidden');
+      renderStudioCharactersGrid();
+      renderStudioCoversGrid();
+      document.getElementById('caption-studio-title').innerHTML = `Step 2: Choose <span style="color:var(--brand-purple);">Presenter, Cover & Style</span>`;
+      document.getElementById('caption-studio-subtitle').textContent = `Select your AI presenter, universal cover thumbnail, and caption style for Prompt Mode.`;
+      const curStyle = localStorage.getItem('captionStyle') || 'aftereffect_preset';
+      const curObj = CAPTION_STYLES_DATA.find(s => s.id === curStyle);
+      const name = curObj ? curObj.name : 'Selected Style';
+      if (btnText) btnText.innerHTML = `<i class="ri-file-copy-line"></i> Generate Prompt (${name})`;
     } else {
       if (charSection) charSection.classList.remove('hidden');
       if (coverSection) coverSection.classList.remove('hidden');
+      if (btnPromptModeInStudio) btnPromptModeInStudio.classList.remove('hidden');
       renderStudioCharactersGrid();
       renderStudioCoversGrid();
       document.getElementById('caption-studio-title').innerHTML = `Step 2: Choose <span style="color:var(--brand-purple);">Presenter, Cover & Style</span>`;
@@ -1619,7 +1688,7 @@ document.addEventListener("DOMContentLoaded", () => {
   if (btnAddCaptionsTool && standaloneCaptionFile) {
     btnAddCaptionsTool.addEventListener('click', () => standaloneCaptionFile.click());
     standaloneCaptionFile.addEventListener('change', (e) => {
-      if (e.target.files.length) openCaptionStudio(e.target.files[0], false, false, true);
+      if (e.target.files.length) openCaptionStudio(e.target.files[0], false, false, true, false);
     });
   }
 
@@ -1636,9 +1705,9 @@ document.addEventListener("DOMContentLoaded", () => {
       if (!currentPendingJob) {
         const ytInput = document.getElementById('yt-link-input')?.value?.trim();
         if (stagedFile) {
-          currentPendingJob = { source: stagedFile, isYoutube: false, isExistingUpload: false, isStandaloneTool: false };
+          currentPendingJob = { source: stagedFile, isYoutube: false, isExistingUpload: false, isStandaloneTool: false, isPromptMode: false };
         } else if (ytInput) {
-          currentPendingJob = { source: ytInput, isYoutube: true, isExistingUpload: false, isStandaloneTool: false };
+          currentPendingJob = { source: ytInput, isYoutube: true, isExistingUpload: false, isStandaloneTool: false, isPromptMode: false };
         } else {
           Toast.show("Please select a video file or enter a YouTube link first.", "info");
           document.getElementById('modal-caption-studio')?.classList.add('hidden');
@@ -1677,6 +1746,10 @@ document.addEventListener("DOMContentLoaded", () => {
           document.getElementById('standalone-caption-loading')?.classList.add('hidden');
           document.getElementById('caption-studio-main')?.classList.remove('hidden');
         }
+      } else if (currentPendingJob.isPromptMode) {
+        const jobToStart = { ...currentPendingJob };
+        document.getElementById('modal-caption-studio')?.classList.add('hidden');
+        startPromptMode(jobToStart.source, jobToStart.isYoutube, jobToStart.isExistingUpload);
       } else {
         const jobToStart = { ...currentPendingJob };
         document.getElementById('modal-caption-studio')?.classList.add('hidden');
@@ -1691,9 +1764,9 @@ document.addEventListener("DOMContentLoaded", () => {
       if (!currentPendingJob) {
         const ytInput = document.getElementById('yt-link-input')?.value?.trim();
         if (stagedFile) {
-          currentPendingJob = { source: stagedFile, isYoutube: false, isExistingUpload: false, isStandaloneTool: false };
+          currentPendingJob = { source: stagedFile, isYoutube: false, isExistingUpload: false, isStandaloneTool: false, isPromptMode: true };
         } else if (ytInput) {
-          currentPendingJob = { source: ytInput, isYoutube: true, isExistingUpload: false, isStandaloneTool: false };
+          currentPendingJob = { source: ytInput, isYoutube: true, isExistingUpload: false, isStandaloneTool: false, isPromptMode: true };
         } else {
           Toast.show("Please select a video file or enter a YouTube link first.", "info");
           document.getElementById('modal-caption-studio')?.classList.add('hidden');

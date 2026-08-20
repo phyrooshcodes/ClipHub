@@ -893,6 +893,9 @@ async def submit_external_response(job_id: str, request: Request):
     try:
         body = await request.json()
         response_text = body.get("response_text", "").strip()
+        character = body.get("character")
+        cover = body.get("cover")
+        caption_style = body.get("caption_style")
         if not response_text:
             return JSONResponse({"error": "response_text is required"}, status_code=400)
     except Exception:
@@ -933,6 +936,12 @@ async def submit_external_response(job_id: str, request: Request):
 
     # Set phase=2 in config so the WS pipeline only runs rendering
     config = registry.get_config(clean_jid)
+    if character:
+        config["character"] = character
+    if cover:
+        config["cover"] = cover
+    if caption_style:
+        config["caption_style"] = caption_style
     config["phase"] = "2"
     registry.set_config(clean_jid, config)
 

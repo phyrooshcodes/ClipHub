@@ -16,7 +16,7 @@
   </script>
   <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
-  <link rel="stylesheet" href="style.css?v=2.8">
+  <link rel="stylesheet" href="style.css?v=2.9">
 </head>
 <body class="light-theme">
 
@@ -1078,6 +1078,30 @@
 
           <div style="border-top:1px solid var(--border-light);"></div>
 
+          <!-- Active Style / Presenter Summary Bar -->
+          <div class="pm-active-config-bar" style="display:flex; align-items:center; justify-content:space-between; background:var(--bg-app); border:1px solid var(--border-light); border-radius:var(--radius-sm); padding:10px 14px; margin-top:-6px; margin-bottom:4px; font-size:12px;">
+            <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
+              <span style="display:flex; align-items:center; gap:6px;">
+                <i class="ri-user-smile-fill" style="color:var(--brand-purple); font-size:14px;"></i>
+                <span style="color:var(--text-muted);">Presenter:</span>
+                <strong id="pm-config-avatar-label" style="color:var(--text-main);">Anime Presenter</strong>
+              </span>
+              <span style="display:flex; align-items:center; gap:6px;">
+                <i class="ri-image-fill" style="color:#f59e0b; font-size:14px;"></i>
+                <span style="color:var(--text-muted);">Cover:</span>
+                <strong id="pm-config-cover-label" style="color:var(--text-main);">Default Universal</strong>
+              </span>
+              <span style="display:flex; align-items:center; gap:6px;">
+                <i class="ri-sparkling-fill" style="color:var(--brand-primary); font-size:14px;"></i>
+                <span style="color:var(--text-muted);">Style:</span>
+                <strong id="pm-config-style-label" style="color:var(--text-main);">After Effects VIP</strong>
+              </span>
+            </div>
+            <button type="button" id="btn-pm-change-style" class="btn-outline-dashed" style="padding:4px 10px; font-size:11px; display:flex; align-items:center; gap:5px; cursor:pointer;" title="Change Presenter, Cover, or Caption Style">
+              <i class="ri-settings-4-line"></i> Change Style
+            </button>
+          </div>
+
           <!-- Step 2: Paste Response -->
           <div id="prompt-mode-step2">
             <div style="font-size:13px; font-weight:600; color:var(--text-main); margin-bottom:8px;">
@@ -1228,6 +1252,6 @@
     
   </div>
 
-  <script src="app.js?v=2.8"></script>
+  <script src="app.js?v=2.9"></script>
 </body>
 </html>
