@@ -2264,6 +2264,7 @@ document.addEventListener("DOMContentLoaded", () => {
   function connectPipelineWS(jobId) {
     if (currentWs && currentWs.readyState !== WebSocket.CLOSED) currentWs.close();
     
+    currentScriptJobId = jobId;
     const character = localStorage.getItem('selectedCharacter') || document.getElementById('config-character-select')?.value || 'anime_presenter.png';
     const cover = localStorage.getItem('selectedCover') || document.getElementById('config-cover-select')?.value || 'default_cover.jpg';
     const captionStyle = localStorage.getItem('captionStyle') || document.getElementById('config-caption-style')?.value || 'aftereffect_preset';
@@ -2277,9 +2278,34 @@ document.addEventListener("DOMContentLoaded", () => {
     }, 3000);
     fetchJobScript(jobId);
 
+    let pollFailoverInterval = null;
+    const checkJobDoneHttp = async () => {
+      try {
+        const res = await fetch(`/clips/${jobId}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.clips && data.clips.length > 0) {
+            clearInterval(scriptPoll);
+            if (pollFailoverInterval) clearInterval(pollFailoverInterval);
+            stopThinkingTimer();
+            updateProgress('step-render', "Finished Processing", 100);
+            appendLog(`<span class="log-highlight">[Success]</span> Pipeline completed (${data.clips.length} clips ready).`);
+            fetchJobScript(jobId);
+            fetchClips(jobId);
+            localStorage.removeItem('currentJobId');
+            localStorage.removeItem('currentJobId_ts');
+          }
+        }
+      } catch(_) {}
+    };
+
     currentWs = new WebSocket(wsUrl);
     currentWs.onclose = () => {
       clearInterval(scriptPoll);
+      if (!pollFailoverInterval) {
+        pollFailoverInterval = setInterval(checkJobDoneHttp, 4000);
+      }
+      checkJobDoneHttp();
     };
     currentWs.onmessage = (event) => {
       let data;
@@ -3831,6 +3857,25 @@ document.addEventListener("DOMContentLoaded", () => {
   populateScriptJobSelector();
   loadCharacters();
   loadCovers();
+
+  async function initJobRecovery() {
+    const savedJobId = localStorage.getItem('currentJobId');
+    if (savedJobId) {
+      try {
+        const res = await fetch(`/clips/${savedJobId}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.clips && data.clips.length > 0) {
+            localStorage.removeItem('currentJobId');
+            localStorage.removeItem('currentJobId_ts');
+            stopThinkingTimer();
+            fetchClips(savedJobId);
+          }
+        }
+      } catch(_) {}
+    }
+  }
+  initJobRecovery();
 
   window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
