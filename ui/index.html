@@ -990,7 +990,7 @@
     </div>
 
     <!-- YouTube Connection Modal -->
-    <div id="modal-youtube-connect" class="modal-backdrop hidden">
+    <div id="modal-youtube-connect" class="modal-backdrop hidden" style="z-index: 10050;">
       <div class="modal-card" style="max-width: 500px;">
         <div class="modal-header">
           <div style="display: flex; align-items: center; gap: 8px;">
@@ -1013,9 +1013,14 @@
               <div id="yt-secrets-upload-area" style="border: 1px dashed var(--border-light); border-radius: 6px; padding: 12px; text-align: center; margin-bottom: 10px; background: var(--bg-card);">
                 <input type="file" id="input-client-secrets" accept=".json" style="display: none;">
                 <p style="font-size: 11px; color: var(--text-muted); margin: 0 0 8px 0;">Upload <code>client_secrets.json</code> from Google Cloud Console</p>
-                <button type="button" class="btn-outline-dashed" onclick="document.getElementById('input-client-secrets').click()" style="font-size: 11px; padding: 5px 12px;">
-                  <i class="ri-file-upload-line"></i> Choose File
-                </button>
+                <div style="display: flex; gap: 8px; justify-content: center; align-items: center; flex-wrap: wrap;">
+                  <button type="button" class="btn-outline-dashed" onclick="document.getElementById('input-client-secrets').click()" style="font-size: 11px; padding: 5px 12px;">
+                    <i class="ri-file-upload-line"></i> Choose File
+                  </button>
+                  <a href="https://console.cloud.google.com/apis/credentials" target="_blank" style="font-size: 11px; color: var(--brand-primary); text-decoration: none; display: inline-flex; align-items: center; gap: 4px;">
+                    <i class="ri-external-link-line"></i> Get Credentials
+                  </a>
+                </div>
               </div>
               <button id="btn-oauth-authorize" class="btn-primary-gradient hidden" style="width: 100%; justify-content: center; padding: 8px 14px;">
                 <i class="ri-google-fill"></i> Authorize with Google

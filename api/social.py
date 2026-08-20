@@ -394,25 +394,28 @@ async def connect_yt_playwright():
 
 @router.get("/api/social/youtube/auth-url")
 async def youtube_auth_url():
-    from modules.publisher_yt import get_youtube_flow, has_client_secrets
+    from modules.publisher_yt import create_authorization_url, has_client_secrets
     if not has_client_secrets(): return JSONResponse({"error": "client_secrets.json missing"}, status_code=400)
     try:
-        flow = get_youtube_flow(redirect_uri="http://localhost:7842/api/social/youtube/callback")
-        auth_url, _ = flow.authorization_url(prompt='consent', access_type='offline')
-        return {"auth_url": auth_url}
+        auth_url, state = create_authorization_url(redirect_uri="http://localhost:7842/api/social/youtube/callback")
+        return {"auth_url": auth_url, "state": state}
     except Exception as e: return JSONResponse({"error": str(e)}, status_code=500)
 
 @router.get("/api/social/youtube/callback")
-async def youtube_callback(code: str):
+async def youtube_callback(code: str, state: str = None):
     from modules.publisher_yt import connect_youtube_with_code
     try:
-        connect_youtube_with_code(code, redirect_uri="http://localhost:7842/api/social/youtube/callback")
-        return HTMLResponse("<html><head><title>YouTube Connected</title><style>body{background:#0f172a;color:#fff;font-family:sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;margin:0;}h2{color:#22c55e;}</style></head><body><h2>✅ YouTube Connected Successfully!</h2><p>You can close this window now.</p><script>if(window.opener){window.opener.location.reload();}setTimeout(()=>window.close(), 1500);</script></body></html>")
+        connect_youtube_with_code(code, state=state, redirect_uri="http://localhost:7842/api/social/youtube/callback")
+        html_content = """<!DOCTYPE html><html><head><title>YouTube Connected</title><style>body{background:#0f172a;color:#f8fafc;font-family:system-ui,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;margin:0;text-align:center;}.card{background:#1e293b;border:1px solid #334155;padding:32px 40px;border-radius:12px;box-shadow:0 10px 25px rgba(0,0,0,0.5);max-width:420px;}h2{color:#22c55e;margin:0 0 12px 0;font-size:22px;}p{color:#94a3b8;font-size:14px;margin:0 0 20px 0;line-height:1.5;}.badge{display:inline-block;background:rgba(34,197,94,0.15);color:#22c55e;padding:4px 10px;border-radius:6px;font-weight:600;font-size:12px;}</style></head><body><div class="card"><h2>&#x2705; YouTube Connected!</h2><p>Your YouTube account and channel have been securely connected to ClipHub via Google OAuth 2.0.</p><span class="badge">You can close this window now</span></div><script>if(window.opener){try{window.opener.location.reload();}catch(e){}}setTimeout(()=>window.close(),1800);</script></body></html>"""
+        return HTMLResponse(content=html_content)
     except Exception as e:
-        return HTMLResponse(f"<html><head><title>Connection Failed</title><style>body{background:#0f172a;color:#fff;font-family:sans-serif;padding:40px;}</style></head><body><h2>❌ Connection Failed</h2><p>{e}</p></body></html>")
+        err_msg = str(e)
+        html_err = f"""<!DOCTYPE html><html><head><title>Connection Failed</title><style>body{{background:#0f172a;color:#f8fafc;font-family:system-ui,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;margin:0;text-align:center;}}.card{{background:#1e293b;border:1px solid #ef4444;padding:32px 40px;border-radius:12px;max-width:460px;}}h2{{color:#ef4444;margin:0 0 12px 0;font-size:22px;}}p{{color:#94a3b8;font-size:13px;margin:0 0 20px 0;}}</style></head><body><div class="card"><h2>&#x274c; Connection Failed</h2><p>{err_msg}</p></div></body></html>"""
+        return HTMLResponse(content=html_err, status_code=400)
+
 @router.post("/api/social/youtube/upload-client-secrets")
 async def upload_client_secrets(file: UploadFile = File(...)):
-    from modules.publisher_yt import CREDENTIALS_DIR, CLIENT_SECRETS_FILE, get_youtube_flow
+    from modules.publisher_yt import CREDENTIALS_DIR, CLIENT_SECRETS_FILE, create_authorization_url
     try:
         content = await file.read()
         data = json.loads(content.decode("utf-8"))
@@ -421,9 +424,8 @@ async def upload_client_secrets(file: UploadFile = File(...)):
         CREDENTIALS_DIR.mkdir(parents=True, exist_ok=True)
         with open(CLIENT_SECRETS_FILE, "wb") as f:
             f.write(content)
-        flow = get_youtube_flow(redirect_uri="http://localhost:7842/api/social/youtube/callback")
-        auth_url, _ = flow.authorization_url(prompt='consent', access_type='offline')
-        return {"success": True, "auth_url": auth_url}
+        auth_url, state = create_authorization_url(redirect_uri="http://localhost:7842/api/social/youtube/callback")
+        return {"success": True, "auth_url": auth_url, "state": state}
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=400)
 

@@ -103,16 +103,40 @@ def post_youtube_short(
 
 
 # OAuth Helpers for Google Cloud App Flow
-def get_youtube_flow(redirect_uri: str = "urn:ietf:wg:oauth:2.0:oob"):
+_active_flows: dict[str, tuple[float, object]] = {}
+
+
+def get_youtube_flow(redirect_uri: str = "http://localhost:7842/api/social/youtube/callback"):
     from google_auth_oauthlib.flow import Flow
     if not CLIENT_SECRETS_FILE.exists():
         raise FileNotFoundError("client_secrets.json is missing in credentials/ directory.")
     return Flow.from_client_secrets_file(str(CLIENT_SECRETS_FILE), scopes=SCOPES, redirect_uri=redirect_uri)
 
 
-def connect_youtube_with_code(code: str, redirect_uri: str = "urn:ietf:wg:oauth:2.0:oob") -> bool:
+def create_authorization_url(redirect_uri: str = "http://localhost:7842/api/social/youtube/callback") -> tuple[str, str]:
+    """Generate authorization URL and preserve PKCE flow state across requests."""
+    flow = get_youtube_flow(redirect_uri=redirect_uri)
+    auth_url, state = flow.authorization_url(
+        prompt="consent",
+        access_type="offline",
+        include_granted_scopes="true"
+    )
+    now = time.time()
+    # Prune expired flows older than 1 hour
+    for s, (t, _) in list(_active_flows.items()):
+        if now - t > 3600:
+            _active_flows.pop(s, None)
+    _active_flows[state] = (now, flow)
+    return auth_url, state
+
+
+def connect_youtube_with_code(code: str, state: Optional[str] = None, redirect_uri: str = "http://localhost:7842/api/social/youtube/callback") -> bool:
     try:
-        flow = get_youtube_flow(redirect_uri)
+        flow = None
+        if state and state in _active_flows:
+            _, flow = _active_flows.pop(state)
+        if flow is None:
+            flow = get_youtube_flow(redirect_uri=redirect_uri)
         flow.fetch_token(code=code)
         creds = flow.credentials
         CREDENTIALS_DIR.mkdir(parents=True, exist_ok=True)
