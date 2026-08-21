@@ -75,16 +75,27 @@ Purpose: create curiosity or challenge an assumption in one breath. This is the 
 
 Don't reach for a template. Instead, actually look at what's specific and surprising about *this particular clip* — the exact claim, the exact tension, the exact word the speaker uses — and find the one sentence Kai would actually say about it if she just watched it and turned to you. The best hooks come from the content itself, not from a rhetorical shape imposed on top of it. If you notice yourself writing something that could be pasted onto a completely different clip and still sort of work, that's a sign it's generic — throw it out and go back to what's actually true about this specific moment.
 
-Ask yourself before writing: what's the one thing in this clip a smart friend would find genuinely surprising, wrong-sounding-but-right, or worth interrupting you to say? Write that, in her voice, in one breath. Let the phrasing come from the idea, not from a formula.
+### 2. "kai_closing" — Flexible length, spoken AFTER the clip
+Purpose: Help the viewer walk away with a genuinely clear understanding of what they just heard — the mechanism behind it, why it actually matters for real life, and a conclusion that lands. This is Kai's teaching moment, not a footnote. Let it breathe as much as the insight genuinely needs.
 
-### 2. "kai_closing" — 30 to 48 words, spoken AFTER the clip
-Purpose: translate the insight into something specific and usable — and let a little of Kai's actual reaction show through, not just a lesson summary. No filler, no vague inspiration ("you've got this!"), no restating the clip.
+**Length calibration — do NOT force either direction:**
+- **Simple, punchy insight** (the speaker stated it clearly and directly): 35–50 words is plenty. Don't pad it.
+- **Layered, nuanced, or counter-intuitive insight** (needs unpacking, has a mechanism, or would confuse without context): 55–90 words is appropriate. Use the space honestly — not to fill time, but because the idea genuinely needs it.
+- The test: would cutting 20 words lose something real? If yes, keep them. If no, cut them.
 
-A strong closing usually does two things: (1) gives the one real, concrete thing to act on, and (2) has a flicker of Kai's personality — her honest reaction, a caveat about real life, or what she'd actually do with this. Not both halves every time — sometimes just a sharp actionable line is enough.
+**What a strong closing builds (in natural order, not a rigid template):**
+1. **The mechanism / "why it actually works"** — the part the speaker implied but didn't fully spell out. This is the educational layer that turns a quote into a lesson.
+2. **Real-life grounding** — a specific situation the viewer is likely in, not generic ("for anyone struggling") but concrete (the 3pm crash, the habit tried and abandoned, the argument that keeps recurring).
+3. **A genuine conclusion or action** — specific and immediately usable. Not "be more aware of this" — something they can actually do or think differently about starting now.
+4. **A flicker of Kai's personality** — her honest take, a quiet caveat, or what she found most useful. This is what makes it feel like a real person, not a script.
 
-Don't open from a template. Think about what Kai's actual first reaction is to what the speaker just said — is she impressed, is she adding a caveat, is she translating jargon into plain terms, is she pushing back a little, is she connecting it to something ordinary? Let that real reaction generate the first sentence naturally, the way it would if she were actually talking, not the way it would if she were filling in a fixed opening line. The content of what the speaker said should determine her reaction — don't decide the reaction type first and then find something to say.
+**What a closing should never do:**
+- Repeat or summarize what the speaker just said — the viewer already heard it.
+- Give vague inspiration ("you've got this", "just believe in yourself").
+- Open with a thesis structure ("So the real lesson here is...", "What this tells us is...").
+- Pad with filler that adds length without adding meaning.
 
-If you catch yourself defaulting to summarizing-then-moralizing ("So the real lesson here is...") treat that as a warning sign, not a safe default — it's the single most generic shape a closing can take. Prefer whatever's actually true about her reaction to this specific clip over whatever's structurally safe.
+**On opening sentence**: Don't start from a template. Kai's first word should come from her genuine reaction to that specific clip. If she's adding a caveat, that comes first. If she's translating a mechanism, that comes first. If she's connecting to a real-life situation, that comes first. Let the content determine the shape — not the other way around.
 
 ---
 
@@ -174,7 +185,7 @@ Total video duration: {duration_str}
 Now {max_clips_instruction}.
 
 HARD CONSTRAINTS — NO EXCEPTIONS:
-- CLIP DIALOGUE LENGTH: 30–42 seconds of source dialogue only. The final video adds ~8s (Kai's intro) + ~18s (Kai's closing) on top. Total output must stay under 65 seconds.
+- CLIP DIALOGUE LENGTH: 30–42 seconds of source dialogue only. The final video adds ~8s (Kai's hook intro) + 15–30s (Kai's closing, flexible based on depth). Keep the speaker's clip in the 30–42s range so the total video breathes naturally.
 - MINIMUM 30s: Never clip a short quote. Expand outward to surrounding sentences until you reach 30 full seconds of dialogue.
 - MAXIMUM 42s: Hard cap. Trim at the nearest clean sentence end at or before 42 seconds.
 - TOPIC DIVERSITY: Zero repetition across sub-topics.
@@ -187,7 +198,7 @@ HARD CONSTRAINTS — NO EXCEPTIONS:
 
 
 # ─── Output Sizing ───────────────────────────────────────────
-_TOKENS_PER_CLIP = 350
+_TOKENS_PER_CLIP = 450   # Bumped from 350 to accommodate longer depth-calibrated closings
 _BASE_TOKENS = 800
 _MAX_OUTPUT_TOKENS = 16384
 

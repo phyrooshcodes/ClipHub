@@ -58,19 +58,27 @@ CLIP STRUCTURE:
    GOOD: "Stop blaming your willpower when your baseline dopamine is completely drained."
    BAD: "Let's explore what's important when making informed decisions about sleep."
 
-2. "closing_explanation" (Kai's Outro Breakdown, 30–48 words MAX):
-   - Spoken AFTER the speaker finishes.
-   - Explains the speaker's main insight in plain, direct words without repeating what they said.
-   - Gives a concrete takeaway or reframe the viewer can use right now.
-   - Keep it concise, punchy, and conversational.
-   GOOD: "Your body needs a physical signal to wind down, not just a dark room. Cut out late-night screen light and keep your room cool so your body temperature drops for deep repair."
+2. "closing_explanation" (Kai's Closing, spoken AFTER the speaker — flexible length):
+   - The speaker just made their point. Now Kai's job is to make sure the viewer actually walks away understanding it — the mechanism behind it, why it works in real life, and what to actually do with it.
+   - **Length is calibrated to depth, not forced:**
+     - Simple, clearly-stated insight → 35–50 words. Don't pad it.
+     - Layered, nuanced, or counter-intuitive insight → 55–90 words. Take the space the idea genuinely needs.
+     - The test: would cutting 20 words lose something real? Keep them. If not, cut them.
+   - **What a strong closing builds (in natural order):**
+     1. The mechanism — why it actually works, the thing the speaker implied but didn't spell out.
+     2. Real-life grounding — a specific, relatable situation, not generic ("when you're tired") but concrete.
+     3. A genuine conclusion or action — specific and immediately usable. Not "be aware of this."
+     4. A flicker of Kai's personality — her honest reaction, a caveat, or what she'd actually do with this.
+   - NEVER repeat what the speaker said. NEVER give vague inspiration. NEVER open with "So the real lesson here is...".
+   - Let her reaction to the specific clip determine the shape of the closing — not the other way around.
+   GOOD: "Your cortisol literally spikes within 30 minutes of waking, which is why checking your phone first thing tanks your focus for the next two hours. The practical fix is dumb simple: keep your phone in another room until you've eaten. That's it. That's the whole thing."
    BAD: "What's important is understanding your biological rhythms so you can make informed decisions and remember that you are capable of achieving restful sleep."
 
 OUTPUT FORMAT:
 Strictly raw JSON with NO markdown formatting:
 {
   "hook": "Kai's 8-14 word punchy conversational opening line",
-  "closing_explanation": "Kai's 30-48 word natural, direct explanation and practical takeaway"
+  "closing_explanation": "Kai's flexible-length natural, direct explanation and practical takeaway"
 }"""
 
 
