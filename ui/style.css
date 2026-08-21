@@ -968,57 +968,179 @@ html, body {
   max-width: unset;
 }
 
+/* ── FLAGSHIP PROMPT MODE STYLES (Core AI Feature) ─────── */
 .btn-prompt-mode {
-  background: transparent;
-  border: 1.5px solid var(--brand-primary);
-  color: var(--brand-primary);
-  padding: 10px 16px;
+  position: relative;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.16) 0%, rgba(168, 85, 247, 0.24) 50%, rgba(236, 72, 153, 0.18) 100%);
+  border: 1.5px solid transparent;
+  background-clip: padding-box;
+  color: #f1f5f9;
+  padding: 10px 18px;
   border-radius: var(--radius-md);
   font-family: var(--font-display);
-  font-weight: 600;
+  font-weight: 700;
   font-size: 13px;
+  letter-spacing: 0.2px;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 7px;
-  transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+  gap: 8px;
+  transition: all 0.24s cubic-bezier(0.4, 0, 0.2, 1);
   white-space: nowrap;
   flex-shrink: 0;
+  box-shadow: 0 2px 14px rgba(139, 92, 246, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  overflow: hidden;
+}
+
+.btn-prompt-mode::before {
+  content: '';
+  position: absolute;
+  inset: -1.5px;
+  border-radius: inherit;
+  padding: 1.5px;
+  background: linear-gradient(135deg, #818cf8 0%, #c084fc 50%, #f472b6 100%);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  transition: opacity 0.24s ease, filter 0.24s ease;
+}
+
+.btn-prompt-mode::after {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.15) 0%, transparent 60%);
+  opacity: 0;
+  transform: scale(0.6);
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  pointer-events: none;
 }
 
 .btn-prompt-mode:hover {
-  background: var(--brand-primary-light);
-  border-color: var(--brand-primary);
-  color: var(--brand-primary);
-  transform: translateY(-1px);
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.26) 0%, rgba(168, 85, 247, 0.36) 50%, rgba(236, 72, 153, 0.28) 100%);
+  color: #ffffff;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 24px rgba(168, 85, 247, 0.5), 0 0 14px rgba(251, 191, 36, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+.btn-prompt-mode:hover::before {
+  filter: brightness(1.25) drop-shadow(0 0 5px rgba(192, 132, 252, 0.7));
+}
+
+.btn-prompt-mode:hover::after {
+  opacity: 1;
+  transform: scale(1);
 }
 
 .btn-prompt-mode:active {
   transform: translateY(0);
+  box-shadow: 0 2px 8px rgba(139, 92, 246, 0.3);
 }
 
-/* Inline Prompt Mode link below YouTube input */
+/* Glowing Star Icon */
+.pm-star-icon {
+  color: #fbbf24;
+  font-size: 15px;
+  filter: drop-shadow(0 0 6px rgba(251, 191, 36, 0.75));
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), filter 0.3s ease;
+  animation: pm-star-pulse 3s infinite ease-in-out;
+}
+
+.btn-prompt-mode:hover .pm-star-icon,
+.btn-prompt-mode-inline:hover .pm-star-icon {
+  transform: scale(1.25) rotate(15deg);
+  filter: drop-shadow(0 0 10px rgba(251, 191, 36, 1));
+}
+
+@keyframes pm-star-pulse {
+  0%, 100% {
+    transform: scale(1) rotate(0deg);
+    filter: drop-shadow(0 0 5px rgba(251, 191, 36, 0.6));
+  }
+  50% {
+    transform: scale(1.12) rotate(6deg);
+    filter: drop-shadow(0 0 9px rgba(251, 191, 36, 0.95));
+  }
+}
+
+/* Mini Pro AI Badge next to Prompt Mode */
+.pm-badge-star {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.22), rgba(245, 158, 11, 0.3));
+  border: 1px solid rgba(251, 191, 36, 0.5);
+  color: #fde68a;
+  font-size: 9.5px;
+  font-weight: 700;
+  padding: 1.5px 6px;
+  border-radius: 12px;
+  letter-spacing: 0.3px;
+  margin-left: 2px;
+  text-transform: uppercase;
+  box-shadow: 0 0 8px rgba(251, 191, 36, 0.25);
+}
+
+.pm-badge-star i {
+  font-size: 9px;
+  color: #fbbf24;
+}
+
+/* Inline Prompt Mode button (YouTube URL section) */
 .btn-prompt-mode-inline {
-  background: transparent;
-  border: none;
-  color: var(--brand-primary);
-  font-size: 12px;
-  font-weight: 500;
+  position: relative;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.14) 0%, rgba(168, 85, 247, 0.22) 100%);
+  border: 1px solid rgba(168, 85, 247, 0.45);
+  color: #f1f5f9;
+  font-size: 11.5px;
+  font-weight: 600;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 3px 6px;
-  border-radius: 4px;
-  transition: background 0.15s;
-  text-decoration: underline;
-  text-underline-offset: 3px;
+  gap: 6px;
+  padding: 5px 13px;
+  border-radius: 20px;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 2px 10px rgba(139, 92, 246, 0.18);
+  text-decoration: none;
 }
 
 .btn-prompt-mode-inline:hover {
-  background: var(--brand-primary-light);
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.28) 0%, rgba(168, 85, 247, 0.4) 100%);
+  border-color: #c084fc;
+  color: #ffffff;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(168, 85, 247, 0.4), 0 0 10px rgba(251, 191, 36, 0.3);
   text-decoration: none;
+}
+
+.btn-prompt-mode-inline .pm-star-icon {
+  font-size: 13px;
+}
+
+/* Prompt Mode Modal Header Badge */
+.pm-modal-icon-badge {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.22), rgba(168, 85, 247, 0.28));
+  border: 1px solid rgba(168, 85, 247, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 14px rgba(168, 85, 247, 0.3);
+}
+
+.pm-modal-icon-badge .pm-star-icon {
+  font-size: 20px;
 }
 
 

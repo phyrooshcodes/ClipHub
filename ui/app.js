@@ -942,7 +942,7 @@ document.addEventListener("DOMContentLoaded", () => {
           <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; border-top:1px solid var(--border-light); padding-top:10px;">
             <button class="btn-channel-danger btn-delete-upload" style="padding:6px 10px; font-size:11px;" title="Delete file from disk"><i class="ri-delete-bin-line"></i></button>
             <div style="display:flex; align-items:center; gap:6px; flex:1;">
-              <button class="btn-prompt-mode btn-prompt-mode-upload" style="padding:6px 10px; font-size:11px; border-radius:var(--radius-sm);" title="Extract transcript & copy prompt for Claude / ChatGPT"><i class="ri-file-copy-line"></i> Prompt Mode</button>
+              <button class="btn-prompt-mode btn-prompt-mode-upload" style="padding:6px 12px; font-size:11px; border-radius:var(--radius-sm);" title="Extract transcript & copy prompt for Claude / ChatGPT"><i class="ri-sparkling-fill pm-star-icon"></i> Prompt Mode</button>
               <button class="btn-primary-gradient btn-select-upload" style="padding:6px 12px; font-size:11.5px; font-weight:600; flex:1;"><i class="ri-sparkling-fill"></i> Select & Clip →</button>
             </div>
           </div>

@@ -131,15 +131,16 @@
                     <button id="btn-yt-import" title="Import and Process YouTube Video"><i class="ri-arrow-right-line"></i> Process</button>
                   </div>
                   <div style="text-align:right; margin-top:6px;">
-                    <button id="btn-yt-prompt-mode" class="btn-prompt-mode-inline" title="Transcribe only, then get a copyable prompt for Claude / ChatGPT"><i class="ri-file-copy-line"></i> Prompt Mode</button>
+                    <button id="btn-yt-prompt-mode" class="btn-prompt-mode-inline" title="Transcribe only, then get a copyable prompt for Claude / ChatGPT"><i class="ri-sparkling-fill pm-star-icon"></i> Prompt Mode</button>
                   </div>
                 </div>
               </div>
               
               <div class="proc-actions-row">
                 <button class="btn-prompt-mode" id="btn-proceed-prompt-mode" title="Run Whisper transcription, then generate a prompt to use with Claude, ChatGPT, or any LLM">
-                  <i class="ri-file-copy-line"></i>
+                  <i class="ri-sparkling-fill pm-star-icon"></i>
                   <span>Prompt Mode</span>
+                  <span class="pm-badge-star"><i class="ri-star-fill"></i> AI</span>
                 </button>
                 <button class="btn-primary-action" id="btn-proceed">
                   <span>Process</span>
@@ -867,7 +868,7 @@
         <div class="modal-footer" style="padding:16px 20px; border-top:1px solid var(--border-light); display:flex; justify-content:space-between; align-items:center;">
           <button id="btn-caption-studio-back" class="btn-outline-dashed" style="padding:8px 16px;">Back</button>
           <div style="display:flex; align-items:center; gap:8px;">
-            <button id="btn-caption-studio-prompt-mode" class="btn-prompt-mode" style="padding:9px 18px; font-size:12.5px;"><i class="ri-file-copy-line"></i> Prompt Mode</button>
+            <button id="btn-caption-studio-prompt-mode" class="btn-prompt-mode" style="padding:9px 18px; font-size:12.5px;"><i class="ri-sparkling-fill pm-star-icon"></i> <span>Prompt Mode</span> <span class="pm-badge-star"><i class="ri-star-fill"></i> AI</span></button>
             <button id="btn-caption-studio-proceed" class="btn-primary-gradient" style="padding:10px 24px;"><i class="ri-sparkling-fill"></i> <span id="btn-proceed-modal-text">Process</span></button>
           </div>
         </div>
@@ -1008,11 +1009,16 @@
     <div id="modal-prompt-mode" class="modal-backdrop hidden" style="z-index: 10060;">
       <div class="modal-card" style="max-width: 680px; width: 95%;">
         <div class="modal-header">
-          <div style="display:flex; align-items:center; gap:10px;">
-            <i class="ri-file-copy-line" style="color:var(--brand-primary); font-size:20px;"></i>
+          <div style="display:flex; align-items:center; gap:12px;">
+            <div class="pm-modal-icon-badge">
+              <i class="ri-sparkling-fill pm-star-icon"></i>
+            </div>
             <div>
-              <h3 style="margin:0; font-size:1rem; font-weight:700; color:var(--text-main);">Prompt Mode</h3>
-              <p style="margin:0; font-size:12px; color:var(--text-muted);">Use Claude, ChatGPT, or any LLM for hook detection</p>
+              <div style="display:flex; align-items:center; gap:8px;">
+                <h3 style="margin:0; font-size:1.05rem; font-weight:700; color:var(--text-main);">Prompt Mode</h3>
+                <span class="pm-badge-star"><i class="ri-star-fill"></i> FLAGSHIP</span>
+              </div>
+              <p style="margin:0; font-size:12px; color:var(--text-muted);">Use Claude, ChatGPT, or any LLM for intelligent hook detection</p>
             </div>
           </div>
           <button class="close-modal" id="btn-close-prompt-mode" title="Close"><i class="ri-close-line"></i></button>
