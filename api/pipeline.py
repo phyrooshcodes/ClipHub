@@ -344,7 +344,7 @@ from typing import Literal, Optional, List, Dict, Any
 class JobConfigModel(BaseModel):
     model: Literal["tiny", "base", "small"] = "small"
     max_clips: int = Field(default=0, ge=0, le=100)
-    caption_style: str = "kinetic_slide"
+    caption_style: str = "aftereffect_preset"
     font_preset: Literal["default", "hormozi", "beast", "minimal"] = "default"
     font_name: str = ""
     font_size: int = Field(default=48, ge=12, le=140)
@@ -507,7 +507,7 @@ async def set_job_config(job_id: str, config: JobConfigModel):
     if not job:
         return JSONResponse({"error": "Job not found"}, status_code=404)
     existing = registry.get_config(job_id)
-    merged = {**existing, **config.model_dump()}
+    merged = {**existing, **config.model_dump(exclude_unset=True)}
     registry.set_config(job_id, merged)
     logger.info(f"[Config] Configured job {job_id}: character='{merged.get('character')}', cover='{merged.get('cover')}', caption_style='{merged.get('caption_style')}'")
     return {"status": "ok", "job_id": job_id}
@@ -593,11 +593,10 @@ async def run_pipeline_ws(websocket: WebSocket, job_id: str):
 
     config = registry.get_config(job_id)
     qp = dict(websocket.query_params)
-    for key in ("character", "cover", "caption_style", "model", "commentary_mode", "commentary_voice", "music", "music_volume"):
+    for key in ("character", "cover", "caption_style", "model", "commentary_mode", "commentary_voice", "music", "music_volume", "font_preset", "font_name", "font_size", "primary_color", "outline_color"):
         val = qp.get(key)
         if val:
-            if not config.get(key) or (config.get(key) in ("anime_presenter.png", "default_cover.jpg") and val not in ("anime_presenter.png", "default_cover.jpg")):
-                config[key] = val
+            config[key] = val
     registry.set_config(job_id, config)
 
     logger.info(f"[Pipeline WS] Job {job_id} connected | Presenter='{config.get('character')}', Cover='{config.get('cover')}', Style='{config.get('caption_style')}'")

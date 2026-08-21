@@ -1725,7 +1725,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const formData = new FormData();
         formData.append('file', currentPendingJob.source);
-        formData.append('style', localStorage.getItem('captionStyle') || 'kinetic_slide');
+        formData.append('style', localStorage.getItem('captionStyle') || 'aftereffect_preset');
 
         try {
           const res = await fetch('/api/tools/add-captions', {
